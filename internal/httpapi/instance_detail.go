@@ -3,7 +3,6 @@
 package httpapi
 
 import (
-	"database/sql"
 	"net/http"
 	"strconv"
 
@@ -228,7 +227,7 @@ func instanceModify(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
 			return
 		}
-		updated, err := oci.UpdateInstanceShape(c.Request.Context(), clients, inst.InstanceID, body.Shape, body.Ocpus, body.MemoryInGbs)
+		updated, err := oci.UpdateInstanceShape(c.Request.Context(), clients, inst.InstanceID, body.Shape, body.Ocpus, body.MemoryInGbs, body.DisplayName)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "update instance: "+err.Error())
 			return
@@ -239,6 +238,7 @@ func instanceModify(deps *Deps) gin.HandlerFunc {
 			"shape":       body.Shape,
 			"ocpus":       body.Ocpus,
 			"memoryInGbs": body.MemoryInGbs,
+				"displayName": body.DisplayName,
 		}))
 	}
 }
@@ -253,11 +253,4 @@ func tenantToCreds(t repo.Tenant) oci.Credentials {
 		KeyFileBlob: ns(t.KeyFileBlob),
 		KeyFile:     ns(t.KeyFile),
 	}
-}
-
-func ns(v sql.NullString) string {
-	if v.Valid {
-		return v.String
-	}
-	return ""
 }

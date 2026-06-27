@@ -157,17 +157,29 @@ func (h *ConsoleHandler) handleCreateConnection(conn *websocket.Conn, data json.
 		return
 	}
 
+
+		// Default username to "opc" (standard OCI default) if not stored in DB.
+		sshUser := info.Username
+		if sshUser == "" {
+			sshUser = "opc"
+		}
+		sshPass := info.Password
+
+		// Warn if no SSH password is configured.
+		if sshPass == "" {
+			deps.Logger.Warn().Msgf("VNC console: no SSH password stored for instance %s, trying key-based auth", info.InstanceID)
+		}
 	// Establish SSH connection.
 	var sshClient *ssh.Client
 	var dialErr error
 
 	if deps.SshDialer != nil {
-		sshClient, dialErr = deps.SshDialer(host, sshPort, info.Username, info.Password, "")
+		sshClient, dialErr = deps.SshDialer(host, sshPort, sshUser, sshPass, "")
 	} else {
 		// Default SSH dial using password auth.
 		sshConfig := &ssh.ClientConfig{
-			User: info.Username,
-			Auth: []ssh.AuthMethod{ssh.Password(info.Password)},
+			User: sshUser,
+			Auth: []ssh.AuthMethod{ssh.Password(sshPass)},
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		}
 		sshClient, dialErr = ssh.Dial("tcp", net.JoinHostPort(host, sshPort), sshConfig)
