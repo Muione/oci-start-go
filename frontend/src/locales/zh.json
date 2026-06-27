@@ -1,0 +1,4 @@
+{
+  "app": { "title": "oci-start" },
+  "common": { "login": "登录", "logout": "退出", "dashboard": "仪表盘" }
+}

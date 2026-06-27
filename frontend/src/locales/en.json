@@ -1,0 +1,4 @@
+{
+  "app": { "title": "oci-start" },
+  "common": { "login": "Login", "logout": "Logout", "dashboard": "Dashboard" }
+}

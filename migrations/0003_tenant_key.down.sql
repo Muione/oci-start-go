@@ -1,0 +1,3 @@
+-- SQLite cannot DROP COLUMN portably before 3.35; even then sqlc/app pool runs
+-- an older pragmatic path. The column is harmless if left in place, so down is
+-- a no-op (a fresh rebuild from 0001 never adds it).

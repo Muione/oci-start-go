@@ -1,0 +1,29 @@
+# Sensitive runtime state — never commit.
+#   data/master.key : 32-byte AES master key (encrypts tenant API keys etc.)
+#   data/vps.db     : SQLite DB with encrypted tenant keys + user credentials
+data/
+
+# Runtime logs (lumberjack output).
+logs/
+
+# codebase-memory MCP index artifacts (regenerable via index_repository).
+.codebase-memory/
+
+# --- Go ---
+*.test
+*.out
+/oci-start
+/bin/
+dist/
+
+# --- Frontend (Vue3+Vite) ---
+frontend/node_modules/
+frontend/dist/
+internal/web/dist/
+
+# --- Editor / OS ---
+.DS_Store
+*.swp
+.idea/
+.vscode/
+*~
