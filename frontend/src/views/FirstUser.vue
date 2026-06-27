@@ -35,6 +35,14 @@ const pub = reactive({ preLoginToken: '', publicKey: '' })
 const form = reactive({ username: '', password: '' })
 
 onMounted(async () => {
+  try {
+    const check = await request.get('/api/config/initialized') as any
+    if (check?.initialized) {
+      ElMessage.warning('系统已初始化，请直接登录')
+      router.push('/login')
+      return
+    }
+  } catch { /* fall through — allow registration attempt */ }
   const data = (await request.get('/api/login/init')) as any
   pub.preLoginToken = data.preLoginToken
   pub.publicKey = data.publicKey

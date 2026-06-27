@@ -7,6 +7,9 @@
     </div>
 
     <el-table :data="rows" v-loading="loading" border style="width: 100%">
+      <template #empty>
+        <el-empty description="暂无租户，请新增" :image-size="80" />
+      </template>
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="userName" label="用户名" min-width="160" />
       <el-table-column prop="tenancy" label="Tenancy OCID" min-width="220" show-overflow-tooltip />
@@ -29,17 +32,50 @@
     </el-table>
 
     <!-- add dialog -->
-    <el-dialog v-model="addVisible" title="新增租户" width="640px">
+    <el-dialog v-model="addVisible" title="新增租户" width="660px" destroy-on-close>
+      <!-- OCI Config Import -->
+      <el-collapse v-model="configCollapse" style="margin-bottom:16px">
+        <el-collapse-item title="从 OCI Config 文件导入" name="config">
+          <el-alert
+            title="粘贴 OCI CLI 配置文件内容，自动填写下方表单"
+            type="info"
+            :closable="false"
+            show-icon
+            style="margin-bottom:12px"
+          />
+          <el-input
+            v-model="ociConfigText"
+            type="textarea"
+            :rows="6"
+            placeholder="[DEFAULT]&#10;user=ocid1.user.oc1..aaaaaaaaxxx&#10;fingerprint=3a:37:17:38:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx&#10;tenancy=ocid1.tenancy.oc1..aaaaaaaaxxx&#10;region=ap-singapore-2"
+          />
+          <div style="margin-top:12px; display:flex; gap:8px">
+            <el-button type="primary" size="small" @click="parseOciConfig" :disabled="!ociConfigText.trim()">
+              解析并填写
+            </el-button>
+            <el-button size="small" @click="ociConfigText = ''; configCollapse = []">清空</el-button>
+          </div>
+        </el-collapse-item>
+      </el-collapse>
+
       <el-form :model="form" label-width="120px">
-        <el-form-item label="Tenancy OCID"><el-input v-model="form.tenancy" /></el-form-item>
-        <el-form-item label="User OCID"><el-input v-model="form.tenantId" /></el-form-item>
-        <el-form-item label="指纹"><el-input v-model="form.fingerprint" /></el-form-item>
+        <el-form-item label="Tenancy OCID">
+          <el-input v-model="form.tenancy" placeholder="ocid1.tenancy.oc1..xxxxx" />
+        </el-form-item>
+        <el-form-item label="User OCID">
+          <el-input v-model="form.tenantId" placeholder="ocid1.user.oc1..xxxxx" />
+        </el-form-item>
+        <el-form-item label="指纹">
+          <el-input v-model="form.fingerprint" placeholder="3a:37:17:38:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx" />
+        </el-form-item>
         <el-form-item label="区域">
-          <el-select v-model="form.region" filterable allow-create placeholder="选择或输入区域">
-            <el-option v-for="r in regions" :key="r.code" :label="r.name" :value="r.name" />
+          <el-select v-model="form.region" filterable allow-create placeholder="选择或输入区域代码">
+            <el-option v-for="r in regions" :key="r.code" :label="`${r.name} (${r.code})`" :value="r.name" />
           </el-select>
         </el-form-item>
-        <el-form-item label="用户名(可选)"><el-input v-model="form.userName" placeholder="留空自动生成 区域码_随机" /></el-form-item>
+        <el-form-item label="用户名(可选)">
+          <el-input v-model="form.userName" placeholder="留空自动生成 区域码_随机" />
+        </el-form-item>
         <el-form-item label="API 私钥">
           <input ref="keyFile" type="file" @change="onFile" />
         </el-form-item>
@@ -84,18 +120,118 @@ const instances = ref<any[]>([])
 
 const form = ref({ tenancy: '', tenantId: '', fingerprint: '', region: '', userName: '' })
 
-// A subset of common OCI regions (code ↔ friendly name); backend resolves
-// the friendly name to the code via the full RegionEnum map.
+// OCI config import
+const configCollapse = ref<string[]>([])
+const ociConfigText = ref('')
+
+// Full OCI region list (code ↔ friendly name).
 const regions: Region[] = [
+  // Asia Pacific
   { code: 'ap-tokyo-1', name: '东京' },
   { code: 'ap-osaka-1', name: '大阪' },
-  { code: 'ap-singapore-1', name: '新加坡' },
   { code: 'ap-seoul-1', name: '首尔' },
+  { code: 'ap-singapore-1', name: '新加坡' },
+  { code: 'ap-singapore-2', name: '新加坡(西)' },
+  { code: 'ap-mumbai-1', name: '孟买' },
+  { code: 'ap-hyderabad-1', name: '海得拉巴' },
+  { code: 'ap-sydney-1', name: '悉尼' },
+  { code: 'ap-melbourne-1', name: '墨尔本' },
+  { code: 'ap-chuncheon-1', name: '春川' },
+  { code: 'ap-osaka-2', name: '大阪(第2)' },
+  // North America
   { code: 'us-ashburn-1', name: '阿什本' },
   { code: 'us-phoenix-1', name: '凤凰城' },
+  { code: 'us-sanjose-1', name: '圣何塞' },
+  { code: 'us-sanjose-2', name: '圣何塞(第2)' },
+  { code: 'us-chicago-1', name: '芝加哥' },
+  { code: 'us-phoenix-2', name: '凤凰城(第2)' },
+  { code: 'us-ashburn-2', name: '阿什本(第2)' },
+  // Latin America
+  { code: 'sa-saopaulo-1', name: '圣保罗' },
+  { code: 'sa-vinhedo-1', name: '维涅杜' },
+  { code: 'mx-queretaro-1', name: '克雷塔罗' },
+  { code: 'mx-queretaro-2', name: '克雷塔罗(第2)' },
+  // Europe
   { code: 'eu-frankfurt-1', name: '法兰克福' },
+  { code: 'eu-frankfurt-2', name: '法兰克福(第2)' },
   { code: 'uk-london-1', name: '伦敦' },
+  { code: 'uk-cardiff-1', name: '加的夫' },
+  { code: 'eu-zurich-1', name: '苏黎世' },
+  { code: 'eu-amsterdam-1', name: '阿姆斯特丹' },
+  { code: 'eu-madrid-1', name: '马德里' },
+  { code: 'eu-milan-1', name: '米兰' },
+  // Middle East & Africa
+  { code: 'me-jeddah-1', name: '吉达' },
+  { code: 'me-dubai-1', name: '迪拜' },
+  { code: 'me-abudhabi-1', name: '阿布扎比' },
+  { code: 'af-johannesburg-1', name: '约翰内斯堡' },
 ]
+
+// OCI region code → friendly name lookup
+const regionCodeToName: Record<string, string> = {}
+regions.forEach(r => { regionCodeToName[r.code] = r.name })
+
+// Parse OCI config text and fill the form.
+// Expected format (INI-style):
+//   [DEFAULT]
+//   user=ocid1.user.oc1..xxx
+//   fingerprint=3a:37:...
+//   tenancy=ocid1.tenancy.oc1..xxx
+//   region=ap-singapore-2
+function parseOciConfig() {
+  const text = ociConfigText.value.trim()
+  if (!text) {
+    ElMessage.warning('请先粘贴 OCI 配置文件内容')
+    return
+  }
+
+  // Parse key=value pairs from [DEFAULT] section
+  const lines = text.split('\n')
+  let inDefault = false
+  const kv: Record<string, string> = {}
+
+  for (const raw of lines) {
+    const line = raw.trim()
+    if (!line || line.startsWith('#') || line.startsWith(';')) continue
+    // Section header
+    if (line.startsWith('[') && line.endsWith(']')) {
+      inDefault = line.toLowerCase().includes('default')
+      continue
+    }
+    if (!inDefault && text.includes('[')) continue // skip non-DEFAULT sections
+    // key = value (also handle key=value without spaces)
+    const eq = line.indexOf('=')
+    if (eq === -1) continue
+    const key = line.substring(0, eq).trim().toLowerCase()
+    const value = line.substring(eq + 1).trim()
+    if (key && value) kv[key] = value
+  }
+
+  // Map OCI config keys to form fields
+  let filled = 0
+  if (kv['user'] && !form.value.tenantId) { form.value.tenantId = kv['user']; filled++ }
+  if (kv['fingerprint'] && !form.value.fingerprint) { form.value.fingerprint = kv['fingerprint']; filled++ }
+  if (kv['tenancy'] && !form.value.tenancy) { form.value.tenancy = kv['tenancy']; filled++ }
+  if (kv['region'] && !form.value.region) {
+    const code = kv['region']
+    // Try to resolve region code to friendly name
+    form.value.region = regionCodeToName[code] || code
+    filled++
+  }
+  // Auto-generate username from region if not set
+  if (kv['region'] && !form.value.userName) {
+    const code = kv['region']
+    const suffix = Math.random().toString(36).substring(2, 6)
+    form.value.userName = `${code.replace(/-/g, '_')}_${suffix}`
+  }
+
+  if (filled > 0) {
+    ElMessage.success(`已自动填写 ${filled} 个字段`)
+    configCollapse.value = []
+  } else {
+    ElMessage.info('未找到可识别的配置项（需要 [DEFAULT] 段下的 user/fingerprint/tenancy/region）')
+  }
+}
 
 async function load() {
   loading.value = true
@@ -111,6 +247,8 @@ async function load() {
 function openAdd() {
   form.value = { tenancy: '', tenantId: '', fingerprint: '', region: '', userName: '' }
   fileBytes.value = null
+  ociConfigText.value = ''
+  configCollapse.value = []
   if (keyFile.value) keyFile.value.value = ''
   addVisible.value = true
 }
@@ -183,4 +321,10 @@ onMounted(load)
 <style scoped>
 .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .toolbar h2 { margin: 0; margin-right: auto; }
+
+:deep(.el-collapse-item__header) {
+  font-size: 14px;
+  font-weight: 500;
+  color: #409eff;
+}
 </style>

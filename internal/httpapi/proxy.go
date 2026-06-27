@@ -122,16 +122,33 @@ func proxyDelete(deps *Deps) gin.HandlerFunc {
 // dashboardStats — GET /api/stats
 func dashboardStats(deps *Deps) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx := c.Request.Context()
 		q := repo.New(deps.Store.Read)
-		tenants, _ := q.ListTenants(c.Request.Context())
-		proxies, _ := q.ListVpnProxyRecords(c.Request.Context())
+
+		tenants, _ := q.ListTenants(ctx)
+		proxies, _ := q.ListVpnProxyRecords(ctx)
+
+		var instanceCount, backupCount, onlineCount int64
+		deps.Store.Read.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM instance_detail`).Scan(&instanceCount)
+		deps.Store.Read.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM instance_backup_detail`).Scan(&backupCount)
+		deps.Store.Read.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM instance_detail WHERE on_line_enable = 1`).Scan(&onlineCount)
+
 		type statsResp struct {
-			TenantCount int `json:"tenantCount"`
-			ProxyCount  int `json:"proxyCount"`
+			TenantCount   int   `json:"tenantCount"`
+			ProxyCount    int   `json:"proxyCount"`
+			InstanceCount int64 `json:"instanceCount"`
+			BackupCount   int64 `json:"backupCount"`
+			OnlineCount   int64 `json:"onlineCount"`
 		}
 		response.OK(c, response.SuccessData(statsResp{
-			TenantCount: len(tenants),
-			ProxyCount:  len(proxies),
+			TenantCount:   len(tenants),
+			ProxyCount:    len(proxies),
+			InstanceCount: instanceCount,
+			BackupCount:   backupCount,
+			OnlineCount:   onlineCount,
 		}))
 	}
 }

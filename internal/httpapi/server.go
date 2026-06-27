@@ -25,6 +25,7 @@ func NewServer(deps *Deps) *gin.Engine {
 	pub.GET("/api/login/init", loginInit(deps))
 	pub.POST("/api/login", login(deps))
 	pub.POST("/api/logout", logout(deps))
+	pub.GET("/api/config/initialized", isInitialized(deps))
 	pub.POST("/api/register-first-user", registerFirstUser(deps))
 	pub.GET("/api/disTurnstile", disTurnstile(deps))
 	pub.GET("/api/config/mfa-enabled", configMfaEnabled(deps))
@@ -34,6 +35,8 @@ func NewServer(deps *Deps) *gin.Engine {
 	pub.GET("/api/github/callback", githubCallback(deps))
 	pub.GET("/api/github/status", githubStatus(deps))
 	pub.GET("/api/google/login/url", googleLoginURL(deps))
+	pub.GET("/api/google/callback", googleCallback(deps))
+	pub.GET("/api/google/status", googleStatus(deps))
 	pub.POST("/api/send-reset-code", sendResetCode(deps))
 	pub.POST("/api/verify-reset-code", verifyResetCode(deps))
 	pub.POST("/api/reset-password", resetPassword(deps))
@@ -43,6 +46,7 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.Use(auth.SessionAuth(deps.Session), auth.UserContext(), auth.TenantContext(deps.Store))
 	pro.GET("/api/version", versionHandler(deps.Store))
 	pro.GET("/api/userInfo", userInfo(deps))
+	pro.POST("/api/change-password", changePassword(deps))
 	pro.GET("/tenants/listAll", tenantList(deps))
 	pro.POST("/tenants/save", tenantSave(deps))
 	pro.GET("/tenants/deleteApi", tenantDelete(deps))
@@ -52,6 +56,55 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/proxies/save", proxySave(deps))
 	pro.GET("/proxies/delete", proxyDelete(deps))
 	pro.GET("/api/stats", dashboardStats(deps))
+
+	// Phase 4: boot task CRUD + grabber system status.
+	pro.GET("/boot/list", bootList(deps))
+	pro.POST("/boot/save", bootSave(deps))
+	pro.GET("/boot/delete", bootDelete(deps))
+	pro.GET("/boot/toggle", bootToggle(deps))
+	pro.GET("/boot/systemStatus", bootSystemStatus(deps))
+	pro.GET("/boot/tenants", bootTenantList(deps))
+
+	// Phase 5: instance details + traffic + backups.
+	pro.GET("/instances/list", instanceList(deps))
+	pro.GET("/instances/:id", instanceGet(deps))
+	pro.POST("/instances/:id/remark", instanceUpdateRemark(deps))
+	pro.GET("/instances/traffic", instanceTraffic(deps))
+	pro.GET("/backup/list", backupList(deps))
+	pro.GET("/backup/delete", backupDelete(deps))
+	pro.POST("/boot-instance/gcp/launch", gcpBootLaunch(deps))
+	pro.GET("/boot-instance/gcp/list", gcpBootList(deps))
+	pro.GET("/boot-instance/gcp/delete", gcpBootDelete(deps))
+	pro.GET("/boot-instance/gcp/status", gcpBootStatus(deps))
+	pro.GET("/traffic/alert/list", trafficAlertList(deps))
+	pro.GET("/traffic/alert/get", trafficAlertGet(deps))
+	pro.POST("/traffic/alert/save", trafficAlertSave(deps))
+
+	// Phase 6: WebSocket endpoints (no auth — WS upgrade handshake is separate).
+	r.GET("/ws/ssh", func(c *gin.Context) { deps.WsHub.SSH.HandleSSH(c.Writer, c.Request) })
+	r.GET("/log/ws", func(c *gin.Context) { deps.WsHub.Log.HandleLog(c.Writer, c.Request) })
+	r.GET("/ws/monitor", func(c *gin.Context) { deps.WsHub.Monitor.HandleMonitor(c.Writer, c.Request) })
+	r.GET("/ws/console", func(c *gin.Context) { deps.WsHub.Console.HandleConsole(c.Writer, c.Request) })
+	r.GET("/ws/rescue", func(c *gin.Context) { deps.WsHub.Rescue.HandleRescue(c.Writer, c.Request) })
+
+	// Phase 6: monitor agent endpoints (public — agent runs on remote VPS).
+	pub.GET("/api/monitor/download", monitorDownload(deps))
+	pub.POST("/api/monitor/report", monitorReport(deps))
+
+	// Phase 7: DNS, SSL, system config.
+	pro.GET("/dns/list", dnsList(deps))
+	pro.POST("/dns/save", dnsSave(deps))
+	pro.GET("/dns/delete", dnsDelete(deps))
+	pro.POST("/system/config/save", systemConfigSave(deps))
+	pro.POST("/dns/sync", dnsSync(deps))
+	pro.GET("/ssl/list", sslList(deps))
+	pro.POST("/ssl/issue", sslIssue(deps))
+	pro.GET("/system/config", systemConfigGet(deps))
+
+	// Phase 8: data migration (import H2 exports into SQLite).
+	pro.POST("/migration/import", deps.Migration.ImportPlain)
+	pro.POST("/migration/import-encrypted", deps.Migration.ImportEncrypted)
+	pro.GET("/migration/export", deps.Migration.ExportPlain)
 
 	// SPA static assets + NoRoute fallback to index.html
 	web.Register(r)

@@ -10,20 +10,53 @@ import (
 )
 
 type Querier interface {
+	AdvanceNextExecutionTime(ctx context.Context, arg AdvanceNextExecutionTimeParams) error
 	CountAppVersion(ctx context.Context) (int64, error)
 	CountByLoginType(ctx context.Context, loginType string) (int64, error)
+	CountInstanceDetails(ctx context.Context) (int64, error)
+	CountRunningTasks(ctx context.Context) (int64, error)
+	CountTotalTasks(ctx context.Context) (int64, error)
+	DeleteComputerInfo(ctx context.Context, bootIDStr sql.NullString) error
+	DeleteInstanceBackupDetail(ctx context.Context, id int64) error
 	// instance_detail queries (Phase 3 instance sync). Sync is delete-by-tenant
 	// then insert-all (parity with Java syncOci: deleteByTenantId then saveAll).
 	DeleteInstanceDetailsByTenantId(ctx context.Context, tenantID sql.NullInt64) error
+	DeleteInstanceTrafficByTenantId(ctx context.Context, tenantID sql.NullInt64) error
+	DeleteLock(ctx context.Context, taskID string) error
+	DeleteProcessingLocks(ctx context.Context) error
 	DeleteSession(ctx context.Context, token string) error
 	DeleteSessionsByUsername(ctx context.Context, username string) error
+	DeleteTemInstancesByTenancy(ctx context.Context, tenancy sql.NullString) error
 	DeleteTenant(ctx context.Context, id int64) error
 	DeleteVpnProxyRecord(ctx context.Context, id int64) error
+	DisableBootInstance(ctx context.Context, arg DisableBootInstanceParams) error
+	EnableBootInstance(ctx context.Context, arg EnableBootInstanceParams) error
 	ExistsByUsername(ctx context.Context, username string) (int64, error)
+	FindBootInstanceByBootID(ctx context.Context, bootID sql.NullString) (BootInstance, error)
+	FindBootInstanceByID(ctx context.Context, id int64) (BootInstance, error)
+	// oci_computer_info queries
+	FindComputerInfoByBootIDStr(ctx context.Context, bootIDStr sql.NullString) (OciComputerInfo, error)
 	// system_config is the runtime KV store (config_key UNIQUE).
 	// Boolean configs use the config_enabled column (INTEGER 0/1);
 	// string configs use config_value. Mirrors Java SystemConfigService.
 	FindConfigByKey(ctx context.Context, configKey sql.NullString) (SystemConfig, error)
+	// Grabber queries (Phase 4). boot_instance, open_boot_lock, oci_computer_info,
+	// tem_instance. See SPEC S8; parity with BootInstanceRepository +
+	// OpenBootLockRepository + BootTotalInstanceService queries.
+	// ALL COMMENTS MUST BE ASCII-ONLY (sqlc v1.31.1 sqlite parser corrupts queries
+	// when a -- comment contains non-ASCII characters).
+	FindDistinctTasksToExecute(ctx context.Context, arg FindDistinctTasksToExecuteParams) ([]FindDistinctTasksToExecuteRow, error)
+	// instance_backup_detail queries
+	FindInstanceBackupsByTenantId(ctx context.Context, tenantID sql.NullInt64) ([]InstanceBackupDetail, error)
+	// Extended instance_detail queries (Phase 5). Instance management, traffic,
+	// backup records. ALL COMMENTS MUST BE ASCII-ONLY.
+	FindInstanceDetailByID(ctx context.Context, id int64) (FindInstanceDetailByIDRow, error)
+	// instance_traffic queries
+	FindInstanceTrafficByInstanceId(ctx context.Context, arg FindInstanceTrafficByInstanceIdParams) ([]InstanceTraffic, error)
+	FindInstancesByTenantId(ctx context.Context, tenantID sql.NullInt64) ([]FindInstancesByTenantIdRow, error)
+	// open_boot_lock queries
+	FindLockByTaskID(ctx context.Context, taskID string) (OpenBootLock, error)
+	FindOfflineInstances(ctx context.Context, lastHeartbeat sql.NullString) ([]FindOfflineInstancesRow, error)
 	// VpnProxyRecord queries (Phase 3 SOCKS proxy pool). Random available pick
 	// parity with VpnProxyRecordRepository.findRandomAvailableRecord.
 	FindRandomAvailableProxy(ctx context.Context) (VpnProxyRecord, error)
@@ -31,32 +64,58 @@ type Querier interface {
 	FindTenantByID(ctx context.Context, id int64) (Tenant, error)
 	FindTenantsByParenId(ctx context.Context, parenID sql.NullInt64) ([]FindTenantsByParenIdRow, error)
 	FindTopBanByIpAddress(ctx context.Context, ipAddress string) (BanRecord, error)
+	// traffic_alert queries
+	FindTrafficAlertByTenantId(ctx context.Context, tenantID int64) (TrafficAlert, error)
 	FindUserByExternalIdAndLoginType(ctx context.Context, arg FindUserByExternalIdAndLoginTypeParams) (LoginUser, error)
 	FindUserByUsername(ctx context.Context, username string) (LoginUser, error)
 	GetAppVersion(ctx context.Context) (AppVersion, error)
+	IncrementFailCount(ctx context.Context, id int64) error
+	IncrementSuccessCount(ctx context.Context, arg IncrementSuccessCountParams) error
 	InsertBan(ctx context.Context, arg InsertBanParams) error
+	InsertBootInstance(ctx context.Context, arg InsertBootInstanceParams) error
+	InsertComputerInfo(ctx context.Context, arg InsertComputerInfoParams) error
+	InsertInstanceBackupDetail(ctx context.Context, arg InsertInstanceBackupDetailParams) error
 	InsertInstanceDetail(ctx context.Context, arg InsertInstanceDetailParams) error
+	InsertInstanceTraffic(ctx context.Context, arg InsertInstanceTrafficParams) error
+	InsertLockIgnore(ctx context.Context, arg InsertLockIgnoreParams) error
 	InsertLoginUser(ctx context.Context, arg InsertLoginUserParams) error
 	InsertSession(ctx context.Context, arg InsertSessionParams) error
+	// tem_instance queries (temp instance tracking during grab)
+	InsertTemInstance(ctx context.Context, arg InsertTemInstanceParams) error
 	InsertTenant(ctx context.Context, arg InsertTenantParams) error
 	InsertVpnProxyRecord(ctx context.Context, arg InsertVpnProxyRecordParams) error
+	ListAllInstanceDetails(ctx context.Context, arg ListAllInstanceDetailsParams) ([]ListAllInstanceDetailsRow, error)
+	ListBootInstances(ctx context.Context) ([]BootInstance, error)
 	ListInstanceDetailsByTenantId(ctx context.Context, tenantID sql.NullInt64) ([]ListInstanceDetailsByTenantIdRow, error)
 	// Tenant queries (Phase 3). key_file_blob holds the AES-256-GCM encrypted
 	// PEM (base64). List/mask queries deliberately omit key_file/key_file_blob.
 	ListTenants(ctx context.Context) ([]ListTenantsRow, error)
+	ListTrafficAlerts(ctx context.Context) ([]TrafficAlert, error)
 	ListVpnProxyRecords(ctx context.Context) ([]VpnProxyRecord, error)
+	MarkDailyReset(ctx context.Context, lastResetDate sql.NullString) error
+	MarkNotificationAsSent(ctx context.Context, id int64) error
+	ResetDailyCounts(ctx context.Context, lastResetDate sql.NullString) error
 	SeedAppVersion(ctx context.Context, arg SeedAppVersionParams) error
 	SetTenantApiSynced(ctx context.Context, arg SetTenantApiSyncedParams) error
 	TouchSessionActive(ctx context.Context, arg TouchSessionActiveParams) error
 	UpdateAppVersion(ctx context.Context, arg UpdateAppVersionParams) error
 	UpdateBanStatus(ctx context.Context, arg UpdateBanStatusParams) error
+	UpdateBootInstance(ctx context.Context, arg UpdateBootInstanceParams) error
+	UpdateBootInstanceStatus(ctx context.Context, arg UpdateBootInstanceStatusParams) error
+	UpdateComputerInfo(ctx context.Context, arg UpdateComputerInfoParams) error
+	UpdateInstanceConnTime(ctx context.Context, arg UpdateInstanceConnTimeParams) error
+	UpdateInstanceDetailRemark(ctx context.Context, arg UpdateInstanceDetailRemarkParams) error
+	UpdateInstanceOffline(ctx context.Context, arg UpdateInstanceOfflineParams) error
+	UpdateInstanceResumeNotify(ctx context.Context, id int64) error
 	UpdateLastLoginAt(ctx context.Context, arg UpdateLastLoginAtParams) error
+	UpdateLockSuccess(ctx context.Context, arg UpdateLockSuccessParams) error
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) error
 	UpdateUserCredentials(ctx context.Context, arg UpdateUserCredentialsParams) error
 	UpdateVpnProxyRecord(ctx context.Context, arg UpdateVpnProxyRecordParams) error
 	UpsertConfig(ctx context.Context, arg UpsertConfigParams) error
 	UpsertConfigEnabled(ctx context.Context, arg UpsertConfigEnabledParams) error
 	UpsertConfigValue(ctx context.Context, arg UpsertConfigValueParams) error
+	UpsertTrafficAlert(ctx context.Context, arg UpsertTrafficAlertParams) error
 }
 
 var _ Querier = (*Queries)(nil)

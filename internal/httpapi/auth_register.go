@@ -11,6 +11,14 @@ import (
 	bcryptpkg "github.com/Muione/oci-start-go/internal/util/bcrypt"
 )
 
+// GET /api/config/initialized — public. Returns whether the system has been initialized.
+func isInitialized(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		n, _ := repo.New(deps.Store.Read).CountByLoginType(c.Request.Context(), "LOCAL")
+		response.OK(c, response.SuccessData(gin.H{"initialized": n > 0}))
+	}
+}
+
 type registerReq struct {
 	PreLoginToken string `json:"preLoginToken"`
 	Username      string `json:"username"`

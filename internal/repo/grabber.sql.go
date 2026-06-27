@@ -24,6 +24,37 @@ func (q *Queries) AdvanceNextExecutionTime(ctx context.Context, arg AdvanceNextE
 	return err
 }
 
+const countRunningTasks = `-- name: CountRunningTasks :one
+SELECT COUNT(*) FROM boot_instance WHERE status = 1
+`
+
+func (q *Queries) CountRunningTasks(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countRunningTasks)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTotalTasks = `-- name: CountTotalTasks :one
+SELECT COUNT(*) FROM boot_instance
+`
+
+func (q *Queries) CountTotalTasks(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countTotalTasks)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const deleteComputerInfo = `-- name: DeleteComputerInfo :exec
+DELETE FROM oci_computer_info WHERE boot_id_str = ?
+`
+
+func (q *Queries) DeleteComputerInfo(ctx context.Context, bootIDStr sql.NullString) error {
+	_, err := q.db.ExecContext(ctx, deleteComputerInfo, bootIDStr)
+	return err
+}
+
 const deleteLock = `-- name: DeleteLock :exec
 DELETE FROM open_boot_lock WHERE task_id = ?
 `
@@ -40,6 +71,87 @@ DELETE FROM open_boot_lock WHERE status = 'PROCESSING'
 func (q *Queries) DeleteProcessingLocks(ctx context.Context) error {
 	_, err := q.db.ExecContext(ctx, deleteProcessingLocks)
 	return err
+}
+
+const deleteTemInstancesByTenancy = `-- name: DeleteTemInstancesByTenancy :exec
+DELETE FROM tem_instance WHERE tenancy = ?
+`
+
+func (q *Queries) DeleteTemInstancesByTenancy(ctx context.Context, tenancy sql.NullString) error {
+	_, err := q.db.ExecContext(ctx, deleteTemInstancesByTenancy, tenancy)
+	return err
+}
+
+const disableBootInstance = `-- name: DisableBootInstance :exec
+UPDATE boot_instance SET status = 0, updated_at = ? WHERE boot_id = ?
+`
+
+type DisableBootInstanceParams struct {
+	UpdatedAt sql.NullString `json:"updated_at"`
+	BootID    sql.NullString `json:"boot_id"`
+}
+
+func (q *Queries) DisableBootInstance(ctx context.Context, arg DisableBootInstanceParams) error {
+	_, err := q.db.ExecContext(ctx, disableBootInstance, arg.UpdatedAt, arg.BootID)
+	return err
+}
+
+const enableBootInstance = `-- name: EnableBootInstance :exec
+UPDATE boot_instance SET status = 1, next_execution_time = ?, updated_at = ? WHERE boot_id = ?
+`
+
+type EnableBootInstanceParams struct {
+	NextExecutionTime sql.NullString `json:"next_execution_time"`
+	UpdatedAt         sql.NullString `json:"updated_at"`
+	BootID            sql.NullString `json:"boot_id"`
+}
+
+func (q *Queries) EnableBootInstance(ctx context.Context, arg EnableBootInstanceParams) error {
+	_, err := q.db.ExecContext(ctx, enableBootInstance, arg.NextExecutionTime, arg.UpdatedAt, arg.BootID)
+	return err
+}
+
+const findBootInstanceByBootID = `-- name: FindBootInstanceByBootID :one
+SELECT id, version, boot_id, tenant_id, ocpu, memory, disk, loop_time, instance_count, status, architecture, root_password, public_ip, next_execution_time, add_count, success_count, remark, created_at, updated_at, cloud_type, current_attempt_count, yesterday_attempt_count, reset_today_flag, last_reset_date, fail_count, total_count, image_id, operating_system, operating_system_version, data_gap, notify_flag FROM boot_instance WHERE boot_id = ?
+`
+
+func (q *Queries) FindBootInstanceByBootID(ctx context.Context, bootID sql.NullString) (BootInstance, error) {
+	row := q.db.QueryRowContext(ctx, findBootInstanceByBootID, bootID)
+	var i BootInstance
+	err := row.Scan(
+		&i.ID,
+		&i.Version,
+		&i.BootID,
+		&i.TenantID,
+		&i.Ocpu,
+		&i.Memory,
+		&i.Disk,
+		&i.LoopTime,
+		&i.InstanceCount,
+		&i.Status,
+		&i.Architecture,
+		&i.RootPassword,
+		&i.PublicIp,
+		&i.NextExecutionTime,
+		&i.AddCount,
+		&i.SuccessCount,
+		&i.Remark,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CloudType,
+		&i.CurrentAttemptCount,
+		&i.YesterdayAttemptCount,
+		&i.ResetTodayFlag,
+		&i.LastResetDate,
+		&i.FailCount,
+		&i.TotalCount,
+		&i.ImageID,
+		&i.OperatingSystem,
+		&i.OperatingSystemVersion,
+		&i.DataGap,
+		&i.NotifyFlag,
+	)
+	return i, err
 }
 
 const findBootInstanceByID = `-- name: FindBootInstanceByID :one
@@ -90,7 +202,7 @@ const findComputerInfoByBootIDStr = `-- name: FindComputerInfoByBootIDStr :one
 SELECT id, boot_id_str, computer_create_json, tenant_id, architecture, cloud_type, computer_region FROM oci_computer_info WHERE boot_id_str = ?
 `
 
-// oci_computer_info queries (Phase 5, placeholder)
+// oci_computer_info queries
 func (q *Queries) FindComputerInfoByBootIDStr(ctx context.Context, bootIDStr sql.NullString) (OciComputerInfo, error) {
 	row := q.db.QueryRowContext(ctx, findComputerInfoByBootIDStr, bootIDStr)
 	var i OciComputerInfo
@@ -130,8 +242,8 @@ LIMIT ?2
 `
 
 type FindDistinctTasksToExecuteParams struct {
-	Now   sql.NullString `json:"now"`
-	Limit int64          `json:"limit"`
+	NextExecutionTime sql.NullString `json:"next_execution_time"`
+	Limit             int64          `json:"limit"`
 }
 
 type FindDistinctTasksToExecuteRow struct {
@@ -168,10 +280,12 @@ type FindDistinctTasksToExecuteRow struct {
 }
 
 // Grabber queries (Phase 4). boot_instance, open_boot_lock, oci_computer_info,
-// boot_total_instance. See SPEC S8; parity with BootInstanceRepository +
+// tem_instance. See SPEC S8; parity with BootInstanceRepository +
 // OpenBootLockRepository + BootTotalInstanceService queries.
+// ALL COMMENTS MUST BE ASCII-ONLY (sqlc v1.31.1 sqlite parser corrupts queries
+// when a -- comment contains non-ASCII characters).
 func (q *Queries) FindDistinctTasksToExecute(ctx context.Context, arg FindDistinctTasksToExecuteParams) ([]FindDistinctTasksToExecuteRow, error) {
-	rows, err := q.db.QueryContext(ctx, findDistinctTasksToExecute, arg.Now, arg.Limit)
+	rows, err := q.db.QueryContext(ctx, findDistinctTasksToExecute, arg.NextExecutionTime, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -225,9 +339,11 @@ func (q *Queries) FindDistinctTasksToExecute(ctx context.Context, arg FindDistin
 }
 
 const findLockByTaskID = `-- name: FindLockByTaskID :one
+
 SELECT task_id, cloud_type, status, ins_id, create_time FROM open_boot_lock WHERE task_id = ?
 `
 
+// open_boot_lock queries
 func (q *Queries) FindLockByTaskID(ctx context.Context, taskID string) (OpenBootLock, error) {
 	row := q.db.QueryRowContext(ctx, findLockByTaskID, taskID)
 	var i OpenBootLock
@@ -250,8 +366,104 @@ func (q *Queries) IncrementFailCount(ctx context.Context, id int64) error {
 	return err
 }
 
-const insertLockIgnore = `-- name: InsertLockIgnore :exec
+const incrementSuccessCount = `-- name: IncrementSuccessCount :exec
+UPDATE boot_instance SET success_count = success_count + 1, current_attempt_count = current_attempt_count + 1, updated_at = ? WHERE id = ?
+`
 
+type IncrementSuccessCountParams struct {
+	UpdatedAt sql.NullString `json:"updated_at"`
+	ID        int64          `json:"id"`
+}
+
+func (q *Queries) IncrementSuccessCount(ctx context.Context, arg IncrementSuccessCountParams) error {
+	_, err := q.db.ExecContext(ctx, incrementSuccessCount, arg.UpdatedAt, arg.ID)
+	return err
+}
+
+const insertBootInstance = `-- name: InsertBootInstance :exec
+INSERT INTO boot_instance (
+    boot_id, tenant_id, ocpu, memory, disk, loop_time, instance_count, status, architecture,
+    root_password, image_id, operating_system, operating_system_version,
+    next_execution_time, cloud_type, data_gap, notify_flag, remark, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertBootInstanceParams struct {
+	BootID                 sql.NullString `json:"boot_id"`
+	TenantID               sql.NullInt64  `json:"tenant_id"`
+	Ocpu                   sql.NullInt64  `json:"ocpu"`
+	Memory                 sql.NullInt64  `json:"memory"`
+	Disk                   sql.NullInt64  `json:"disk"`
+	LoopTime               sql.NullInt64  `json:"loop_time"`
+	InstanceCount          sql.NullInt64  `json:"instance_count"`
+	Status                 sql.NullInt64  `json:"status"`
+	Architecture           sql.NullString `json:"architecture"`
+	RootPassword           sql.NullString `json:"root_password"`
+	ImageID                sql.NullString `json:"image_id"`
+	OperatingSystem        sql.NullString `json:"operating_system"`
+	OperatingSystemVersion sql.NullString `json:"operating_system_version"`
+	NextExecutionTime      sql.NullString `json:"next_execution_time"`
+	CloudType              sql.NullInt64  `json:"cloud_type"`
+	DataGap                sql.NullString `json:"data_gap"`
+	NotifyFlag             sql.NullString `json:"notify_flag"`
+	Remark                 sql.NullString `json:"remark"`
+	CreatedAt              sql.NullString `json:"created_at"`
+	UpdatedAt              sql.NullString `json:"updated_at"`
+}
+
+func (q *Queries) InsertBootInstance(ctx context.Context, arg InsertBootInstanceParams) error {
+	_, err := q.db.ExecContext(ctx, insertBootInstance,
+		arg.BootID,
+		arg.TenantID,
+		arg.Ocpu,
+		arg.Memory,
+		arg.Disk,
+		arg.LoopTime,
+		arg.InstanceCount,
+		arg.Status,
+		arg.Architecture,
+		arg.RootPassword,
+		arg.ImageID,
+		arg.OperatingSystem,
+		arg.OperatingSystemVersion,
+		arg.NextExecutionTime,
+		arg.CloudType,
+		arg.DataGap,
+		arg.NotifyFlag,
+		arg.Remark,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const insertComputerInfo = `-- name: InsertComputerInfo :exec
+INSERT INTO oci_computer_info (boot_id_str, computer_create_json, tenant_id, architecture, cloud_type, computer_region)
+VALUES (?, ?, ?, ?, ?, ?)
+`
+
+type InsertComputerInfoParams struct {
+	BootIDStr          sql.NullString `json:"boot_id_str"`
+	ComputerCreateJson sql.NullString `json:"computer_create_json"`
+	TenantID           sql.NullInt64  `json:"tenant_id"`
+	Architecture       sql.NullString `json:"architecture"`
+	CloudType          sql.NullInt64  `json:"cloud_type"`
+	ComputerRegion     sql.NullString `json:"computer_region"`
+}
+
+func (q *Queries) InsertComputerInfo(ctx context.Context, arg InsertComputerInfoParams) error {
+	_, err := q.db.ExecContext(ctx, insertComputerInfo,
+		arg.BootIDStr,
+		arg.ComputerCreateJson,
+		arg.TenantID,
+		arg.Architecture,
+		arg.CloudType,
+		arg.ComputerRegion,
+	)
+	return err
+}
+
+const insertLockIgnore = `-- name: InsertLockIgnore :exec
 INSERT OR IGNORE INTO open_boot_lock (task_id, cloud_type, status, create_time)
 VALUES (?, 1, 'PROCESSING', ?)
 `
@@ -261,9 +473,108 @@ type InsertLockIgnoreParams struct {
 	CreateTime sql.NullString `json:"create_time"`
 }
 
-// open_boot_lock queries
 func (q *Queries) InsertLockIgnore(ctx context.Context, arg InsertLockIgnoreParams) error {
 	_, err := q.db.ExecContext(ctx, insertLockIgnore, arg.TaskID, arg.CreateTime)
+	return err
+}
+
+const insertTemInstance = `-- name: InsertTemInstance :exec
+
+INSERT INTO tem_instance (tenancy, instance_id, public_ip, region, architecture, root_password, clone_boot_volume_id, cloud_type)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertTemInstanceParams struct {
+	Tenancy           sql.NullString `json:"tenancy"`
+	InstanceID        sql.NullString `json:"instance_id"`
+	PublicIp          sql.NullString `json:"public_ip"`
+	Region            sql.NullString `json:"region"`
+	Architecture      sql.NullString `json:"architecture"`
+	RootPassword      sql.NullString `json:"root_password"`
+	CloneBootVolumeID sql.NullString `json:"clone_boot_volume_id"`
+	CloudType         sql.NullInt64  `json:"cloud_type"`
+}
+
+// tem_instance queries (temp instance tracking during grab)
+func (q *Queries) InsertTemInstance(ctx context.Context, arg InsertTemInstanceParams) error {
+	_, err := q.db.ExecContext(ctx, insertTemInstance,
+		arg.Tenancy,
+		arg.InstanceID,
+		arg.PublicIp,
+		arg.Region,
+		arg.Architecture,
+		arg.RootPassword,
+		arg.CloneBootVolumeID,
+		arg.CloudType,
+	)
+	return err
+}
+
+const listBootInstances = `-- name: ListBootInstances :many
+SELECT id, version, boot_id, tenant_id, ocpu, memory, disk, loop_time, instance_count, status, architecture, root_password, public_ip, next_execution_time, add_count, success_count, remark, created_at, updated_at, cloud_type, current_attempt_count, yesterday_attempt_count, reset_today_flag, last_reset_date, fail_count, total_count, image_id, operating_system, operating_system_version, data_gap, notify_flag FROM boot_instance ORDER BY created_at DESC
+`
+
+func (q *Queries) ListBootInstances(ctx context.Context) ([]BootInstance, error) {
+	rows, err := q.db.QueryContext(ctx, listBootInstances)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BootInstance{}
+	for rows.Next() {
+		var i BootInstance
+		if err := rows.Scan(
+			&i.ID,
+			&i.Version,
+			&i.BootID,
+			&i.TenantID,
+			&i.Ocpu,
+			&i.Memory,
+			&i.Disk,
+			&i.LoopTime,
+			&i.InstanceCount,
+			&i.Status,
+			&i.Architecture,
+			&i.RootPassword,
+			&i.PublicIp,
+			&i.NextExecutionTime,
+			&i.AddCount,
+			&i.SuccessCount,
+			&i.Remark,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CloudType,
+			&i.CurrentAttemptCount,
+			&i.YesterdayAttemptCount,
+			&i.ResetTodayFlag,
+			&i.LastResetDate,
+			&i.FailCount,
+			&i.TotalCount,
+			&i.ImageID,
+			&i.OperatingSystem,
+			&i.OperatingSystemVersion,
+			&i.DataGap,
+			&i.NotifyFlag,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markDailyReset = `-- name: MarkDailyReset :exec
+UPDATE boot_instance SET reset_today_flag = 1, last_reset_date = ? WHERE status = 1
+`
+
+func (q *Queries) MarkDailyReset(ctx context.Context, lastResetDate sql.NullString) error {
+	_, err := q.db.ExecContext(ctx, markDailyReset, lastResetDate)
 	return err
 }
 
@@ -273,6 +584,61 @@ UPDATE boot_instance SET notify_flag = 'YES' WHERE id = ? AND notify_flag = 'NO'
 
 func (q *Queries) MarkNotificationAsSent(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, markNotificationAsSent, id)
+	return err
+}
+
+const resetDailyCounts = `-- name: ResetDailyCounts :exec
+UPDATE boot_instance SET current_attempt_count = 0 WHERE reset_today_flag = 0 OR last_reset_date <> ?
+`
+
+func (q *Queries) ResetDailyCounts(ctx context.Context, lastResetDate sql.NullString) error {
+	_, err := q.db.ExecContext(ctx, resetDailyCounts, lastResetDate)
+	return err
+}
+
+const updateBootInstance = `-- name: UpdateBootInstance :exec
+UPDATE boot_instance SET
+    ocpu = ?, memory = ?, disk = ?, loop_time = ?, instance_count = ?,
+    architecture = ?, image_id = ?, operating_system = ?,
+    operating_system_version = ?, data_gap = ?, notify_flag = ?,
+    remark = ?, updated_at = ?
+WHERE boot_id = ?
+`
+
+type UpdateBootInstanceParams struct {
+	Ocpu                   sql.NullInt64  `json:"ocpu"`
+	Memory                 sql.NullInt64  `json:"memory"`
+	Disk                   sql.NullInt64  `json:"disk"`
+	LoopTime               sql.NullInt64  `json:"loop_time"`
+	InstanceCount          sql.NullInt64  `json:"instance_count"`
+	Architecture           sql.NullString `json:"architecture"`
+	ImageID                sql.NullString `json:"image_id"`
+	OperatingSystem        sql.NullString `json:"operating_system"`
+	OperatingSystemVersion sql.NullString `json:"operating_system_version"`
+	DataGap                sql.NullString `json:"data_gap"`
+	NotifyFlag             sql.NullString `json:"notify_flag"`
+	Remark                 sql.NullString `json:"remark"`
+	UpdatedAt              sql.NullString `json:"updated_at"`
+	BootID                 sql.NullString `json:"boot_id"`
+}
+
+func (q *Queries) UpdateBootInstance(ctx context.Context, arg UpdateBootInstanceParams) error {
+	_, err := q.db.ExecContext(ctx, updateBootInstance,
+		arg.Ocpu,
+		arg.Memory,
+		arg.Disk,
+		arg.LoopTime,
+		arg.InstanceCount,
+		arg.Architecture,
+		arg.ImageID,
+		arg.OperatingSystem,
+		arg.OperatingSystemVersion,
+		arg.DataGap,
+		arg.NotifyFlag,
+		arg.Remark,
+		arg.UpdatedAt,
+		arg.BootID,
+	)
 	return err
 }
 
@@ -293,6 +659,27 @@ func (q *Queries) UpdateBootInstanceStatus(ctx context.Context, arg UpdateBootIn
 		arg.PublicIp,
 		arg.UpdatedAt,
 		arg.ID,
+	)
+	return err
+}
+
+const updateComputerInfo = `-- name: UpdateComputerInfo :exec
+UPDATE oci_computer_info SET computer_create_json = ?, architecture = ?, computer_region = ? WHERE boot_id_str = ?
+`
+
+type UpdateComputerInfoParams struct {
+	ComputerCreateJson sql.NullString `json:"computer_create_json"`
+	Architecture       sql.NullString `json:"architecture"`
+	ComputerRegion     sql.NullString `json:"computer_region"`
+	BootIDStr          sql.NullString `json:"boot_id_str"`
+}
+
+func (q *Queries) UpdateComputerInfo(ctx context.Context, arg UpdateComputerInfoParams) error {
+	_, err := q.db.ExecContext(ctx, updateComputerInfo,
+		arg.ComputerCreateJson,
+		arg.Architecture,
+		arg.ComputerRegion,
+		arg.BootIDStr,
 	)
 	return err
 }

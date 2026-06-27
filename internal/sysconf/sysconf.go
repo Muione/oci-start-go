@@ -39,6 +39,17 @@ func (s *Service) GetBool(ctx context.Context, key string) bool {
 	return cfg.ConfigEnabled.Valid && cfg.ConfigEnabled.Int64 != 0
 }
 
+// SetString upserts the config_value for key.
+func (s *Service) SetString(ctx context.Context, key, value string) error {
+	now := time.Now().Format(timeFmt)
+	return repo.New(s.store.Write).UpsertConfigValue(ctx, repo.UpsertConfigValueParams{
+		ConfigKey:     sql.NullString{String: key, Valid: true},
+		ConfigValue:   sql.NullString{String: value, Valid: true},
+		ConfigEnabled: sql.NullInt64{},
+		LastModified:  sql.NullString{String: now, Valid: true},
+	})
+}
+
 // SetEnabled upserts the config_enabled flag for key (turnstile.enabled etc.).
 func (s *Service) SetEnabled(ctx context.Context, key string, enabled bool) error {
 	now := time.Now().Format(timeFmt)

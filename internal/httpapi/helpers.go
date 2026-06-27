@@ -15,3 +15,8 @@ func ns(v sql.NullString) string {
 func nullStr(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
 }
+
+// nullInt64 wraps an int64 into a nullable; NULL when zero.
+func nullInt64(v int64) sql.NullInt64 {
+	return sql.NullInt64{Int64: v, Valid: v != 0}
+}

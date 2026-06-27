@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "axios": "^1.7.2",
     "element-plus": "^2.7.0",
     "jsencrypt": "^3.3.2",

@@ -10,6 +10,8 @@ sql:
       - internal/repo/queries/tenant.sql
       - internal/repo/queries/instance_detail.sql
       - internal/repo/queries/vpn_proxy_record.sql
+      - internal/repo/queries/grabber.sql
+      - internal/repo/queries/instance_detail_ext.sql
     schema:
       - migrations/0001_init_schema.up.sql
       - migrations/0002_auth.up.sql
