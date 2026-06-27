@@ -151,7 +151,11 @@ func main() {
 		Logger:    logger,
 		MasterKey: masterKey,
 		InstanceLookup: func(instanceID string) (*ws.ConsoleInstanceInfo, error) {
-			var info ws.ConsoleInstanceInfo
+			var (
+				username, port, password, compID, ad sql.NullString
+				tenantID                             sql.NullInt64
+				info                                 ws.ConsoleInstanceInfo
+			)
 			err := store.Read.QueryRowContext(context.Background(),
 				`SELECT instance_id, display_name, public_ips, private_ips, shape,
 				        username, port, password, tenant_id, compartment_id,
@@ -159,11 +163,17 @@ func main() {
 				 FROM instance_detail WHERE instance_id = ? LIMIT 1`,
 				instanceID).Scan(
 				&info.InstanceID, &info.DisplayName, &info.PublicIPs, &info.PrivateIPs,
-				&info.Shape, &info.Username, &info.Port, &info.Password,
-				&info.TenantID, &info.CompartmentID, &info.AvailabilityDomain)
+				&info.Shape, &username, &port, &password,
+				&tenantID, &compID, &ad)
 			if err != nil {
 				return nil, fmt.Errorf("instance %s not found: %w", instanceID, err)
 			}
+			info.Username = username.String
+			info.Port = port.String
+			info.Password = password.String
+			info.TenantID = tenantID.Int64
+			info.CompartmentID = compID.String
+			info.AvailabilityDomain = ad.String
 			return &info, nil
 		},
 	})

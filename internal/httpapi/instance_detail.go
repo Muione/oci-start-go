@@ -3,11 +3,13 @@
 package httpapi
 
 import (
+	"database/sql"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Muione/oci-start-go/internal/oci"
 	"github.com/Muione/oci-start-go/internal/repo"
 	"github.com/Muione/oci-start-go/internal/response"
 )
@@ -177,4 +179,85 @@ func trafficAlertGet(deps *Deps) gin.HandlerFunc {
 		}
 		response.OK(c, response.SuccessData(alert))
 	}
+}
+
+// instanceModify modifies an instance's shape, OCPU, memory, or display name
+// via the OCI API and updates the local DB record.
+// POST /instances/:id/modify  {shape?, ocpus?, memoryInGbs?, displayName?}
+func instanceModify(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid id")
+			return
+		}
+		var body struct {
+			Shape       string   `json:"shape"`
+			Ocpus       *float32 `json:"ocpus"`
+			MemoryInGbs *float32 `json:"memoryInGbs"`
+			DisplayName string  `json:"displayName"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid body")
+			return
+		}
+		if body.Shape == "" && body.DisplayName == "" {
+			response.Fail(c, http.StatusBadRequest, "shape or displayName required")
+			return
+		}
+		// Get the instance to find its tenant
+		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "find instance: "+err.Error())
+			return
+		}
+		// Get tenant credentials
+		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "tenant not found")
+			return
+		}
+		creds := tenantToCreds(t)
+		prov, err := oci.NewProvider(creds, deps.MasterKey)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
+			return
+		}
+		clients, err := oci.NewClients(prov)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			return
+		}
+		updated, err := oci.UpdateInstanceShape(c.Request.Context(), clients, inst.InstanceID, body.Shape, body.Ocpus, body.MemoryInGbs)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "update instance: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessData(map[string]any{
+			"id":          id,
+			"state":       string(updated.LifecycleState),
+			"shape":       body.Shape,
+			"ocpus":       body.Ocpus,
+			"memoryInGbs": body.MemoryInGbs,
+		}))
+	}
+}
+
+// tenantToCreds converts a repo.Tenant to oci.Credentials (used by instanceModify).
+func tenantToCreds(t repo.Tenant) oci.Credentials {
+	return oci.Credentials{
+		Tenancy:     ns(t.Tenancy),
+		UserID:      ns(t.TenantID),
+		Fingerprint: ns(t.Fingerprint),
+		Region:      ns(t.Region),
+		KeyFileBlob: ns(t.KeyFileBlob),
+		KeyFile:     ns(t.KeyFile),
+	}
+}
+
+func ns(v sql.NullString) string {
+	if v.Valid {
+		return v.String
+	}
+	return ""
 }

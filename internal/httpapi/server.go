@@ -69,6 +69,7 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.GET("/instances/list", instanceList(deps))
 	pro.GET("/instances/:id", instanceGet(deps))
 	pro.POST("/instances/:id/remark", instanceUpdateRemark(deps))
+	pro.POST("/instances/:id/modify", instanceModify(deps))
 	pro.GET("/instances/traffic", instanceTraffic(deps))
 	pro.GET("/backup/list", backupList(deps))
 	pro.GET("/backup/delete", backupDelete(deps))

@@ -154,9 +154,50 @@ func (s *TenantService) SyncOci(ctx context.Context, id int64) error {
 	})
 }
 
-// ListInstances returns the locally cached instance_detail rows for a tenant.
-func (s *TenantService) ListInstances(ctx context.Context, id int64) ([]repo.ListInstanceDetailsByTenantIdRow, error) {
-	return repo.New(s.store.Read).ListInstanceDetailsByTenantId(ctx, sql.NullInt64{Int64: id, Valid: true})
+// ListInstances returns the locally cached instance_detail rows for a tenant,
+// converted to plain types so the JSON serialization produces strings/numbers
+// rather than sql.NullString objects.
+func (s *TenantService) ListInstances(ctx context.Context, id int64) ([]InstanceDetailResp, error) {
+	rows, err := repo.New(s.store.Read).ListInstanceDetailsByTenantId(ctx, sql.NullInt64{Int64: id, Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	// Resolve tenant name for the given tenant id
+	tenantName := ""
+	if t, err := repo.New(s.store.Read).FindTenantByID(ctx, id); err == nil {
+		tenantName = ns(t.UserName)
+	}
+	out := make([]InstanceDetailResp, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, InstanceDetailResp{
+			ID:                  r.ID,
+			TenantID:            ni(r.TenantID),
+			TenantName:          tenantName,
+			InstanceID:          ns(r.InstanceID),
+			DisplayName:         ns(r.DisplayName),
+			Shape:               ns(r.Shape),
+			State:               ns(r.State),
+			Ocpus:               ni(r.Ocpus),
+			MemoryInGbs:         ni(r.MemoryInGbs),
+			BootVolumeSizeInGbs: ni(r.BootVolumeSizeInGbs),
+			PublicIps:           ns(r.PublicIps),
+			PrivateIps:          ns(r.PrivateIps),
+			AvailabilityDomain:  ns(r.AvailabilityDomain),
+			CompartmentID:       ns(r.CompartmentID),
+			BootVolumeID:        ns(r.BootVolumeID),
+			BootVolumeName:      ns(r.BootVolumeName),
+			VpusPerGb:           ns(r.VpusPerGb),
+			Ipv6Addresses:       ns(r.Ipv6Addresses),
+			VnicIds:             ns(r.VnicIds),
+			Architecture:        ns(r.Architecture),
+			ConnTime:            r.ConnTime,
+			EnablePing:          r.EnablePing,
+			OnLineEnable:        r.OnLineEnable,
+			LastHeartbeat:       ns(r.LastHeartbeat),
+			CreateTime:          ns(r.CreateTime),
+		})
+	}
+	return out, nil
 }
 
 // --- helpers ---

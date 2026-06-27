@@ -10,6 +10,7 @@
         <el-empty description="暂无实例数据" :image-size="80" />
       </template>
       <el-table-column prop="displayName" label="名称" min-width="160" />
+      <el-table-column prop="tenantName" label="所属租户" min-width="140" />
       <el-table-column prop="instanceId" label="实例ID" min-width="220" show-overflow-tooltip />
       <el-table-column prop="shape" label="Shape" min-width="140" />
       <el-table-column label="状态" width="100">
@@ -31,9 +32,10 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="140" fixed="right">
+      <el-table-column label="操作" width="240" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="showDetail(row)">详情</el-button>
+          <el-button size="small" type="warning" @click="openModify(row)">修改配置</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -50,6 +52,7 @@
     <el-dialog v-model="detailVisible" title="实例详情" width="720px">
       <el-descriptions v-if="detail" :column="2" border>
         <el-descriptions-item label="显示名称">{{ detail.displayName }}</el-descriptions-item>
+        <el-descriptions-item label="所属租户">{{ detail.tenantName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="实例ID">{{ detail.instanceId }}</el-descriptions-item>
         <el-descriptions-item label="Shape">{{ detail.shape }}</el-descriptions-item>
         <el-descriptions-item label="状态">{{ detail.state }}</el-descriptions-item>
@@ -76,6 +79,35 @@
         </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
+
+    <!-- Modify Config Dialog -->
+    <el-dialog v-model="modifyVisible" title="修改实例配置" width="520px" destroy-on-close>
+      <el-alert
+        title="提示：修改 Shape 可能需要先停止实例，请在 OCI 控制台确认实例状态"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom:16px"
+      />
+      <el-form :model="modifyForm" label-width="120px">
+        <el-form-item label="当前 Shape">
+          <el-input :model-value="modifyTarget?.shape" disabled />
+        </el-form-item>
+        <el-form-item label="新 Shape">
+          <el-input v-model="modifyForm.shape" placeholder="例如: VM.Standard.E4.Flex" />
+        </el-form-item>
+        <el-form-item label="OCPU">
+          <el-input-number v-model="modifyForm.ocpus" :min="1" :max="128" :step="1" controls-position="right" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="内存(GB)">
+          <el-input-number v-model="modifyForm.memoryInGbs" :min="1" :max="1024" :step="1" controls-position="right" style="width:100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="modifyVisible = false">取消</el-button>
+        <el-button type="primary" :loading="modifySaving" @click="doModify">确认修改</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -86,7 +118,8 @@ import { ElMessage } from 'element-plus'
 import request from '../utils/request'
 
 interface Instance {
-  id: number; instanceId: string; displayName: string; shape: string; state: string
+  id: number; tenantId: number; tenantName: string
+  instanceId: string; displayName: string; shape: string; state: string
   ocpus: number; memoryInGbs: number; bootVolumeSizeInGbs: number
   publicIps: string; privateIps: string; availabilityDomain: string
   compartmentId: string; bootVolumeId: string; bootVolumeName: string
@@ -102,6 +135,55 @@ const detailVisible = ref(false)
 const detail = ref<Instance | null>(null)
 const router = useRouter()
 const remark = ref('')
+// Modify config state
+const modifyVisible = ref(false)
+const modifySaving = ref(false)
+const modifyTarget = ref<Instance | null>(null)
+const modifyForm = ref({ shape: '', ocpus: 4, memoryInGbs: 24, displayName: '' })
+
+function openModify(row: Instance) {
+  modifyTarget.value = row
+  modifyForm.value = {
+    shape: row.shape || '',
+    ocpus: row.ocpus || 4,
+    memoryInGbs: row.memoryInGbs || 24,
+    displayName: row.displayName || '',
+  }
+  modifyVisible.value = true
+}
+
+async function doModify() {
+  if (!modifyTarget.value) return
+  modifySaving.value = true
+  try {
+    const body: any = {}
+    if (modifyForm.value.shape && modifyForm.value.shape !== modifyTarget.value.shape) {
+      body.shape = modifyForm.value.shape
+    }
+    if (modifyForm.value.ocpus > 0 && modifyForm.value.ocpus !== modifyTarget.value.ocpus) {
+      body.ocpus = modifyForm.value.ocpus
+    }
+    if (modifyForm.value.memoryInGbs > 0 && modifyForm.value.memoryInGbs !== modifyTarget.value.memoryInGbs) {
+      body.memoryInGbs = modifyForm.value.memoryInGbs
+    }
+    if (modifyForm.value.displayName && modifyForm.value.displayName !== modifyTarget.value.displayName) {
+      body.displayName = modifyForm.value.displayName
+    }
+    if (!body.shape && !body.displayName && body.ocpus === undefined && body.memoryInGbs === undefined) {
+      ElMessage.warning('没有需要修改的配置')
+      modifySaving.value = false
+      return
+    }
+    await request.post(`/instances/${modifyTarget.value.id}/modify`, body)
+    ElMessage.success('修改请求已提交，实例正在更新中')
+    modifyVisible.value = false
+    await load()
+  } catch (e: any) {
+    ElMessage.error(e.message || '修改失败')
+  } finally {
+    modifySaving.value = false
+  }
+}
 
 async function load() {
   loading.value = true

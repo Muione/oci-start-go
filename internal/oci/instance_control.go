@@ -103,3 +103,43 @@ func GetInstanceState(ctx context.Context, c Clients, instanceID string) (string
 	}
 	return string(inst.LifecycleState), nil
 }
+
+// UpdateInstanceShape modifies the shape (and optionally OCPU/memory) of a
+// running or stopped instance. The instance must be STOPPED for most shape
+// changes; some flexible shapes support in-place resizing without stop.
+func UpdateInstanceShape(ctx context.Context, c Clients, instanceID, shape string, ocpus, memoryInGBs *float32) (*core.Instance, error) {
+	details := core.UpdateInstanceDetails{
+		Shape: common.String(shape),
+	}
+	if ocpus != nil || memoryInGBs != nil {
+		details.ShapeConfig = &core.UpdateInstanceShapeConfigDetails{}
+		if ocpus != nil {
+			details.ShapeConfig.Ocpus = ocpus
+		}
+		if memoryInGBs != nil {
+			details.ShapeConfig.MemoryInGBs = memoryInGBs
+		}
+	}
+	resp, err := c.Compute.UpdateInstance(ctx, core.UpdateInstanceRequest{
+		InstanceId:            common.String(instanceID),
+		UpdateInstanceDetails: details,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("update instance %s: %w", instanceID, err)
+	}
+	return &resp.Instance, nil
+}
+
+// UpdateInstanceDisplayName changes the display name of an instance.
+func UpdateInstanceDisplayName(ctx context.Context, c Clients, instanceID, displayName string) (*core.Instance, error) {
+	resp, err := c.Compute.UpdateInstance(ctx, core.UpdateInstanceRequest{
+		InstanceId: common.String(instanceID),
+		UpdateInstanceDetails: core.UpdateInstanceDetails{
+			DisplayName: common.String(displayName),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("update instance display name %s: %w", instanceID, err)
+	}
+	return &resp.Instance, nil
+}

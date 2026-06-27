@@ -25,6 +25,7 @@ func NewInstanceDetailSvc(store *db.Store) *InstanceDetailSvc {
 type InstanceDetailResp struct {
 	ID                  int64  `json:"id"`
 	TenantID            int64  `json:"tenantId"`
+	TenantName          string `json:"tenantName"`
 	InstanceID          string `json:"instanceId"`
 	DisplayName         string `json:"displayName"`
 	Shape               string `json:"shape"`
@@ -49,13 +50,27 @@ type InstanceDetailResp struct {
 	CreateTime          string `json:"createTime"`
 }
 
+// tenantNameMap builds a tenantID → userName lookup.
+func (s *InstanceDetailSvc) tenantNameMap(ctx context.Context) (map[int64]string, error) {
+	tenants, err := repo.New(s.store.Read).ListTenants(ctx)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[int64]string, len(tenants))
+	for _, t := range tenants {
+		m[t.ID] = ns(t.UserName)
+	}
+	return m, nil
+}
+
 // GetByID returns a single instance detail by primary key.
 func (s *InstanceDetailSvc) GetByID(ctx context.Context, id int64) (*InstanceDetailResp, error) {
 	r, err := repo.New(s.store.Read).FindInstanceDetailByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("find instance detail %d: %w", id, err)
 	}
-	resp := toDetailResp(r)
+	tNames, _ := s.tenantNameMap(ctx)
+	resp := toDetailResp(r, tNames)
 	return &resp, nil
 }
 
@@ -73,9 +88,10 @@ func (s *InstanceDetailSvc) List(ctx context.Context, limit, offset int64) ([]In
 	if err != nil {
 		return nil, 0, fmt.Errorf("list instance details: %w", err)
 	}
+	tNames, _ := s.tenantNameMap(ctx)
 	out := make([]InstanceDetailResp, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, toListDetailResp(r))
+		out = append(out, toListDetailResp(r, tNames))
 	}
 	return out, total, nil
 }
@@ -86,9 +102,10 @@ func (s *InstanceDetailSvc) ListByTenant(ctx context.Context, tenantID int64) ([
 	if err != nil {
 		return nil, fmt.Errorf("find instances by tenant %d: %w", tenantID, err)
 	}
+	tNames, _ := s.tenantNameMap(ctx)
 	out := make([]InstanceDetailResp, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, toFindByTenantResp(r))
+		out = append(out, toFindByTenantResp(r, tNames))
 	}
 	return out, nil
 }
@@ -183,10 +200,12 @@ func (s *InstanceDetailSvc) InsertBackup(ctx context.Context, params repo.Insert
 
 // --- converters from sqlc Row types to API response ---
 
-func toDetailResp(r repo.FindInstanceDetailByIDRow) InstanceDetailResp {
+func toDetailResp(r repo.FindInstanceDetailByIDRow, tNames map[int64]string) InstanceDetailResp {
+	tid := ni(r.TenantID)
 	return InstanceDetailResp{
 		ID:                  r.ID,
-		TenantID:            ni(r.TenantID),
+		TenantID:            tid,
+		TenantName:          tNames[tid],
 		InstanceID:          ns(r.InstanceID),
 		DisplayName:         ns(r.DisplayName),
 		Shape:               ns(r.Shape),
@@ -212,10 +231,12 @@ func toDetailResp(r repo.FindInstanceDetailByIDRow) InstanceDetailResp {
 	}
 }
 
-func toListDetailResp(r repo.ListAllInstanceDetailsRow) InstanceDetailResp {
+func toListDetailResp(r repo.ListAllInstanceDetailsRow, tNames map[int64]string) InstanceDetailResp {
+	tid := ni(r.TenantID)
 	return InstanceDetailResp{
 		ID:                  r.ID,
-		TenantID:            ni(r.TenantID),
+		TenantID:            tid,
+		TenantName:          tNames[tid],
 		InstanceID:          ns(r.InstanceID),
 		DisplayName:         ns(r.DisplayName),
 		Shape:               ns(r.Shape),
@@ -241,10 +262,12 @@ func toListDetailResp(r repo.ListAllInstanceDetailsRow) InstanceDetailResp {
 	}
 }
 
-func toFindByTenantResp(r repo.FindInstancesByTenantIdRow) InstanceDetailResp {
+func toFindByTenantResp(r repo.FindInstancesByTenantIdRow, tNames map[int64]string) InstanceDetailResp {
+	tid := ni(r.TenantID)
 	return InstanceDetailResp{
 		ID:                  r.ID,
-		TenantID:            ni(r.TenantID),
+		TenantID:            tid,
+		TenantName:          tNames[tid],
 		InstanceID:          ns(r.InstanceID),
 		DisplayName:         ns(r.DisplayName),
 		Shape:               ns(r.Shape),

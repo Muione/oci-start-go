@@ -85,6 +85,8 @@ export interface BootTask {
 /** Instance from GET /instances/list */
 export interface Instance {
   id: number
+  tenantId: number
+  tenantName: string
   instanceId: string
   displayName: string
   shape: string

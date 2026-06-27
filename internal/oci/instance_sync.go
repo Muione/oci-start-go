@@ -97,7 +97,7 @@ func buildInstanceDetailRow(ctx context.Context, c Clients, tenantID int64, inst
 		}
 	}
 	// Boot volume: id/name/size/vpus (first attachment).
-	if id, name, size, vpus, ok := bootVolumeInfo(ctx, c, ptrStr(inst.Id), compartmentID); ok {
+	if id, name, size, vpus, ok := bootVolumeInfo(ctx, c, ptrStr(inst.Id), compartmentID, ptrStr(inst.AvailabilityDomain)); ok {
 		row.BootVolumeID = nullStr(id)
 		row.BootVolumeName = nullStr(name)
 		if size != nil {
@@ -110,10 +110,11 @@ func buildInstanceDetailRow(ctx context.Context, c Clients, tenantID int64, inst
 	return row
 }
 
-func bootVolumeInfo(ctx context.Context, c Clients, instanceID, compartmentID string) (id, name string, size, vpus *int64, ok bool) {
+func bootVolumeInfo(ctx context.Context, c Clients, instanceID, compartmentID, availabilityDomain string) (id, name string, size, vpus *int64, ok bool) {
 	resp, err := c.Compute.ListBootVolumeAttachments(ctx, core.ListBootVolumeAttachmentsRequest{
-		CompartmentId: common.String(compartmentID),
-		InstanceId:    common.String(instanceID),
+		CompartmentId:      common.String(compartmentID),
+		AvailabilityDomain: common.String(availabilityDomain),
+		InstanceId:         common.String(instanceID),
 	})
 	if err != nil {
 		return
