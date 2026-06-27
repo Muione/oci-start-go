@@ -120,6 +120,113 @@ onMounted(load)
 </script>
 
 <style scoped>
-.toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.page-title { margin: 0; margin-right: auto; font-size: 22px; color: #303133; }
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  margin: 0;
+  margin-right: auto;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+  background: linear-gradient(135deg, #0066ff, #00bcd4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+:deep(.el-table) {
+  border-radius: 12px;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(0, 102, 255, 0.1);
+}
+
+:deep(.el-table__header) {
+  background: linear-gradient(90deg, rgba(0, 102, 255, 0.03), rgba(0, 188, 212, 0.03));
+}
+
+:deep(.el-table__header th) {
+  background: transparent;
+  color: #1e293b;
+  font-weight: 600;
+  border-bottom: 2px solid rgba(0, 102, 255, 0.1);
+}
+
+:deep(.el-table__body tr:hover > td) {
+  background-color: rgba(0, 102, 255, 0.05);
+}
+
+:deep(.el-card) {
+  border-radius: 12px;
+  border: 1px solid rgba(0, 102, 255, 0.1);
+  margin-bottom: 20px;
+}
+
+:deep(.el-card__header) {
+  background: linear-gradient(90deg, rgba(0, 102, 255, 0.03), rgba(0, 188, 212, 0.03));
+  border-bottom: 1px solid rgba(0, 102, 255, 0.1);
+  padding: 20px 24px;
+}
+
+:deep(.el-card__body) {
+  background: #ffffff;
+  padding: 24px;
+}
+
+:deep(.el-button--small) {
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+:deep(.el-button--primary:hover) {
+  box-shadow: 0 8px 16px rgba(0, 102, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+:deep(.el-button--danger:hover) {
+  box-shadow: 0 8px 16px rgba(239, 68, 68, 0.3);
+  transform: translateY(-1px);
+}
+
+:deep(.el-tag) {
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+}
+
+:deep(.el-form-item__label) {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+:deep(.el-input__wrapper) {
+  border-radius: 8px;
+}
+
+:deep(.el-pagination) {
+  text-align: center;
+  margin-top: 24px;
+}
+
+:deep(.el-pagination__item.active) {
+  background: linear-gradient(135deg, #0066ff, #00bcd4);
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .page-title {
+    font-size: 20px;
+  }
+}
 </style>

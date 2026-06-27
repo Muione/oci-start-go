@@ -141,6 +141,93 @@ onMounted(load)
 </script>
 
 <style scoped>
-.toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.toolbar h2 { margin: 0; margin-right: auto; }
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.toolbar h2 {
+  margin: 0;
+  margin-right: auto;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+  background: linear-gradient(135deg, #0066ff, #00bcd4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+:deep(.el-table) {
+  border-radius: 12px;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(0, 102, 255, 0.1);
+}
+
+:deep(.el-table__header) {
+  background: linear-gradient(90deg, rgba(0, 102, 255, 0.03), rgba(0, 188, 212, 0.03));
+}
+
+:deep(.el-table__header th) {
+  background: transparent;
+  color: #1e293b;
+  font-weight: 600;
+  border-bottom: 2px solid rgba(0, 102, 255, 0.1);
+}
+
+:deep(.el-table__body tr:hover > td) {
+  background-color: rgba(0, 102, 255, 0.05);
+}
+
+:deep(.el-pagination) {
+  text-align: center;
+  margin-top: 24px;
+}
+
+:deep(.el-pagination__item.active) {
+  background: linear-gradient(135deg, #0066ff, #00bcd4);
+  color: #fff;
+}
+
+:deep(.el-dialog) {
+  border-radius: 16px;
+}
+
+:deep(.el-dialog__header) {
+  border-bottom: 1px solid rgba(0, 102, 255, 0.1);
+}
+
+:deep(.el-dialog__title) {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+:deep(.el-descriptions) {
+  background: transparent;
+}
+
+:deep(.el-descriptions__body) {
+  background: transparent;
+}
+
+:deep(.el-button--small) {
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+:deep(.el-button--primary:hover) {
+  box-shadow: 0 8px 16px rgba(0, 102, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+:deep(.el-tag) {
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+}
 </style>

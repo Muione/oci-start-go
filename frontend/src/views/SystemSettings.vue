@@ -409,25 +409,195 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.settings-page { padding: 4px 0; }
+.settings-page {
+  padding: 0;
+}
+
 .toolbar {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 16px;
 }
-.toolbar-left { display: flex; align-items: center; gap: 12px; }
-.toolbar-left h2 { margin: 0; }
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolbar-left h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+  background: linear-gradient(135deg, #0066ff, #00bcd4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.toolbar-left :deep(.el-tag) {
+  border-radius: 6px;
+  font-weight: 600;
+  background: rgba(0, 102, 255, 0.1);
+  color: #0066ff;
+  border: none;
+}
+
 .section-card {
-  margin-bottom: 20px;
-  border-radius: 8px;
-  border: 1px solid #ebeef5;
-  transition: box-shadow 0.2s;
+  margin-bottom: 24px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 102, 255, 0.1);
+  background: linear-gradient(135deg, #ffffff, #f8fafc);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.section-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.08); }
-.card-header { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+
+.section-card:hover {
+  box-shadow: 0 20px 40px rgba(0, 102, 255, 0.15);
+  transform: translateY(-4px);
+  border-color: rgba(0, 102, 255, 0.2);
+}
+
+.section-card :deep(.el-card__header) {
+  padding: 20px 24px;
+  background: linear-gradient(90deg, rgba(0, 102, 255, 0.03), rgba(0, 188, 212, 0.03));
+  border-bottom: 1px solid rgba(0, 102, 255, 0.1);
+}
+
+.section-card :deep(.el-card__body) {
+  padding: 24px;
+  background: #ffffff;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
 .channel-card {
-  border: 1px solid #ebeef5; border-radius: 8px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  border: 1px solid rgba(0, 102, 255, 0.1);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  background: linear-gradient(135deg, #f8fafc, #ffffff);
 }
-.channel-card.configured { border-color: #b7eb8f; }
-.channel-header { display: flex; align-items: center; justify-content: space-between; }
+
+.channel-card:hover {
+  border-color: rgba(0, 102, 255, 0.2);
+  box-shadow: 0 8px 16px rgba(0, 102, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.channel-card.configured {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.05), #ffffff);
+}
+
+.channel-card.configured::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #10b981, #34d399);
+  border-radius: 12px 12px 0 0;
+}
+
+.channel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0, 102, 255, 0.1);
+}
+
+:deep(.el-descriptions) {
+  background: transparent;
+}
+
+:deep(.el-descriptions__body) {
+  background: transparent;
+}
+
+:deep(.el-descriptions__item) {
+  background: transparent;
+}
+
+:deep(.el-descriptions__cell) {
+  padding: 12px 0;
+  color: #64748b;
+}
+
+:deep(.el-descriptions__label) {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+:deep(.el-button) {
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+:deep(.el-button--primary:hover) {
+  box-shadow: 0 8px 16px rgba(0, 102, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+:deep(.el-button--warning:hover) {
+  box-shadow: 0 8px 16px rgba(245, 158, 11, 0.3);
+  transform: translateY(-1px);
+}
+
+:deep(.el-button--info:hover) {
+  box-shadow: 0 8px 16px rgba(0, 102, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+:deep(.el-tag) {
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  padding: 6px 12px;
+}
+
+:deep(.el-dialog) {
+  border-radius: 16px;
+}
+
+:deep(.el-dialog__header) {
+  border-bottom: 1px solid rgba(0, 102, 255, 0.1);
+  padding: 20px 24px;
+}
+
+:deep(.el-dialog__title) {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+@media (max-width: 768px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .toolbar-left h2 {
+    font-size: 20px;
+  }
+
+  .section-card {
+    margin-bottom: 16px;
+  }
+
+  .card-header {
+    font-size: 14px;
+  }
+}
 </style>

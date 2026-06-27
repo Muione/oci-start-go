@@ -114,6 +114,121 @@ async function onSubmit() {
 </script>
 
 <style scoped>
-.login-wrap { display: flex; align-items: center; justify-content: center; height: 100vh; background: #f0f2f5; }
-.login-card { width: 420px; }
+.login-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%);
+  background-size: 400% 400%;
+  animation: gradient-animation 15s ease infinite;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-wrap::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+              radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.login-card {
+  width: 420px;
+  z-index: 10;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  border-radius: 16px;
+  animation: slide-up 0.5s ease-out;
+}
+
+.login-card :deep(.el-card__header) {
+  background: transparent;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  padding: 24px;
+}
+
+.login-card :deep(.el-card__header h2) {
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin: 0;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.login-card :deep(.el-card__body) {
+  background: rgba(255, 255, 255, 0.95);
+  padding: 24px;
+}
+
+.login-card :deep(.el-form-item__label) {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.login-card :deep(.el-button) {
+  width: 100%;
+  font-size: 16px;
+  font-weight: 600;
+  height: 40px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.login-card :deep(.el-button--primary) {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border: none;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.login-card :deep(.el-button--primary:hover) {
+  background: linear-gradient(135deg, #764ba2, #667eea);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+  transform: translateY(-2px);
+}
+
+.login-card :deep(.el-checkbox__label) {
+  color: #64748b;
+  font-weight: 500;
+}
+
+@keyframes gradient-animation {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    width: 100%;
+    margin: 0 16px;
+  }
+}
 </style>

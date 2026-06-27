@@ -1,0 +1,628 @@
+/* ==================== Global Styles ==================== */
+:root {
+  /* Primary Colors - Modern Blue Gradient */
+  --primary-color: #0066ff;
+  --primary-light: #3385ff;
+  --primary-dark: #0052cc;
+  
+  /* Secondary Colors - Teal/Cyan */
+  --secondary-color: #00bcd4;
+  --secondary-light: #4dd0e1;
+  
+  /* Accent Colors */
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --danger-color: #ef4444;
+  --info-color: #0066ff;
+  
+  /* Neutral Colors */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-dark: #001529;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-tertiary: #94a3b8;
+  --border-color: #e2e8f0;
+  --border-color-light: #f1f5f9;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  
+  /* Typography */
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 
+                 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --font-mono: 'Menlo', 'Monaco', 'Courier New', monospace;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-family);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+/* ==================== Typography ==================== */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+h1 {
+  font-size: 2rem;
+}
+
+h2 {
+  font-size: 1.5rem;
+}
+
+h3 {
+  font-size: 1.25rem;
+}
+
+p {
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+/* ==================== Layout ==================== */
+.layout {
+  height: 100vh;
+  background: var(--bg-secondary);
+}
+
+.aside {
+  background: linear-gradient(135deg, #0a0e27 0%, #001529 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  overflow-y: auto;
+}
+
+.aside::-webkit-scrollbar {
+  width: 6px;
+}
+
+.aside::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.aside::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.aside::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.logo {
+  padding: 16px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 12px;
+  transition: all 0.3s ease;
+}
+
+.logo-text {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.5px;
+  background: linear-gradient(135deg, #3385ff, #00bcd4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.logo-icon {
+  font-size: 24px;
+  display: block;
+}
+
+/* ==================== Navigation ==================== */
+.side-menu {
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.side-menu :deep(.el-menu-item),
+.side-menu :deep(.el-sub-menu__title) {
+  transition: all 0.3s ease;
+  color: #a3b1cc;
+  font-weight: 500;
+}
+
+.side-menu :deep(.el-menu-item:hover),
+.side-menu :deep(.el-sub-menu__title:hover) {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: #fff;
+}
+
+.side-menu :deep(.el-menu-item.is-active),
+.side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+  background: linear-gradient(90deg, rgba(0, 102, 255, 0.3), rgba(0, 188, 212, 0.1));
+  color: #3385ff;
+  border-right: 3px solid #0066ff;
+}
+
+.side-menu :deep(.el-icon) {
+  margin-right: 8px;
+  transition: all 0.3s ease;
+}
+
+/* ==================== Cards ==================== */
+.el-card {
+  border: none;
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--bg-primary);
+}
+
+.el-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.el-card.stat-card {
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #ffffff, #f8fafc);
+}
+
+.el-card.stat-card:hover {
+  box-shadow: 0 20px 25px -5px rgba(0, 102, 255, 0.1);
+  transform: translateY(-4px);
+}
+
+.el-card.section-card {
+  border-radius: 12px;
+  border: 1px solid var(--border-color-light);
+}
+
+.el-card :deep(.el-card__header) {
+  border-bottom: 1px solid var(--border-color-light);
+  padding: 20px;
+  background: linear-gradient(90deg, rgba(0, 102, 255, 0.02), rgba(0, 188, 212, 0.02));
+}
+
+/* ==================== Stat Cards ==================== */
+.stat-card .stat-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stat-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+  box-shadow: 0 4px 12px rgba(0, 102, 255, 0.3);
+}
+
+.stat-body {
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* ==================== Buttons ==================== */
+.el-button {
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  text-transform: none;
+  letter-spacing: 0.5px;
+}
+
+.el-button--primary {
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+  border: none;
+}
+
+.el-button--primary:hover {
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary-color));
+  box-shadow: 0 8px 16px rgba(0, 102, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.el-button--success {
+  background: linear-gradient(135deg, var(--success-color), #34d399);
+  border: none;
+}
+
+.el-button--success:hover {
+  background: linear-gradient(135deg, #059669, var(--success-color));
+  box-shadow: 0 8px 16px rgba(16, 185, 129, 0.3);
+}
+
+.el-button--warning {
+  background: linear-gradient(135deg, var(--warning-color), #fbbf24);
+  border: none;
+  color: white;
+}
+
+.el-button--warning:hover {
+  background: linear-gradient(135deg, #d97706, var(--warning-color));
+  box-shadow: 0 8px 16px rgba(245, 158, 11, 0.3);
+}
+
+.el-button--danger {
+  background: linear-gradient(135deg, var(--danger-color), #f87171);
+  border: none;
+}
+
+.el-button--danger:hover {
+  background: linear-gradient(135deg, #dc2626, var(--danger-color));
+  box-shadow: 0 8px 16px rgba(239, 68, 68, 0.3);
+}
+
+/* ==================== Forms ==================== */
+.el-form-item {
+  margin-bottom: 20px;
+}
+
+.el-form-item :deep(.el-form-item__label) {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.el-input {
+  border-radius: 8px;
+}
+
+.el-input :deep(.el-input__wrapper) {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  background: var(--bg-primary);
+}
+
+.el-input :deep(.el-input__wrapper:hover) {
+  border-color: var(--primary-light);
+}
+
+.el-input :deep(.el-input__wrapper.is-focus) {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
+}
+
+.el-input :deep(.el-input__inner) {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.el-input :deep(.el-input__inner::placeholder) {
+  color: var(--text-tertiary);
+}
+
+/* ==================== Tables ==================== */
+.el-table {
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.el-table :deep(.el-table__header) {
+  background: linear-gradient(90deg, rgba(0, 102, 255, 0.02), rgba(0, 188, 212, 0.02));
+}
+
+.el-table :deep(.el-table__header th) {
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: 600;
+  border-bottom: 2px solid var(--border-color-light);
+}
+
+.el-table :deep(.el-table__body td) {
+  border-bottom: 1px solid var(--border-color-light);
+  color: var(--text-primary);
+}
+
+.el-table :deep(.el-table__body tr:hover > td) {
+  background-color: rgba(0, 102, 255, 0.05);
+}
+
+/* ==================== Tags ==================== */
+.el-tag {
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  padding: 6px 12px;
+}
+
+.el-tag--primary {
+  background: rgba(0, 102, 255, 0.1);
+  color: var(--primary-color);
+}
+
+.el-tag--success {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success-color);
+}
+
+.el-tag--warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning-color);
+}
+
+.el-tag--danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger-color);
+}
+
+.el-tag--info {
+  background: rgba(0, 102, 255, 0.1);
+  color: var(--info-color);
+}
+
+/* ==================== Dialogs ==================== */
+.el-dialog {
+  border-radius: 12px;
+}
+
+.el-dialog :deep(.el-dialog__header) {
+  border-bottom: 1px solid var(--border-color-light);
+  padding: 20px;
+}
+
+.el-dialog :deep(.el-dialog__title) {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* ==================== Loading & Skeleton ==================== */
+.el-skeleton__item {
+  background: linear-gradient(
+    90deg,
+    var(--border-color-light) 25%,
+    var(--border-color) 50%,
+    var(--border-color-light) 75%
+  );
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+  border-radius: 8px;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ==================== Utilities ==================== */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 0;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.toolbar-left h2 {
+  margin-bottom: 0;
+}
+
+.stats-row {
+  margin-bottom: 24px;
+}
+
+.engine-section {
+  padding: 12px 0;
+}
+
+.engine-section-title {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.engine-metrics {
+  display: flex;
+  gap: 16px;
+}
+
+.engine-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metric-num {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.metric-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 768px) {
+  .logo-text {
+    font-size: 16px;
+  }
+  
+  .stat-value {
+    font-size: 24px;
+  }
+  
+  .toolbar {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+}
+
+/* ==================== Animations ==================== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.slide-in-left {
+  animation: slideInLeft 0.3s ease-out;
+}
+
+/* ==================== Element Plus Overrides ==================== */
+.el-message-box {
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.el-message-box__header {
+  border-bottom: 1px solid var(--border-color-light);
+  padding: 20px;
+}
+
+.el-notification {
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.el-popper.is-dark {
+  background: #1f2937;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.el-popper.is-dark :deep([role="tooltip"]) {
+  color: #f3f4f6;
+}
+
+/* ==================== Scrollbar Styling ==================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* ==================== Dark Mode Support ==================== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #1e293b;
+    --bg-secondary: #0f172a;
+    --bg-tertiary: #1e293b;
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --text-tertiary: #94a3b8;
+    --border-color: #334155;
+    --border-color-light: #1e293b;
+  }
+  
+  body {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+  
+  .el-card {
+    background: var(--bg-primary);
+  }
+}
