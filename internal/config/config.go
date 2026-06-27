@@ -3,6 +3,7 @@
 package config
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,9 @@ import (
 
 	"github.com/spf13/viper"
 )
+
+//go:embed default_config.yaml
+var defaultConfig []byte
 
 type Config struct {
 	Server     ServerCfg     `mapstructure:"server"`
@@ -115,7 +119,8 @@ type MigrateCfg struct {
 }
 
 // Load reads config.yaml (cwd or /etc/oci-start), applies env overrides, and
-// resolves the data directory (DATA_PATH or ./data).
+// resolves the data directory (DATA_PATH or ./data). If no config file is found,
+// the embedded default is written to ./config.yaml on first run.
 func Load() (*Config, error) {
 	v := viper.New()
 	v.SetConfigName("config")
@@ -136,8 +141,21 @@ func Load() (*Config, error) {
 	v.SetDefault("migrate.auto_on_boot", true)
 
 	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
+		// If config file not found, write the embedded default.
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			if werr := os.WriteFile("config.yaml", defaultConfig, 0644); werr != nil {
+				return nil, fmt.Errorf("config not found and failed to write default: %w", werr)
+			}
+			fmt.Println("📝 首次运行 — 已生成默认配置文件 config.yaml，请按需修改后重新启动")
+			// Re-read the newly written config.
+			if rerr := v.ReadInConfig(); rerr != nil {
+				return nil, fmt.Errorf("read newly generated config: %w", rerr)
+			}
+		} else {
+			return nil, fmt.Errorf("read config: %w", err)
+		}
 	}
+
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshal config: %w", err)

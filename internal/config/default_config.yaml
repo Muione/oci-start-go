@@ -1,0 +1,66 @@
+# oci-start Go rewrite — Phase 1 runtime config (mirrors Java application.yml)
+# Env overrides: SERVER_PORT, DATA_PATH (remaps ./data prefix), LOG_HOME, DEPLOY_TYPE,
+# OCI_START_MASTER_KEY (base64 of 32 raw bytes; read by crypto pkg, not viper), TZ.
+
+server:
+  port: 9856                 # SERVER_PORT
+  max_header_bytes: 81920
+
+datasource:
+  driver: sqlite
+  url: "file:./data/vps.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)&_pragma=synchronous(NORMAL)"
+  max_open_conns: 1          # write pool: serialized writes
+  read_max_open_conns: 0     # read pool: unlimited (WAL allows concurrent readers)
+
+base_file:
+  path: ./data/upload/       # DATA_PATH remaps ./data prefix
+
+third_api:
+  speed_url: https://speed.objboy.com/   # user-facing speed-test endpoint (NOT telemetry)
+
+oci:
+  version: 0.1.0
+  ssh_version: v-0.1.0
+
+ssl:
+  staging: false
+
+turnstile:
+  local:
+    bypass: false   # dev: force-disable Turnstile at boot (parity: turnstile.local.bypass)
+
+sa_token:                    # consumed Phase 2; declared now for parity
+  name: satoken
+  timeout: 2592000           # 30d
+  active_timeout: 7200       # 2h
+  is_concurrent: false
+  style: uuid
+
+openresty:                   # Phase 7
+  api:
+    base_url: http://127.0.0.1:8080/api
+
+cache:                       # Phase 7
+  type: ristretto
+  spec:
+    initial_capacity: 100
+    maximum_size: 1000
+    expire_after_access: 30m
+    expire_after_write: 1h
+
+logging:
+  level: info
+  log_home: logs             # LOG_HOME
+  file: application.log
+  max_size_mb: 100
+  max_age_days: 3
+  total_size_cap_gb: 3
+  clean_history_on_start: true
+  pretty_console: true
+
+deploy:
+  type: docker               # runtime-detected: ssh if /.dockerenv absent
+
+migrate:
+  path: ./migrations
+  auto_on_boot: true
