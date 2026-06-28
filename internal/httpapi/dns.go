@@ -190,8 +190,8 @@ func cloudflareZones(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured (set cloudflare.api.token)")
 			return
 		}
-		client := dns.NewCfClient(cfToken)
-		zones, err := client.ListZones(ctx)
+		cache := dns.GetOrCreateCache(cfToken)
+		zones, err := cache.ListZones(ctx)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "list zones: "+err.Error())
 			return
@@ -221,8 +221,8 @@ func cloudflareRecords(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured (set cloudflare.api.token)")
 			return
 		}
-		client := dns.NewCfClient(cfToken)
-		records, resp, err := client.ListDnsRecordsPage(ctx, zoneID, page, perPage, recordType, name, content)
+		cache := dns.GetOrCreateCache(cfToken)
+		records, resp, err := cache.RawClient().ListDnsRecordsPage(ctx, zoneID, page, perPage, recordType, name, content)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "list records: "+err.Error())
 			return
@@ -268,8 +268,8 @@ func cloudflareCreateRecord(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured (set cloudflare.api.token)")
 			return
 		}
-		client := dns.NewCfClient(cfToken)
-		record, err := client.CreateDnsRecord(ctx, zoneID, dns.DnsRecord{
+		cache := dns.GetOrCreateCache(cfToken)
+		record, err := cache.CreateRecord(ctx, zoneID, dns.DnsRecord{
 			Type:    body.Type,
 			Name:    body.Name,
 			Content: body.Content,
@@ -316,8 +316,8 @@ func cloudflareUpdateRecord(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured (set cloudflare.api.token)")
 			return
 		}
-		client := dns.NewCfClient(cfToken)
-		record, err := client.UpdateDnsRecord(ctx, zoneID, recordID, dns.DnsRecord{
+		cache := dns.GetOrCreateCache(cfToken)
+		record, err := cache.UpdateRecord(ctx, zoneID, recordID, dns.DnsRecord{
 			Type:    body.Type,
 			Name:    body.Name,
 			Content: body.Content,
@@ -348,8 +348,8 @@ func cloudflareDeleteRecord(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured (set cloudflare.api.token)")
 			return
 		}
-		client := dns.NewCfClient(cfToken)
-		if err := client.DeleteDnsRecord(ctx, zoneID, recordID); err != nil {
+		cache := dns.GetOrCreateCache(cfToken)
+		if err := cache.DeleteRecord(ctx, zoneID, recordID); err != nil {
 			response.Fail(c, http.StatusInternalServerError, "delete record: "+err.Error())
 			return
 		}
