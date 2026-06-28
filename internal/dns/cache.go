@@ -1,10 +1,13 @@
-// Package dns — cache.go: server-side TTL cache for Cloudflare API responses.
-// Wraps CfClient to avoid redundant API calls for zone lists and DNS records.
-// Mutations (create/update/delete) invalidate the affected zone's cache.
+// Package dns — cache.go: two-level (memory + database) TTL cache for
+// Cloudflare API responses. Memory provides sub-millisecond reads; the
+// database backing store survives server restarts so the DNS management
+// page can show cached data immediately while a background API refresh
+// completes.
 package dns
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 )
@@ -17,10 +20,11 @@ type cacheEntry[T any] struct {
 
 func (e cacheEntry[T]) expired() bool { return time.Now().After(e.expiresAt) }
 
-// CfCache wraps a CfClient with a TTL-based in-memory cache.
+// CfCache wraps a CfClient with a two-level TTL cache (memory + optional DB).
 // Safe for concurrent use.
 type CfCache struct {
 	client *CfClient
+	store  *CacheStore // optional persistent backing store
 
 	mu          sync.RWMutex
 	zones       *cacheEntry[[]Zone]
@@ -39,18 +43,31 @@ func NewCfCache(client *CfClient) *CfCache {
 	}
 }
 
-// NewCfCacheWithTTL creates a cached client with custom TTLs.
-func NewCfCacheWithTTL(client *CfClient, zoneTTL, recordTTL time.Duration) *CfCache {
-	return &CfCache{
-		client:      client,
-		zoneRecords: make(map[string]*cacheEntry[[]DnsRecord]),
-		zoneTTL:     zoneTTL,
-		recordTTL:   recordTTL,
+// SetStore attaches a persistent database backing store. When set, cache
+// reads fall through to the DB on memory miss, and writes are persisted.
+func (c *CfCache) SetStore(store *CacheStore) {
+	c.store = store
+	c.PreloadFromDB()
+}
+
+// PreloadFromDB populates the in-memory cache from the database backing
+// store. Called at startup and when the backing store is attached.
+func (c *CfCache) PreloadFromDB() {
+	if c.store == nil {
+		return
+	}
+	// Preload zones
+	if zones, ok := c.store.LoadZones(); ok && len(zones) > 0 {
+		c.mu.Lock()
+		c.zones = &cacheEntry[[]Zone]{value: zones, expiresAt: time.Now().Add(c.zoneTTL)}
+		c.mu.Unlock()
 	}
 }
 
 // ListZones returns cached zones or fetches from API if expired/missing.
+// Reads from memory → DB → API, writing back at each level on miss.
 func (c *CfCache) ListZones(ctx context.Context) ([]Zone, error) {
+	// 1. Memory
 	c.mu.RLock()
 	if c.zones != nil && !c.zones.expired() {
 		val := c.zones.value
@@ -59,6 +76,17 @@ func (c *CfCache) ListZones(ctx context.Context) ([]Zone, error) {
 	}
 	c.mu.RUnlock()
 
+	// 2. DB backing store
+	if c.store != nil {
+		if zones, ok := c.store.LoadZones(); ok && len(zones) > 0 {
+			c.mu.Lock()
+			c.zones = &cacheEntry[[]Zone]{value: zones, expiresAt: time.Now().Add(c.zoneTTL)}
+			c.mu.Unlock()
+			return zones, nil
+		}
+	}
+
+	// 3. API
 	zones, err := c.client.ListZones(ctx)
 	if err != nil {
 		return nil, err
@@ -67,22 +95,29 @@ func (c *CfCache) ListZones(ctx context.Context) ([]Zone, error) {
 	c.mu.Lock()
 	c.zones = &cacheEntry[[]Zone]{value: zones, expiresAt: time.Now().Add(c.zoneTTL)}
 	c.mu.Unlock()
+
+	// Persist to DB
+	if c.store != nil {
+		c.store.SaveZones(zones)
+	}
 	return zones, nil
 }
 
-// InvalidateZones clears the zone list cache.
+// InvalidateZones clears the zone list cache (memory + DB).
 func (c *CfCache) InvalidateZones() {
 	c.mu.Lock()
 	c.zones = nil
 	c.mu.Unlock()
+	if c.store != nil {
+		c.store.InvalidateAll()
+	}
 }
 
 // ListRecords returns cached DNS records for a zone or fetches from API.
 func (c *CfCache) ListRecords(ctx context.Context, zoneID, recordType, name string) ([]DnsRecord, error) {
-	cacheKey := zoneID
-
+	// 1. Memory
 	c.mu.RLock()
-	entry, ok := c.zoneRecords[cacheKey]
+	entry, ok := c.zoneRecords[zoneID]
 	if ok && entry != nil && !entry.expired() {
 		val := entry.value
 		c.mu.RUnlock()
@@ -90,32 +125,49 @@ func (c *CfCache) ListRecords(ctx context.Context, zoneID, recordType, name stri
 	}
 	c.mu.RUnlock()
 
+	// 2. DB backing store
+	if c.store != nil {
+		if records, ok := c.store.LoadRecords(zoneID); ok && len(records) > 0 {
+			c.mu.Lock()
+			c.zoneRecords[zoneID] = &cacheEntry[[]DnsRecord]{value: records, expiresAt: time.Now().Add(c.recordTTL)}
+			c.mu.Unlock()
+			return records, nil
+		}
+	}
+
+	// 3. API
 	records, err := c.client.ListDnsRecords(ctx, zoneID, recordType, name)
 	if err != nil {
 		return nil, err
 	}
 
 	c.mu.Lock()
-	c.zoneRecords[cacheKey] = &cacheEntry[[]DnsRecord]{value: records, expiresAt: time.Now().Add(c.recordTTL)}
+	c.zoneRecords[zoneID] = &cacheEntry[[]DnsRecord]{value: records, expiresAt: time.Now().Add(c.recordTTL)}
 	c.mu.Unlock()
+
+	// Persist to DB
+	if c.store != nil {
+		c.store.SaveRecords(zoneID, records)
+	}
 	return records, nil
 }
 
-// ListRecordsPage is like ListRecords but with pagination. Paginated results
-// are cached with a shorter TTL since they represent a specific page view.
+// ListRecordsPage always hits the API — paginated results are too volatile
+// to cache usefully.
 func (c *CfCache) ListRecordsPage(ctx context.Context, zoneID string, page, perPage int, recordType, name, content string) ([]DnsRecord, *CfListRecordsResponse, error) {
-	// For paginated results, always hit the API — pages change too often
-	// and caching individual pages adds complexity without much benefit.
 	return c.client.ListDnsRecordsPage(ctx, zoneID, page, perPage, recordType, name, content)
 }
 
-// InvalidateZone clears the cache for a specific zone (call after mutations).
+// InvalidateZone clears cache for a specific zone (memory + DB).
 func (c *CfCache) InvalidateZone(zoneID string) {
 	c.mu.Lock()
 	delete(c.zoneRecords, zoneID)
-	// Also invalidate zone list since a new zone might have been created
 	c.zones = nil
 	c.mu.Unlock()
+
+	if c.store != nil {
+		c.store.InvalidateRecords(zoneID)
+	}
 }
 
 // CreateRecord creates a DNS record and invalidates the zone cache.
@@ -150,21 +202,29 @@ func (c *CfCache) DeleteRecord(ctx context.Context, zoneID, recordID string) err
 func (c *CfCache) RawClient() *CfClient { return c.client }
 
 // ─── Global cache singleton ───────────────────────────────────────────
-//
-// GetOrCreateCache returns a shared, token-scoped CfCache. When the token
-// changes (reconfigured via system settings), the old cache is discarded
-// and a new one is created. This allows the cache to persist across HTTP
-// requests while reacting to credential changes.
 
 var (
 	globalCache      *CfCache
 	globalCacheToken string
+	globalCacheStore *CacheStore
 	globalCacheMu    sync.Mutex
 )
 
+// SetGlobalCacheStore sets the database backing store for the global
+// CfCache singleton. Call once at startup (before any DNS requests).
+func SetGlobalCacheStore(store *CacheStore) {
+	globalCacheMu.Lock()
+	defer globalCacheMu.Unlock()
+	globalCacheStore = store
+	if globalCache != nil {
+		globalCache.SetStore(store)
+	}
+}
+
 // GetOrCreateCache returns a cached Cloudflare client for the given API
 // token. If the token matches the currently-cached client, it is returned
-// immediately. Otherwise a new client + cache is created.
+// immediately. Otherwise a new client + cache is created. The global DB
+// backing store is attached automatically if SetGlobalCacheStore was called.
 func GetOrCreateCache(apiToken string) *CfCache {
 	globalCacheMu.Lock()
 	defer globalCacheMu.Unlock()
@@ -173,5 +233,9 @@ func GetOrCreateCache(apiToken string) *CfCache {
 	}
 	globalCache = NewCfCache(NewCfClient(apiToken))
 	globalCacheToken = apiToken
+	if globalCacheStore != nil {
+		globalCache.SetStore(globalCacheStore)
+		log.Println("[dns] cache store attached, preloaded from DB")
+	}
 	return globalCache
 }

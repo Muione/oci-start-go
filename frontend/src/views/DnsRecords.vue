@@ -14,7 +14,13 @@
     <el-tabs v-model="activeTab" @tab-change="onTabChange" type="border-card">
       <!-- Cloudflare Tab -->
       <el-tab-pane label="Cloudflare" name="cloudflare">
-        <div v-if="!cfConfigured" style="text-align:center;padding:48px 0">
+        <!-- Loading: initial check not yet completed -->
+        <div v-if="cfConfigured === null" style="text-align:center;padding:48px 0">
+          <el-skeleton :rows="4" animated style="max-width:400px;margin:0 auto" />
+        </div>
+
+        <!-- Not configured -->
+        <div v-else-if="!cfConfigured" style="text-align:center;padding:48px 0">
           <el-empty description="Cloudflare 未配置" :image-size="80">
             <template #extra>
               <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">
@@ -25,6 +31,7 @@
           </el-empty>
         </div>
 
+        <!-- Configured -->
         <template v-else>
           <div class="provider-toolbar">
             <div class="provider-left">
@@ -250,7 +257,7 @@ interface EoRecord {
 const dnsTypes = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV', 'CAA', 'PTR']
 
 // ---- Cloudflare State ----
-const cfConfigured = ref(false)
+const cfConfigured = ref<boolean | null>(null) // null = not yet checked
 const cfZones = ref<CfZone[]>([])
 const cfZoneId = ref('')
 const cfRecords = ref<CfRecord[]>([])

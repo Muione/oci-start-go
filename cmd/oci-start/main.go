@@ -222,6 +222,15 @@ func main() {
 
 	// Phase 7 wiring: DNS + ACME cert manager.
 	dnsSvc := dns.NewDnsService(store)
+
+	// DNS cache: persists Cloudflare API responses to SQLite so the
+	// DNS management page serves cached data immediately after restart.
+	dnsCacheStore := dns.NewCacheStore(store.Write)
+	if err := dnsCacheStore.EnsureTable(); err != nil {
+		logger.Warn().Err(err).Msg("main: failed to ensure api_cache table")
+	}
+	dns.SetGlobalCacheStore(dnsCacheStore)
+
 	certManager := acme.NewCertManager(logger)
 
 	// Phase 8 wiring: GCP Compute Engine (lazy init from system config).
