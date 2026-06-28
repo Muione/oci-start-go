@@ -73,4 +73,7 @@ type Deps struct {
 	// Phase 9: tenant email & social config services.
 	TenantEmail  *service.TenantEmailService
 	TenantSocial *service.TenantSocialService
+
+	// Phase 10: tenant IAM user management.
+	TenantUser *service.TenantUserService
 }

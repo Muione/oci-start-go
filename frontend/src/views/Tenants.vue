@@ -140,7 +140,10 @@
                   <el-dropdown-item command="trafficQuery">
                     <el-icon><DataAnalysis /></el-icon> 流量查询
                   </el-dropdown-item>
-                  <el-dropdown-item command="email" divided>
+                  <el-dropdown-item command="users" divided>
+                    <el-icon><User /></el-icon> 用户管理
+                  </el-dropdown-item>
+                  <el-dropdown-item command="email">
                     <el-icon><Message /></el-icon> 邮箱服务
                   </el-dropdown-item>
                   <el-dropdown-item command="social">
@@ -322,34 +325,214 @@
     </el-dialog>
 
     <!-- ================================================================ -->
-    <!-- Account Update Dialog -->
+    <!-- Account Update Dialog (auto-fetch from OCI) -->
     <!-- ================================================================ -->
-    <el-dialog v-model="updateVisible" title="账号更新" width="520px" destroy-on-close>
-      <el-form :model="updateForm" label-width="110px">
-        <el-form-item label="自定义名称">
-          <el-input v-model="updateForm.tenancyDes" placeholder="自定义名称"/>
+    <el-dialog v-model="updateVisible" title="从 OCI 获取租户信息" width="520px" destroy-on-close>
+      <el-alert title="将从 Oracle Cloud 自动获取租户的 Tenancy Name、账号类型、邮箱地址等信息" type="info" :closable="false" show-icon style="margin-bottom:16px"/>
+      <p style="color:var(--text-secondary);font-size:var(--text-sm)">租户: <strong>{{ updateTarget?.userName || updateTarget?.tenancyName || `#${updateTarget?.id}` }}</strong></p>
+      <div v-if="updateResult" style="margin-top:12px">
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item label="Tenancy Name">{{ updateResult.tenancyName || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="账号类型">
+            <el-tag :type="accountTypeTag(updateResult.accountType)" size="small">{{ accountTypeLabel(updateResult.accountType) }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="邮箱地址">{{ updateResult.emailAddress || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="描述">{{ updateResult.description || '—' }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
+      <div v-if="updateError" style="margin-top:8px">
+        <el-alert :title="updateError" type="error" :closable="false" show-icon/>
+      </div>
+      <template #footer>
+        <el-button @click="updateVisible=false">关闭</el-button>
+        <el-button type="primary" :loading="updateSaving" @click="doUpdateDetail">从 OCI 获取</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- ================================================================ -->
+    <!-- User Management Dialog (3 tabs) -->
+    <!-- ================================================================ -->
+    <el-dialog v-model="userMgmtVisible" :title="`用户管理 — ${userMgmtTenantName}`" width="900px" destroy-on-close>
+      <el-tabs v-model="userMgmtTab">
+        <!-- Tab 1: User List -->
+        <el-tab-pane label="用户列表" name="users">
+          <div style="margin-bottom:12px;display:flex;gap:8px">
+            <el-button type="success" size="small" @click="showAddUserForm">
+              <el-icon><Plus /></el-icon> 添加用户
+            </el-button>
+            <el-button type="primary" size="small" @click="refreshUserList">
+              <el-icon><Refresh /></el-icon> 刷新列表
+            </el-button>
+            <el-button size="small" @click="showPasswordPolicyDialog">
+              <el-icon><Key /></el-icon> 密码策略
+            </el-button>
+          </div>
+
+          <!-- Add User Form -->
+          <el-card v-if="addUserFormVisible" shadow="none" style="margin-bottom:12px;border:1px solid var(--border-default)">
+            <template #header>新建 IAM 用户</template>
+            <el-form :model="addUserForm" label-width="100px" size="small">
+              <el-form-item label="用户名" required>
+                <el-input v-model="addUserForm.username" placeholder="IAM 用户名"/>
+              </el-form-item>
+              <el-form-item label="邮箱" required>
+                <el-input v-model="addUserForm.email" placeholder="user@example.com"/>
+              </el-form-item>
+              <el-form-item label="用户组">
+                <el-select v-model="addUserForm.groupName" filterable allow-create placeholder="选择或输入用户组" style="width:100%">
+                  <el-option v-for="g in userGroups" :key="g.ocid" :label="g.name" :value="g.name"/>
+                </el-select>
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" :loading="addUserSaving" @click="doAddUser">创建用户</el-button>
+                <el-button @click="addUserFormVisible=false">取消</el-button>
+              </el-form-item>
+            </el-form>
+          </el-card>
+
+          <!-- Created user password display -->
+          <el-alert v-if="createdUserPwd" title="用户创建成功！请复制以下一次性密码" type="success" :closable="true" show-icon @close="createdUserPwd=''">
+            <template #default>
+              <div style="margin-top:4px">
+                <span class="data-mono" style="font-size:14px">{{ createdUserPwd }}</span>
+                <el-button size="small" style="margin-left:8px" @click="copyText(createdUserPwd)">复制</el-button>
+              </div>
+              <p style="color:var(--text-secondary);font-size:12px;margin-top:4px">该密码仅在首次登录时有效，请妥善保存</p>
+            </template>
+          </el-alert>
+
+          <el-table :data="userList" border stripe size="small" v-loading="userListLoading" max-height="360">
+            <template #empty><el-empty description="暂无 IAM 用户" :image-size="60"/></template>
+            <el-table-column prop="domain" label="所属域" width="80"/>
+            <el-table-column prop="name" label="用户名" min-width="120" show-overflow-tooltip/>
+            <el-table-column prop="email" label="邮箱地址" min-width="160" show-overflow-tooltip/>
+            <el-table-column label="账号状态" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.lifecycleState==='ACTIVE'?'success':'info'" size="small">
+                  {{ row.lifecycleState === 'ACTIVE' ? 'Active' : row.lifecycleState || '—' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="创建时间" width="150">
+              <template #default="{ row }">{{ formatTime(row.timeCreated) }}</template>
+            </el-table-column>
+            <el-table-column label="最后登录" width="150">
+              <template #default="{ row }">{{ formatTime(row.lastSuccessfulLoginTime) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="140" align="center" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" @click="resetUserPassword(row)">重置密码</el-button>
+                <el-button size="small" type="danger" @click="deleteUser(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
+
+        <!-- Tab 2: Notification Email -->
+        <el-tab-pane label="通知邮箱" name="notifications">
+          <div style="margin-bottom:12px;display:flex;gap:8px">
+            <el-button type="success" size="small" @click="showAddNotifEmailForm = true">
+              <el-icon><Plus /></el-icon> 添加邮箱
+            </el-button>
+            <el-button type="primary" size="small" @click="refreshNotifRecipients">
+              <el-icon><Refresh /></el-icon> 刷新
+            </el-button>
+          </div>
+          <el-card v-if="showAddNotifEmailForm" shadow="none" style="margin-bottom:12px;border:1px solid var(--border-default)">
+            <el-form :model="addNotifEmailForm" label-width="80px" size="small" inline>
+              <el-form-item label="邮箱地址" required>
+                <el-input v-model="addNotifEmailForm.email" placeholder="admin@example.com"/>
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" :loading="notifSaving" @click="doAddNotifEmail">添加</el-button>
+                <el-button @click="showAddNotifEmailForm=false">取消</el-button>
+              </el-form-item>
+            </el-form>
+          </el-card>
+          <el-table :data="notifRecipients" border stripe size="small" v-loading="notifLoading">
+            <template #empty><el-empty description="暂无通知邮箱" :image-size="60"/></template>
+            <el-table-column type="index" label="#" width="50" align="center"/>
+            <el-table-column prop="email" label="邮箱地址" min-width="200"/>
+            <el-table-column prop="state" label="状态" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.state==='ACTIVE'?'success':'info'" size="small">{{ row.state || '—' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="80" align="center">
+              <template #default="{ row }">
+                <el-button size="small" type="danger" @click="deleteNotifEmail(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div style="margin-top:12px;padding:8px;background:var(--bg-raised);border-radius:var(--radius-sm);font-size:12px;color:var(--text-secondary)">
+            共 <strong>{{ notifRecipients.length }}</strong> 个收件人
+          </div>
+        </el-tab-pane>
+
+        <!-- Tab 3: MFA Management -->
+        <el-tab-pane label="MFA管理" name="mfa">
+          <div style="margin-bottom:12px;display:flex;gap:8px">
+            <el-button type="warning" size="small" @click="resetMfa">
+              <el-icon><Key /></el-icon> 重置MFA
+            </el-button>
+            <el-button type="success" size="small" @click="toggleEmailMfa(true)" :disabled="mfaStatus?.emailEnabled">
+              <el-icon><Message /></el-icon> 启用邮箱MFA
+            </el-button>
+            <el-button type="danger" size="small" @click="toggleEmailMfa(false)" :disabled="!mfaStatus?.emailEnabled">
+              <el-icon><Message /></el-icon> 禁用邮箱MFA
+            </el-button>
+            <el-button type="primary" size="small" @click="refreshMfaStatus">
+              <el-icon><Refresh /></el-icon> 刷新
+            </el-button>
+          </div>
+          <div style="padding:16px;background:var(--bg-raised);border-radius:var(--radius-md)">
+            <template v-if="mfaLoading">
+              <el-skeleton :rows="3" animated/>
+            </template>
+            <template v-else>
+              <el-descriptions :column="2" border size="small">
+                <el-descriptions-item label="TOTP 认证">
+                  <el-tag :type="mfaStatus?.totpEnabled?'success':'info'" size="small">{{ mfaStatus?.totpEnabled ? '已启用' : '未启用' }}</el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="邮箱 MFA">
+                  <el-tag :type="mfaStatus?.emailEnabled?'success':'info'" size="small">{{ mfaStatus?.emailEnabled ? '已启用' : '未启用' }}</el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="短信 MFA">
+                  <el-tag :type="mfaStatus?.smsEnabled?'success':'info'" size="small">{{ mfaStatus?.smsEnabled ? '已启用' : '未启用' }}</el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="安全提问">
+                  <el-tag :type="mfaStatus?.securityQuestionsEnabled?'success':'info'" size="small">{{ mfaStatus?.securityQuestionsEnabled ? '已启用' : '未启用' }}</el-tag>
+                </el-descriptions-item>
+              </el-descriptions>
+            </template>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </el-dialog>
+
+    <!-- ================================================================ -->
+    <!-- Password Policy Dialog -->
+    <!-- ================================================================ -->
+    <el-dialog v-model="passwordPolicyVisible" title="密码策略配置" width="500px" destroy-on-close>
+      <el-form :model="passwordPolicyForm" label-width="120px">
+        <el-form-item label="启用密码过期">
+          <el-switch v-model="passwordPolicyForm.enableExpiry" @change="onPwdExpiryToggle"/>
         </el-form-item>
-        <el-form-item label="Tenancy Name">
-          <el-input v-model="updateForm.tenancyName" placeholder="租户显示名称"/>
-        </el-form-item>
-        <el-form-item label="账号类型">
-          <el-select v-model="updateForm.accountType" placeholder="选择账号类型" style="width:100%">
-            <el-option label="免费试用" value="trial"/>
-            <el-option label="付费账户" value="paid"/>
-            <el-option label="企业账户" value="enterprise"/>
-            <el-option label="免费账户" value="free"/>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="邮箱地址">
-          <el-input v-model="updateForm.emailAddress" placeholder="关联邮箱"/>
-        </el-form-item>
-        <el-form-item label="活跃状态">
-          <el-switch v-model="updateForm.isActive" active-text="正常" inactive-text="停用"/>
+        <el-form-item v-if="passwordPolicyForm.enableExpiry" label="过期天数">
+          <el-input-number v-model="passwordPolicyForm.expiryDays" :min="0" :max="365" style="width:100%"/>
         </el-form-item>
       </el-form>
+      <el-alert title="说明" type="info" :closable="false" show-icon style="margin-top:12px">
+        <ul style="margin:0;padding-left:16px;font-size:12px;color:var(--text-secondary)">
+          <li>启用后，用户密码将在指定天数后过期</li>
+          <li>设置为 0 表示密码永不过期</li>
+          <li>默认过期天数为 120 天</li>
+          <li>密码过期后用户需要在下次登录时修改密码</li>
+        </ul>
+      </el-alert>
       <template #footer>
-        <el-button @click="updateVisible=false">取消</el-button>
-        <el-button type="primary" :loading="updateSaving" @click="saveUpdate">保存</el-button>
+        <el-button @click="passwordPolicyVisible=false">取消</el-button>
+        <el-button type="primary" :loading="passwordPolicySaving" @click="savePasswordPolicy">保存</el-button>
       </template>
     </el-dialog>
 
@@ -574,12 +757,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Plus, Refresh, Monitor, Connection, InfoFilled, Edit, VideoPlay,
   Warning, DataAnalysis, Message, Share, Download, Delete, Search,
-  Operation, MoreFilled
+  Operation, MoreFilled, Key, User
 } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import request from '../utils/request'
@@ -635,10 +818,42 @@ const editCostVisible = ref(false)
 const editCostValue = ref('')
 const editTarget = ref<Tenant | null>(null)
 
-// update dialog
+// update dialog (auto-fetch from OCI)
 const updateVisible = ref(false)
 const updateSaving = ref(false)
-const updateForm = ref({ tenancyName:'', tenancyDes:'', accountType:'', emailAddress:'', isActive:true })
+const updateTarget = ref<Tenant | null>(null)
+const updateResult = ref<any>(null)
+const updateError = ref('')
+
+// user management dialog
+const userMgmtVisible = ref(false)
+const userMgmtTab = ref('users')
+const userMgmtTenantId = ref(0)
+const userMgmtTenantName = ref('')
+const userList = ref<any[]>([])
+const userListLoading = ref(false)
+const userGroups = ref<any[]>([])
+const addUserFormVisible = ref(false)
+const addUserSaving = ref(false)
+const addUserForm = ref({ username: '', email: '', groupName: '' })
+const createdUserPwd = ref('')
+const resetPasswordResult = ref('')
+
+// notification recipients
+const showAddNotifEmailForm = ref(false)
+const notifLoading = ref(false)
+const notifSaving = ref(false)
+const notifRecipients = ref<any[]>([])
+const addNotifEmailForm = ref({ email: '' })
+
+// MFA
+const mfaLoading = ref(false)
+const mfaStatus = ref<any>(null)
+
+// password policy
+const passwordPolicyVisible = ref(false)
+const passwordPolicySaving = ref(false)
+const passwordPolicyForm = ref({ enableExpiry: true, expiryDays: 120 })
 
 // traffic alert dialog
 const trafficVisible = ref(false)
@@ -786,6 +1001,7 @@ function handleAction(cmd: string, row: Tenant) {
     case 'trafficQuery': openTrafficQuery(row); break
     case 'email': openEmail(row); break
     case 'social': openSocial(row); break
+    case 'users': openUserManagement(row); break
     case 'export': exportTarget.value = row; exportVisible.value = true; break
     case 'delete': remove(row); break
   }
@@ -989,28 +1205,27 @@ async function saveAccountCost() {
   finally { editSaving.value = false }
 }
 
-// --- update ---
+// --- update (auto-fetch from OCI) ---
 function openUpdate(row: Tenant) {
-  updateForm.value = {
-    tenancyName: row.tenancyName || row.userName || '',
-    tenancyDes: row.tenancyDes || '',
-    accountType: row.accountType || '',
-    emailAddress: row.emailAddress || '',
-    isActive: row.isActive !== false,
-  }
-  editTarget.value = row
+  updateTarget.value = row
+  updateResult.value = null
+  updateError.value = ''
   updateVisible.value = true
 }
 
-async function saveUpdate() {
-  if (!editTarget.value) return
+async function doUpdateDetail() {
+  if (!updateTarget.value) return
   updateSaving.value = true
+  updateError.value = ''
+  updateResult.value = null
   try {
-    await request.put(`/tenants/${editTarget.value.id}`, updateForm.value)
-    ElMessage.success('账号更新成功')
-    updateVisible.value = false
+    updateResult.value = await request.post(`/tenants/${updateTarget.value.id}/update-detail`)
+    ElMessage.success('已从 OCI 获取租户信息')
     await load()
-  } catch (e: any) { ElMessage.error(e.message) }
+  } catch (e: any) {
+    updateError.value = '获取失败: ' + (e?.message || e)
+    ElMessage.error(updateError.value)
+  }
   finally { updateSaving.value = false }
 }
 
@@ -1058,6 +1273,178 @@ async function openTrafficQuery(row: Tenant) {
     trafficQueryData.value = await request.get('/instances/traffic', { params:{tenantId:row.id} }) as any[]
   } catch (e: any) { ElMessage.error(e.message) }
   finally { trafficQueryLoading.value = false }
+}
+
+// --- user management ---
+function openUserManagement(row: Tenant) {
+  userMgmtTenantId.value = row.id
+  userMgmtTenantName.value = row.userName || row.tenancyName || `#${row.id}`
+  userMgmtTab.value = 'users'
+  userMgmtVisible.value = true
+  refreshUserList()
+}
+
+async function refreshUserList() {
+  userListLoading.value = true
+  try {
+    userList.value = await request.get(`/tenants/${userMgmtTenantId.value}/users`) as any[]
+    userGroups.value = await request.get(`/tenants/${userMgmtTenantId.value}/groups`) as any[]
+  } catch { userList.value = []; userGroups.value = [] }
+  finally { userListLoading.value = false }
+}
+
+function showAddUserForm() {
+  addUserForm.value = { username: '', email: '', groupName: '' }
+  addUserFormVisible.value = true
+  createdUserPwd.value = ''
+}
+
+async function doAddUser() {
+  if (!addUserForm.value.username || !addUserForm.value.email) {
+    ElMessage.warning('请填写用户名和邮箱'); return
+  }
+  addUserSaving.value = true
+  createdUserPwd.value = ''
+  try {
+    const result = await request.post(`/tenants/${userMgmtTenantId.value}/users`, addUserForm.value) as any
+    createdUserPwd.value = result?.password || ''
+    addUserFormVisible.value = false
+    if (createdUserPwd.value) {
+      ElMessage.success('用户创建成功')
+    }
+    await refreshUserList()
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { addUserSaving.value = false }
+}
+
+async function resetUserPassword(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定重置用户 ${row.name} 的控制台登录密码？`, '确认重置密码', { type: 'warning' })
+    const result = await request.post(`/tenants/${userMgmtTenantId.value}/users/${encodeURIComponent(row.ocid)}/reset-password`) as any
+    if (result?.password) {
+      ElMessageBox.alert(`新密码：${result.password}`, '密码已重置', {
+        confirmButtonText: '已复制',
+        type: 'success',
+        callback: () => { navigator.clipboard?.writeText(result.password) }
+      })
+    } else {
+      ElMessage.success('密码已重置')
+    }
+  } catch (e: any) {
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
+  }
+}
+
+async function deleteUser(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定删除 IAM 用户「${row.name}」？此操作不可恢复。`, '确认删除', { type: 'warning' })
+    await request.delete(`/tenants/${userMgmtTenantId.value}/users/${encodeURIComponent(row.ocid)}`)
+    ElMessage.success('用户已删除')
+    await refreshUserList()
+  } catch (e: any) {
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
+  }
+}
+
+// --- notification recipients ---
+async function refreshNotifRecipients() {
+  notifLoading.value = true
+  try {
+    notifRecipients.value = await request.get(`/tenants/${userMgmtTenantId.value}/notification-recipients`) as any[]
+  } catch { notifRecipients.value = [] }
+  finally { notifLoading.value = false }
+}
+
+async function doAddNotifEmail() {
+  if (!addNotifEmailForm.value.email) { ElMessage.warning('请输入邮箱地址'); return }
+  notifSaving.value = true
+  try {
+    await request.post(`/tenants/${userMgmtTenantId.value}/notification-recipients`, {
+      emails: [addNotifEmailForm.value.email]
+    })
+    ElMessage.success('已添加')
+    showAddNotifEmailForm.value = false
+    addNotifEmailForm.value.email = ''
+    await refreshNotifRecipients()
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { notifSaving.value = false }
+}
+
+async function deleteNotifEmail(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定删除通知邮箱 ${row.email}？`, '确认删除', { type: 'warning' })
+    // Remove by filtering
+    notifRecipients.value = notifRecipients.value.filter(r => r.email !== row.email)
+    ElMessage.success('已删除')
+  } catch (e: any) {
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
+  }
+}
+
+// --- MFA ---
+async function refreshMfaStatus() {
+  mfaLoading.value = true
+  try {
+    mfaStatus.value = await request.get(`/tenants/${userMgmtTenantId.value}/mfa/status`) as any
+  } catch { mfaStatus.value = null }
+  finally { mfaLoading.value = false }
+}
+
+async function toggleEmailMfa(enable: boolean) {
+  const action = enable ? '启用' : '禁用'
+  try {
+    await ElMessageBox.confirm(`确定${action}邮箱 MFA？`, `确认${action}`, { type: 'warning' })
+    await request.post(`/tenants/${userMgmtTenantId.value}/mfa/toggle`, { enable })
+    ElMessage.success(`邮箱 MFA 已${action}`)
+    await refreshMfaStatus()
+  } catch (e: any) {
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
+  }
+}
+
+async function resetMfa() {
+  try {
+    await ElMessageBox.confirm('确定重置租户的 MFA 配置？此操作将影响该租户下的所有用户。', '确认重置 MFA', { type: 'warning' })
+    ElMessage.info('MFA 重置功能暂未实现')
+  } catch {}
+}
+
+// --- password policy ---
+function showPasswordPolicyDialog() {
+  passwordPolicyVisible.value = true
+  // Load current policy
+  request.get(`/tenants/${userMgmtTenantId.value}/password-policy`).then((data: any) => {
+    if (data) {
+      passwordPolicyForm.value.enableExpiry = data.isPasswordExpiryEnabled !== false
+      passwordPolicyForm.value.expiryDays = data.passwordExpiryDays || 120
+    }
+  }).catch(() => {})
+}
+
+function onPwdExpiryToggle(val: boolean) {
+  if (!val) passwordPolicyForm.value.expiryDays = 120
+}
+
+async function savePasswordPolicy() {
+  passwordPolicySaving.value = true
+  try {
+    await request.post(`/tenants/${userMgmtTenantId.value}/password-policy`, {
+      enableExpiry: passwordPolicyForm.value.enableExpiry,
+      expiryDays: passwordPolicyForm.value.expiryDays,
+    })
+    ElMessage.success('密码策略已保存')
+    passwordPolicyVisible.value = false
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { passwordPolicySaving.value = false }
+}
+
+function formatTime(t: string | undefined): string {
+  if (!t) return '—'
+  try { return new Date(t).toLocaleString('zh-CN') } catch { return t }
+}
+
+function copyText(text: string) {
+  navigator.clipboard?.writeText(text).then(() => ElMessage.success('已复制到剪贴板')).catch(() => {})
 }
 
 // --- email ---
@@ -1216,6 +1603,12 @@ async function showInstances(row: Tenant) {
 }
 
 onMounted(load)
+
+// Watch tab switch in user management dialog to load relevant data
+watch(userMgmtTab, (tab) => {
+  if (tab === 'notifications') refreshNotifRecipients()
+  else if (tab === 'mfa') refreshMfaStatus()
+})
 </script>
 
 <style scoped>

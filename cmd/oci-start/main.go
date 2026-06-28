@@ -245,6 +245,9 @@ func main() {
 	tenantEmailSvc := service.NewTenantEmailService(store)
 	tenantSocialSvc := service.NewTenantSocialService(store)
 
+	// Phase 10 wiring: tenant IAM user management.
+	tenantUserSvc := service.NewTenantUserService(store, masterKey)
+
 	sched := scheduler.New(engine, store, logger, &scheduler.SvcSet{
 		Traffic:     trafficSvc,
 		CheckLive:   checkLiveSvc,
@@ -283,6 +286,7 @@ func main() {
 		GcpSvc:       gcpSvc,
 		TenantEmail:  tenantEmailSvc,
 		TenantSocial: tenantSocialSvc,
+		TenantUser:   tenantUserSvc,
 	}
 	router := httpapi.NewServer(deps)
 
