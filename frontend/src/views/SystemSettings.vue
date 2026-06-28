@@ -58,8 +58,8 @@
             </template>
             <el-descriptions :column="1" size="small" border>
               <el-descriptions-item label="Bot Token">
-                <span v-if="cfgStr('telegram.bot.token')" style="color:#67c23a">••••••••</span>
-                <span v-else style="color:#909399">未配置</span>
+                <span v-if="cfgStr('telegram.bot.token')" style="color:var(--status-up)">••••••••</span>
+                <span v-else style="color:var(--text-muted)">未配置</span>
                 <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('telegram.bot.token', cfgStr('telegram.bot.token'))">编辑</el-button>
               </el-descriptions-item>
               <el-descriptions-item label="Chat ID">
@@ -83,8 +83,8 @@
             </template>
             <el-descriptions :column="1" size="small" border>
               <el-descriptions-item label="Webhook URL">
-                <span v-if="cfgStr('dingtalk.webhook')" style="color:#67c23a">••••••••</span>
-                <span v-else style="color:#909399">未配置</span>
+                <span v-if="cfgStr('dingtalk.webhook')" style="color:var(--status-up)">••••••••</span>
+                <span v-else style="color:var(--text-muted)">未配置</span>
                 <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('dingtalk.webhook', cfgStr('dingtalk.webhook'))">编辑</el-button>
               </el-descriptions-item>
               <el-descriptions-item label="签名密钥">
@@ -132,8 +132,8 @@
             </template>
             <el-descriptions :column="1" size="small" border>
               <el-descriptions-item label="Webhook URL">
-                <span v-if="cfgStr('feishu.webhook')" style="color:#67c23a">••••••••</span>
-                <span v-else style="color:#909399">未配置</span>
+                <span v-if="cfgStr('feishu.webhook')" style="color:var(--status-up)">••••••••</span>
+                <span v-else style="color:var(--text-muted)">未配置</span>
                 <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('feishu.webhook', cfgStr('feishu.webhook'))">编辑</el-button>
               </el-descriptions-item>
               <el-descriptions-item label="签名密钥">
@@ -417,86 +417,66 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 28px;
+  margin-bottom: var(--space-6);
   flex-wrap: wrap;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .toolbar-left h2 {
   margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-  color: #1e293b;
-  background: linear-gradient(135deg, #0066ff, #00bcd4);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  letter-spacing: var(--tracking-tight);
 }
 
 .toolbar-left :deep(.el-tag) {
-  border-radius: 6px;
-  font-weight: 600;
-  background: rgba(0, 102, 255, 0.1);
-  color: #0066ff;
+  border-radius: var(--radius-sm);
+  font-weight: var(--font-semibold);
+  background: var(--accent-subtle);
+  color: var(--accent);
   border: none;
 }
 
 .section-card {
-  margin-bottom: 24px;
-  border-radius: 16px;
-  border: 1px solid rgba(0, 102, 255, 0.1);
-  background: linear-gradient(135deg, #ffffff, #f8fafc);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.section-card:hover {
-  box-shadow: 0 20px 40px rgba(0, 102, 255, 0.15);
-  transform: translateY(-4px);
-  border-color: rgba(0, 102, 255, 0.2);
-}
-
-.section-card :deep(.el-card__header) {
-  padding: 20px 24px;
-  background: linear-gradient(90deg, rgba(0, 102, 255, 0.03), rgba(0, 188, 212, 0.03));
-  border-bottom: 1px solid rgba(0, 102, 255, 0.1);
+  margin-bottom: var(--space-6);
+  border-radius: var(--radius-md);
 }
 
 .section-card :deep(.el-card__body) {
-  padding: 24px;
-  background: #ffffff;
+  padding: var(--space-5);
 }
 
 .card-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  font-weight: 700;
-  color: #1e293b;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
 }
 
 .channel-card {
-  border: 1px solid rgba(0, 102, 255, 0.1);
-  border-radius: 12px;
-  transition: all 0.3s ease;
-  background: linear-gradient(135deg, #f8fafc, #ffffff);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast);
+  background: var(--bg-surface);
+  position: relative;
+  overflow: hidden;
 }
 
 .channel-card:hover {
-  border-color: rgba(0, 102, 255, 0.2);
-  box-shadow: 0 8px 16px rgba(0, 102, 255, 0.1);
-  transform: translateY(-2px);
+  border-color: var(--accent);
 }
 
 .channel-card.configured {
-  border-color: rgba(16, 185, 129, 0.3);
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.05), #ffffff);
+  border-color: rgba(52, 168, 83, 0.3);
 }
 
 .channel-card.configured::before {
@@ -506,16 +486,16 @@ onMounted(() => {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #10b981, #34d399);
-  border-radius: 12px 12px 0 0;
+  background: var(--status-up);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
 .channel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(0, 102, 255, 0.1);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 :deep(.el-descriptions) {
@@ -531,55 +511,21 @@ onMounted(() => {
 }
 
 :deep(.el-descriptions__cell) {
-  padding: 12px 0;
-  color: #64748b;
+  color: var(--text-secondary);
 }
 
 :deep(.el-descriptions__label) {
-  font-weight: 600;
-  color: #1e293b;
-}
-
-:deep(.el-button) {
-  border-radius: 8px;
-  transition: all 0.3s ease;
-}
-
-:deep(.el-button--primary:hover) {
-  box-shadow: 0 8px 16px rgba(0, 102, 255, 0.3);
-  transform: translateY(-1px);
-}
-
-:deep(.el-button--warning:hover) {
-  box-shadow: 0 8px 16px rgba(245, 158, 11, 0.3);
-  transform: translateY(-1px);
-}
-
-:deep(.el-button--info:hover) {
-  box-shadow: 0 8px 16px rgba(0, 102, 255, 0.3);
-  transform: translateY(-1px);
-}
-
-:deep(.el-tag) {
-  border-radius: 8px;
-  border: none;
-  font-weight: 600;
-  padding: 6px 12px;
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
 }
 
 :deep(.el-dialog) {
-  border-radius: 16px;
-}
-
-:deep(.el-dialog__header) {
-  border-bottom: 1px solid rgba(0, 102, 255, 0.1);
-  padding: 20px 24px;
+  border-radius: var(--radius-lg);
 }
 
 :deep(.el-dialog__title) {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1e293b;
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
 }
 
 @media (max-width: 768px) {
@@ -589,15 +535,15 @@ onMounted(() => {
   }
 
   .toolbar-left h2 {
-    font-size: 20px;
+    font-size: var(--text-lg);
   }
 
   .section-card {
-    margin-bottom: 16px;
+    margin-bottom: var(--space-4);
   }
 
   .card-header {
-    font-size: 14px;
+    font-size: var(--text-base);
   }
 }
 </style>

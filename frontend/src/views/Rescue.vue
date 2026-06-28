@@ -31,7 +31,7 @@
                   {{ inst.state || 'Unknown' }}
                 </el-tag>
               </div>
-              <div style="font-size:12px;color:#909399;margin-top:2px">
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
                 {{ inst.instanceId }} · {{ inst.shape }} · {{ inst.publicIps || '无公网IP' }}
               </div>
             </el-option>
@@ -47,7 +47,7 @@
 
         <el-form-item v-if="form.rescueType === 1" label="救援卷 ID">
           <el-input v-model="form.rescueImageId" placeholder="预创建的急救引导卷 OCID" style="width:360px" clearable />
-          <div style="font-size:12px;color:#909399;margin-top:2px">
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
             请输入已通过 OCI 控制台或 API 预创建的救援引导卷 OCID（非镜像 OCID）
           </div>
         </el-form-item>
@@ -91,7 +91,7 @@
         <el-tag v-if="active" type="warning" style="margin-left:8px">进行中</el-tag>
       </template>
       <div style="max-width:600px">
-        <el-progress :percentage="status.progress" :color="status.progress === 100 ? '#67c23a' : '#409eff'" />
+        <el-progress :percentage="status.progress" :color="status.progress === 100 ? 'var(--status-up)' : 'var(--accent)'" />
         <p style="margin-top:12px; font-size:14px">{{ status.message }}</p>
         <el-descriptions v-if="status.instanceId" :column="1" border style="margin-top:12px">
           <el-descriptions-item label="实例">{{ status.instanceId }}</el-descriptions-item>
@@ -107,7 +107,7 @@
           v-for="(item, idx) in history"
           :key="idx"
           :timestamp="item.time"
-          :color="item.ok ? '#67c23a' : '#f56c6c'"
+          :color="item.ok ? 'var(--status-up)' : 'var(--status-down)'"
         >
           {{ item.msg }}
         </el-timeline-item>

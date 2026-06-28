@@ -1,16 +1,16 @@
 <template>
   <div class="dashboard">
+    <!-- Page header -->
     <div class="toolbar">
       <div class="toolbar-left">
-        <h2>📊 仪表盘</h2>
-        <el-tag type="info" size="small" effect="plain">实时监控</el-tag>
+        <h2>仪表盘</h2>
       </div>
-      <el-button type="primary" @click="loadAll" :loading="loading">
+      <el-button @click="loadAll" :loading="loading" size="small">
         <el-icon><Refresh /></el-icon> 刷新
       </el-button>
     </div>
 
-    <!-- Error Alert -->
+    <!-- Error alert -->
     <el-alert
       v-if="loadError"
       :title="loadError"
@@ -21,95 +21,102 @@
       style="margin-bottom: 20px"
     />
 
-    <!-- Stats Row -->
-    <el-row :gutter="20" class="stats-row" v-loading="loading">
-      <el-col :span="24" :md="12" :lg="8" :xl="4" v-for="card in statCards" :key="card.label" style="margin-bottom:20px">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-inner">
-            <div class="stat-icon" :style="{ background: card.color }">
-              <el-icon :size="28">
-                <component :is="card.icon" />
-              </el-icon>
+    <!-- Stat cards -->
+    <div class="stat-grid">
+      <div
+        v-for="card in statCards"
+        :key="card.label"
+        class="stat-card"
+      >
+        <div class="stat-header">
+          <span class="stat-icon">
+            <el-icon :size="16"><component :is="card.icon" /></el-icon>
+          </span>
+          <span class="stat-label">{{ card.label }}</span>
+        </div>
+        <div class="stat-body">
+          <span class="stat-value">{{ card.value }}</span>
+          <span v-if="card.sub" class="stat-sub">{{ card.sub }}</span>
+        </div>
+        <div class="stat-rule"></div>
+        <div class="stat-status">
+          <span class="status-dot" :class="'status-dot--' + card.statusColor"></span>
+          <span class="stat-status-text">{{ card.statusText }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Engine + Channels -->
+    <div class="panel-grid">
+      <!-- Engine -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">
+            <el-icon :size="16"><SetUp /></el-icon> 抢机引擎
+          </span>
+          <span class="engine-state" :class="engineRunning ? 'engine-state--up' : 'engine-state--down'">
+            <span class="status-dot" :class="engineRunning ? 'status-dot--up' : 'status-dot--down'"></span>
+            {{ engineRunning ? '运行中' : '已停止' }}
+          </span>
+        </div>
+        <div class="panel-body">
+          <div class="metric-row">
+            <div class="metric-group">
+              <div class="metric-label">父池 Parent Pool</div>
+              <div class="metric-pair">
+                <div class="metric">
+                  <span class="metric-value">{{ engine.parentActive }}</span>
+                  <span class="metric-unit">活跃</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-value">{{ engine.parentCapacity }}</span>
+                  <span class="metric-unit">容量</span>
+                </div>
+              </div>
             </div>
-            <div class="stat-body">
-              <div class="stat-value">{{ card.value }}</div>
-              <div class="stat-label">{{ card.label }}</div>
+            <div class="metric-group">
+              <div class="metric-label">API 池</div>
+              <div class="metric-pair">
+                <div class="metric">
+                  <span class="metric-value">{{ engine.apiActive }}</span>
+                  <span class="metric-unit">活跃</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-value">{{ engine.apiCapacity }}</span>
+                  <span class="metric-unit">容量</span>
+                </div>
+              </div>
             </div>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <!-- Engine + Channels Row -->
-    <el-row :gutter="20">
-      <!-- Grab Engine -->
-      <el-col :span="24" :lg="14">
-        <el-card shadow="hover" class="section-card">
-          <template #header>
-            <div class="card-header">
-              <span><el-icon><SetUp /></el-icon> 抢机引擎</span>
-              <el-tag :type="engineRunning ? 'success' : 'danger'" size="small">
-                {{ engineRunning ? '运行中' : '已停止' }}
-              </el-tag>
+          <div class="engine-extra">
+            <div class="extra-item">
+              <span class="extra-value">{{ engine.registeredJobs }}</span>
+              <span class="extra-label">已注册 Cron</span>
             </div>
-          </template>
-          <el-row :gutter="24">
-            <el-col :span="12">
-              <div class="engine-section">
-                <div class="engine-section-title">父池 (Parent Pool)</div>
-                <div class="engine-metrics">
-                  <div class="engine-metric">
-                    <span class="metric-num">{{ engine.parentActive }}</span>
-                    <span class="metric-label">活跃</span>
-                  </div>
-                  <div class="engine-metric">
-                    <span class="metric-num">{{ engine.parentCapacity }}</span>
-                    <span class="metric-label">容量</span>
-                  </div>
-                </div>
-              </div>
-            </el-col>
-            <el-col :span="12">
-              <div class="engine-section">
-                <div class="engine-section-title">API 池</div>
-                <div class="engine-metrics">
-                  <div class="engine-metric">
-                    <span class="metric-num">{{ engine.apiActive }}</span>
-                    <span class="metric-label">活跃</span>
-                  </div>
-                  <div class="engine-metric">
-                    <span class="metric-num">{{ engine.apiCapacity }}</span>
-                    <span class="metric-label">容量</span>
-                  </div>
-                </div>
-              </div>
-            </el-col>
-          </el-row>
-          <el-divider style="margin:12px 0" />
-          <el-row :gutter="16">
-            <el-col :span="8">
-              <el-statistic title="已注册 Cron" :value="engine.registeredJobs" />
-            </el-col>
-            <el-col :span="8">
-              <el-statistic title="总任务数" :value="engine.totalTasks ?? '-'" />
-            </el-col>
-            <el-col :span="8">
-              <el-statistic title="运行中任务" :value="engine.runningTasks ?? '-'" />
-            </el-col>
-          </el-row>
-        </el-card>
-      </el-col>
+            <div class="extra-item">
+              <span class="extra-value">{{ engine.totalTasks ?? '-' }}</span>
+              <span class="extra-label">总任务</span>
+            </div>
+            <div class="extra-item">
+              <span class="extra-value">{{ engine.runningTasks ?? '-' }}</span>
+              <span class="extra-label">运行中</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <!-- Notification Channels -->
-      <el-col :span="24" :lg="10">
-        <el-card shadow="hover" class="section-card">
-          <template #header>
-            <span><el-icon><Bell /></el-icon> 通知渠道</span>
-          </template>
-          <div class="channels-list">
+      <!-- Notification channels -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">
+            <el-icon :size="16"><Bell /></el-icon> 通知渠道
+          </span>
+        </div>
+        <div class="panel-body">
+          <div class="channel-list">
             <div v-for="ch in notificationChannels" :key="ch.name" class="channel-row">
               <div class="channel-left">
-                <el-icon :size="20" :color="ch.enabled ? '#67c23a' : '#c0c4cc'">
+                <el-icon :size="16" :color="ch.enabled ? 'var(--status-up)' : 'var(--text-muted)'">
                   <ChatDotRound v-if="ch.name === 'Telegram'" />
                   <Message v-else-if="ch.name === 'DingTalk'" />
                   <Bell v-else-if="ch.name === 'Bark'" />
@@ -117,60 +124,74 @@
                 </el-icon>
                 <span class="channel-name">{{ ch.label }}</span>
               </div>
-              <el-tag :type="ch.enabled ? 'success' : 'info'" size="small">
+              <span class="channel-state" :class="ch.enabled ? 'channel-state--up' : ''">
                 {{ ch.enabled ? '已配置' : '未配置' }}
-              </el-tag>
+              </span>
             </div>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </div>
+      </div>
+    </div>
 
-    <!-- Quick Actions + System Info -->
-    <el-row :gutter="20" style="margin-top:20px">
-      <el-col :span="24" :lg="14">
-        <el-card shadow="hover" class="section-card">
-          <template #header>
-            <span><el-icon><Link /></el-icon> 快捷入口</span>
-          </template>
-          <el-row :gutter="12">
-            <el-col :span="8" v-for="link in quickLinks" :key="link.path" style="margin-bottom:12px">
-              <el-button :type="link.type" plain @click="$router.push(link.path)" style="width:100%">
-                <el-icon><component :is="link.icon" /></el-icon>
-                {{ link.label }}
-              </el-button>
-            </el-col>
-          </el-row>
-        </el-card>
-      </el-col>
+    <!-- Quick links + System overview -->
+    <div class="panel-grid">
+      <!-- Quick links -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">
+            <el-icon :size="16"><Link /></el-icon> 快捷入口
+          </span>
+        </div>
+        <div class="panel-body">
+          <div class="quick-links">
+            <router-link
+              v-for="link in quickLinks"
+              :key="link.path"
+              :to="link.path"
+              class="quick-link"
+            >
+              <el-icon :size="14"><component :is="link.icon" /></el-icon>
+              {{ link.label }}
+            </router-link>
+          </div>
+        </div>
+      </div>
 
-      <el-col :span="24" :lg="10">
-        <el-card shadow="hover" class="section-card">
-          <template #header>
-            <span><el-icon><InfoFilled /></el-icon> 系统概览</span>
-          </template>
-          <el-descriptions :column="1" border size="small">
-            <el-descriptions-item label="应用版本">
-              {{ appVersion || '-' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="MFA">
-              <el-tag :type="mfaEnabled ? 'success' : 'info'" size="small">
+      <!-- System overview -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">
+            <el-icon :size="16"><InfoFilled /></el-icon> 系统概览
+          </span>
+        </div>
+        <div class="panel-body">
+          <div class="info-list">
+            <div class="info-row">
+              <span class="info-label">应用版本</span>
+              <span class="info-value data-mono">{{ appVersion || '-' }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">MFA</span>
+              <span class="info-state" :class="mfaEnabled ? 'info-state--up' : ''">
                 {{ mfaEnabled ? '已启用' : '已禁用' }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="SSL 证书">
-              <el-tag v-if="sslDomain" type="success" size="small">已配置</el-tag>
-              <span v-else style="color:#909399">未配置</span>
-            </el-descriptions-item>
-            <el-descriptions-item label="GCP">
-              <el-tag :type="gcpConfigured ? 'success' : 'info'" size="small">
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">SSL 证书</span>
+              <span class="info-state" :class="sslDomain ? 'info-state--up' : ''">
+                {{ sslDomain ? '已配置' : '未配置' }}
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">GCP</span>
+              <span class="info-state" :class="gcpConfigured ? 'info-state--up' : ''">
                 {{ gcpConfigured ? '已配置' : '未配置' }}
-              </el-tag>
-            </el-descriptions-item>
-          </el-descriptions>
-        </el-card>
-      </el-col>
-    </el-row>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -202,7 +223,6 @@ const engine = ref({
 })
 const notificationChannels = ref<Array<{ name: string; label: string; enabled: boolean }>>([])
 
-// System overview
 const appVersion = ref('')
 const mfaEnabled = ref(false)
 const sslDomain = ref('')
@@ -217,41 +237,53 @@ const statCards = computed(() => [
     label: '实例总数',
     value: stats.value.instanceCount,
     icon: Monitor,
-    color: 'linear-gradient(135deg, #409eff, #337ecc)',
+    sub: undefined,
+    statusColor: 'idle',
+    statusText: '全部',
   },
   {
     label: '在线实例',
     value: stats.value.onlineCount,
     icon: Monitor,
-    color: 'linear-gradient(135deg, #67c23a, #529b2e)',
+    sub: stats.value.instanceCount ? ` / ${stats.value.instanceCount}` : undefined,
+    statusColor: 'up',
+    statusText: stats.value.instanceCount
+      ? Math.round((stats.value.onlineCount / stats.value.instanceCount) * 100) + '% 在线率'
+      : '暂无数据',
   },
   {
     label: '租户数量',
     value: stats.value.tenantCount,
     icon: User,
-    color: 'linear-gradient(135deg, #e6a23c, #d4882e)',
+    sub: undefined,
+    statusColor: 'idle',
+    statusText: '已配置',
   },
   {
     label: '代理数量',
     value: stats.value.proxyCount,
     icon: Connection,
-    color: 'linear-gradient(135deg, #909399, #7a7e84)',
+    sub: undefined,
+    statusColor: 'idle',
+    statusText: '已注册',
   },
   {
     label: '备份总数',
     value: stats.value.backupCount,
     icon: Files,
-    color: 'linear-gradient(135deg, #f56c6c, #e05a5a)',
+    sub: undefined,
+    statusColor: 'idle',
+    statusText: '累计',
   },
 ])
 
 const quickLinks = [
-  { label: '抢机任务', path: '/boot', icon: Platform, type: 'primary' as const },
-  { label: '实例列表', path: '/instances', icon: Monitor, type: 'success' as const },
-  { label: 'SSH 终端', path: '/terminal', icon: Promotion, type: 'warning' as const },
-  { label: '系统设置', path: '/settings', icon: Setting, type: 'info' as const },
-  { label: 'VNC 控制台', path: '/console', icon: VideoCamera, type: '' as const },
-  { label: '救援模式', path: '/rescue', icon: Warning, type: 'danger' as const },
+  { label: '抢机任务', path: '/boot', icon: Platform },
+  { label: '实例列表', path: '/instances', icon: Monitor },
+  { label: 'SSH 终端', path: '/terminal', icon: Promotion },
+  { label: '系统设置', path: '/settings', icon: Setting },
+  { label: 'VNC 控制台', path: '/console', icon: VideoCamera },
+  { label: '救援模式', path: '/rescue', icon: Warning },
 ]
 
 async function loadAll() {
@@ -334,293 +366,389 @@ onMounted(loadAll)
 
 <style scoped>
 .dashboard {
-  padding: 24px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  min-height: calc(100vh - 60px);
+  max-width: 1200px;
 }
 
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 28px;
-  flex-wrap: wrap;
-  gap: 16px;
-}
+/* ============================================================
+   Stat Grid
+   ============================================================ */
 
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.toolbar-left h2 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-  color: #1e293b;
-  background: linear-gradient(135deg, #0066ff, #00bcd4);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Alert Styling */
-.dashboard :deep(.el-alert) {
-  border-radius: 12px;
-  border: none;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
-}
-
-/* Stats Row */
-.stats-row {
-  margin-bottom: 28px;
+.stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
 }
 
 .stat-card {
-  border-radius: 16px;
-  overflow: hidden;
-  background: linear-gradient(135deg, #ffffff, #f8fafc);
-  border: 1px solid rgba(0, 102, 255, 0.1);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  cursor: pointer;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  transition: border-color var(--transition-fast);
 }
 
 .stat-card:hover {
-  box-shadow: 0 20px 40px rgba(0, 102, 255, 0.15);
-  transform: translateY(-6px);
-  border-color: rgba(0, 102, 255, 0.2);
+  border-color: var(--border-default);
 }
 
-.stat-card :deep(.el-card__body) {
-  padding: 24px;
-}
-
-.stat-inner {
+/* Header row */
+.stat-header {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-2);
 }
 
 .stat-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 14px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: #fff;
-  flex-shrink: 0;
-  box-shadow: 0 8px 16px rgba(0, 102, 255, 0.3);
-}
-
-.stat-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.stat-value {
-  font-size: 32px;
-  font-weight: 800;
-  color: #1e293b;
-  line-height: 1.2;
-  letter-spacing: -0.5px;
+  color: var(--text-muted);
 }
 
 .stat-label {
-  font-size: 13px;
-  color: #94a3b8;
-  margin-top: 6px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--text-muted);
+  letter-spacing: var(--tracking-wide);
 }
 
-/* Section Cards */
-.section-card {
-  margin-bottom: 20px;
-  border-radius: 16px;
-  border: 1px solid rgba(0, 102, 255, 0.1);
+/* Value row */
+.stat-body {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.stat-value {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  line-height: 1;
+  letter-spacing: var(--tracking-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-sub {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-weight: var(--font-medium);
+}
+
+/* Rule */
+.stat-rule {
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+/* Status row */
+.stat-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stat-status-text {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: var(--font-medium);
+}
+
+/* ============================================================
+   Panel Grid (2-col)
+   ============================================================ */
+
+.panel-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 768px) {
+  .panel-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   Panel (card)
+   ============================================================ */
+
+.panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
-.section-card :deep(.el-card__header) {
-  padding: 20px 24px;
-  font-weight: 600;
-  background: linear-gradient(90deg, rgba(0, 102, 255, 0.03), rgba(0, 188, 212, 0.03));
-  border-bottom: 1px solid rgba(0, 102, 255, 0.1);
-  display: flex;
-  align-items: center;
-}
-
-.section-card :deep(.el-card__body) {
-  padding: 24px;
-  background: #ffffff;
-}
-
-.card-header {
+.panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.card-header span {
+.panel-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  color: #1e293b;
-  font-size: 16px;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
 }
 
-.card-header :deep(.el-icon) {
-  color: #0066ff;
+.panel-title :deep(.el-icon) {
+  color: var(--text-muted);
 }
 
-/* Engine Section */
-.engine-section {
-  padding: 12px 0;
+.panel-body {
+  padding: var(--space-4) var(--space-5);
 }
 
-.engine-section-title {
-  font-size: 12px;
-  color: #94a3b8;
-  text-transform: uppercase;
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  margin-bottom: 12px;
-}
+/* ============================================================
+   Engine
+   ============================================================ */
 
-.engine-metrics {
+.engine-state {
   display: flex;
-  gap: 20px;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
 }
 
-.engine-metric {
-  text-align: center;
+.engine-state--up {
+  color: var(--status-up);
+  background: rgba(52, 168, 83, 0.08);
 }
 
-.metric-num {
-  font-size: 28px;
-  font-weight: 800;
-  color: #0066ff;
-  display: block;
-  line-height: 1;
+.engine-state--down {
+  color: var(--text-muted);
+}
+
+.metric-row {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.metric-group {
+  flex: 1;
 }
 
 .metric-label {
-  font-size: 12px;
-  color: #94a3b8;
-  margin-top: 6px;
-  font-weight: 500;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  margin-bottom: var(--space-2);
 }
 
-/* Channels List */
-.channels-list {
+.metric-pair {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.metric {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+}
+
+.metric-value {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-unit {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.engine-extra {
+  display: flex;
+  gap: var(--space-8);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.extra-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.extra-value {
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.extra-label {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
+/* ============================================================
+   Notification Channels
+   ============================================================ */
+
+.channel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .channel-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-radius: 10px;
-  background: #f8fafc;
-  transition: all 0.3s ease;
-  border: 1px solid transparent;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
 }
 
 .channel-row:hover {
-  background: #f0f4ff;
-  border-color: rgba(0, 102, 255, 0.1);
+  background: var(--bg-raised);
 }
 
 .channel-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .channel-name {
-  font-size: 14px;
-  color: #1e293b;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: var(--font-medium);
 }
 
-/* Descriptions */
-.section-card :deep(.el-descriptions) {
-  background: transparent;
+.channel-state {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: var(--font-medium);
 }
 
-.section-card :deep(.el-descriptions__body) {
-  background: transparent;
+.channel-state--up {
+  color: var(--status-up);
 }
 
-.section-card :deep(.el-descriptions__item) {
-  background: transparent;
+/* ============================================================
+   Quick Links
+   ============================================================ */
+
+.quick-links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
 }
 
-.section-card :deep(.el-descriptions__cell) {
-  padding: 12px 0;
-  color: #64748b;
+@media (max-width: 480px) {
+  .quick-links {
+    grid-template-columns: 1fr;
+  }
 }
 
-.section-card :deep(.el-descriptions__label) {
-  font-weight: 600;
-  color: #1e293b;
+.quick-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-/* Responsive */
+.quick-link:hover {
+  background: var(--bg-raised);
+  color: var(--accent);
+}
+
+/* ============================================================
+   System Info
+   ============================================================ */
+
+.info-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+}
+
+.info-row + .info-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.info-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-weight: var(--font-medium);
+}
+
+.info-value {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: var(--font-medium);
+}
+
+.info-state {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: var(--font-medium);
+}
+
+.info-state--up {
+  color: var(--status-up);
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+
 @media (max-width: 768px) {
-  .dashboard {
-    padding: 16px;
-  }
-
-  .toolbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .toolbar-left h2 {
-    font-size: 20px;
-  }
-
-  .stats-row {
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-  }
-
-  .stat-icon {
-    width: 56px;
-    height: 56px;
+  .stat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-3);
   }
 
   .stat-value {
-    font-size: 24px;
+    font-size: var(--text-2xl);
   }
 
-  .engine-metrics {
-    gap: 16px;
+  .metric-row {
+    flex-direction: column;
+    gap: var(--space-4);
   }
 
-  .metric-num {
-    font-size: 24px;
+  .engine-extra {
+    gap: var(--space-4);
+    flex-wrap: wrap;
   }
 }
 
 @media (max-width: 480px) {
-  .stats-row {
-    grid-template-columns: 1fr;
-  }
-
-  .toolbar-left h2 {
-    font-size: 18px;
+  .stat-grid {
+    grid-template-columns: 1fr 1fr;
   }
 }
 </style>

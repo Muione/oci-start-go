@@ -71,6 +71,6 @@ async function onSubmit() {
 </script>
 
 <style scoped>
-.login-wrap { display: flex; align-items: center; justify-content: center; height: 100vh; background: #f0f2f5; }
+.login-wrap { display: flex; align-items: center; justify-content: center; height: 100vh; background: var(--bg-page); }
 .login-card { width: 420px; }
 </style>

@@ -1,105 +1,157 @@
 <template>
-  <div>
+  <div class="boot-page">
     <div class="toolbar">
-      <h2>抢机任务</h2>
-      <el-button type="primary" @click="openAdd">新建任务</el-button>
-      <el-button @click="load">刷新</el-button>
+      <div class="toolbar-left">
+        <h2>抢机任务</h2>
+        <el-tag :type="engineRunning ? 'success' : 'info'" size="small">
+          {{ engineRunning ? '引擎运行中' : '引擎已停止' }}
+        </el-tag>
+      </div>
+      <div class="toolbar-right">
+        <el-button type="primary" @click="openAdd">
+          <el-icon><Plus /></el-icon> 新建任务
+        </el-button>
+        <el-button @click="load" :loading="loading">
+          <el-icon><Refresh /></el-icon> 刷新
+        </el-button>
+      </div>
     </div>
 
-    <!-- System Status Card -->
-    <el-card v-if="sysStatus" class="status-card" shadow="hover">
-      <template #header><span>引擎状态</span></template>
-      <el-row :gutter="20">
-        <el-col :span="4">
-          <el-statistic title="总任务" :value="sysStatus.totalTasks" />
-        </el-col>
-        <el-col :span="4">
-          <el-statistic title="运行中" :value="sysStatus.runningTasks" />
-        </el-col>
-        <el-col :span="4">
-          <el-statistic title="活跃Key" :value="sysStatus.activeKeyCount" />
-        </el-col>
-        <el-col :span="4">
-          <el-statistic title="批次大小" :value="sysStatus.batchSize" />
-        </el-col>
-        <el-col :span="4">
-          <el-tag :type="sysStatus.running ? 'success' : 'danger'">
-            {{ sysStatus.running ? '运行中' : '已停止' }}
+    <!-- System Status -->
+    <el-card v-if="sysStatus" class="status-card" shadow="none">
+      <template #header>
+        <div class="card-header">
+          <span class="card-title">
+            <el-icon><SetUp /></el-icon> 引擎状态
+          </span>
+          <el-tag :type="sysStatus.running ? 'success' : 'danger'" size="small" effect="dark">
+            {{ sysStatus.running ? '活跃' : '停止' }}
           </el-tag>
-        </el-col>
-        <el-col :span="4">
-          <el-statistic title="父池活跃" :value="sysStatus.parentPool?.active ?? 0" />
-        </el-col>
-      </el-row>
-      <el-row :gutter="20" style="margin-top: 12px">
-        <el-col :span="4">
-          <el-statistic title="父池队列" :value="sysStatus.parentPool?.queue ?? 0" />
-        </el-col>
-        <el-col :span="4">
-          <el-statistic title="API池活跃" :value="sysStatus.apiPool?.active ?? 0" />
-        </el-col>
-        <el-col :span="4">
-          <el-statistic title="API池完成" :value="sysStatus.apiPool?.completed ?? 0" />
-        </el-col>
-      </el-row>
+        </div>
+      </template>
+      <div class="status-grid">
+        <div class="status-item">
+          <span class="status-value">{{ sysStatus.totalTasks || 0 }}</span>
+          <span class="status-label">总任务</span>
+        </div>
+        <div class="status-item">
+          <span class="status-value" style="color:var(--status-up)">{{ sysStatus.runningTasks || 0 }}</span>
+          <span class="status-label">运行中</span>
+        </div>
+        <div class="status-item">
+          <span class="status-value">{{ sysStatus.activeKeyCount || 0 }}</span>
+          <span class="status-label">活跃 Key</span>
+        </div>
+        <div class="status-item">
+          <span class="status-value">{{ sysStatus.batchSize || '-' }}</span>
+          <span class="status-label">批次大小</span>
+        </div>
+        <div class="status-item">
+          <span class="status-value">{{ sysStatus.parentPool?.active ?? 0 }} / {{ sysStatus.parentPool?.queue ?? 0 }}</span>
+          <span class="status-label">父池 活跃/队列</span>
+        </div>
+        <div class="status-item">
+          <span class="status-value">{{ sysStatus.apiPool?.active ?? 0 }} / {{ sysStatus.apiPool?.completed ?? 0 }}</span>
+          <span class="status-label">API池 活跃/完成</span>
+        </div>
+      </div>
     </el-card>
 
     <!-- Task Table -->
-    <el-table :data="rows" v-loading="loading" border stripe style="width: 100%; margin-top: 16px">
-      <template #empty>
-        <el-empty description="暂无抢机任务，请新建" :image-size="80" />
-      </template>
-      <el-table-column prop="bootId" label="Boot ID" min-width="200" show-overflow-tooltip />
-      <el-table-column prop="tenantId" label="租户ID" width="80" />
-      <el-table-column prop="architecture" label="架构" width="70">
-        <template #default="{ row }">
-          <el-tag size="small" :type="row.architecture === 'ARM' ? '' : 'warning'">
-            {{ row.architecture || '-' }}
-          </el-tag>
+    <el-card shadow="none" class="table-card">
+      <el-table :data="rows" v-loading="loading" border stripe size="default">
+        <template #empty>
+          <el-empty description="暂无抢机任务" :image-size="80">
+            <el-button type="primary" @click="openAdd">新建任务</el-button>
+          </el-empty>
         </template>
-      </el-table-column>
-      <el-table-column label="规格" width="160">
-        <template #default="{ row }">
-          {{ row.ocpu }}C / {{ row.memory }}G / {{ row.disk }}GB
-        </template>
-      </el-table-column>
-      <el-table-column prop="loopTime" label="间隔(s)" width="80" />
-      <el-table-column prop="instanceCount" label="目标数" width="80" />
-      <el-table-column label="状态" width="90">
-        <template #default="{ row }">
-          <el-tag :type="statusTag(row.status)">{{ statusText(row.status) }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="publicIp" label="公网IP" width="140" />
-      <el-table-column prop="failCount" label="失败次数" width="90" />
-      <el-table-column prop="successCount" label="成功次数" width="90" />
-      <el-table-column prop="nextExecutionTime" label="下次执行" width="160" />
-      <el-table-column label="操作" width="220" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" @click="edit(row)">编辑</el-button>
-          <el-button size="small" :type="row.status === 1 ? 'warning' : 'success'"
-            @click="toggle(row)">
-            {{ row.status === 1 ? '暂停' : '启用' }}
-          </el-button>
-          <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+        <el-table-column label="任务ID" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="data-mono" style="font-size:var(--text-xs)">{{ row.bootId?.substring(0, 20) }}...</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="租户" width="100">
+          <template #default="{ row }">
+            <el-tag size="small" effect="plain" type="info">#{{ row.tenantId }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="架构" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.architecture === 'ARM' ? 'success' : 'warning'" effect="dark">
+              {{ row.architecture || '-' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="规格" min-width="150">
+          <template #default="{ row }">
+            <span class="data-mono">{{ row.ocpu }}C / {{ row.memory }}G / {{ row.disk }}GB</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="镜像" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.operatingSystem || '-' }} {{ row.operatingSystemVersion || '' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="loopTime" label="间隔(s)" width="80" align="center" />
+        <el-table-column label="进度" width="110" align="center">
+          <template #default="{ row }">
+            <span class="data-mono" style="color:var(--status-up)">{{ row.successCount || 0 }}</span>
+            <span style="color:var(--text-muted)"> / </span>
+            <span class="data-mono">{{ row.instanceCount || 0 }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="statusTag(row.status)" size="small" effect="dark">
+              {{ statusText(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="失败" width="70" align="center">
+          <template #default="{ row }">
+            <span :style="{ color: row.failCount > 0 ? 'var(--status-down)' : 'var(--text-muted)' }">
+              {{ row.failCount || 0 }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="nextExecutionTime" label="下次执行" width="155" />
+        <el-table-column label="操作" width="220" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="edit(row)">
+              <el-icon><Edit /></el-icon>
+            </el-button>
+            <el-button
+              size="small"
+              :type="row.status === 1 ? 'warning' : 'success'"
+              @click="toggle(row)"
+            >
+              {{ row.status === 1 ? '暂停' : '启用' }}
+            </el-button>
+            <el-popconfirm title="确定删除此任务？" @confirm="remove(row)">
+              <template #reference>
+                <el-button size="small" type="danger">删除</el-button>
+              </template>
+            </el-popconfirm>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
 
+    <!-- ================================================================ -->
     <!-- Add/Edit Dialog -->
-    <el-dialog v-model="addVisible" :title="editing ? '编辑任务' : '新建任务'" width="680px">
+    <!-- ================================================================ -->
+    <el-dialog v-model="addVisible" :title="editing ? '编辑任务' : '新建任务'" width="680px" destroy-on-close>
       <el-form :model="form" label-width="130px">
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="租户">
+            <el-form-item label="租户" required>
               <el-select v-model="form.tenantId" filterable placeholder="选择租户" style="width:100%">
-                <el-option v-for="t in tenantList" :key="t.id" :label="`${t.name} (${t.region})`"
-                  :value="t.id" />
+                <el-option v-for="t in tenantList" :key="t.id" :label="`${t.name} (${t.region})`" :value="t.id" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="架构">
+            <el-form-item label="架构" required>
               <el-select v-model="form.architecture" placeholder="选择架构" style="width:100%">
                 <el-option label="ARM (Ampere)" value="ARM" />
                 <el-option label="AMD (Intel/AMD)" value="AMD" />
@@ -109,17 +161,17 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="8">
-            <el-form-item label="OCPU">
+            <el-form-item label="OCPU" required>
               <el-input-number v-model="form.ocpu" :min="1" :max="128" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="内存 (GB)">
+            <el-form-item label="内存 (GB)" required>
               <el-input-number v-model="form.memory" :min="1" :max="1024" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="磁盘 (GB)">
+            <el-form-item label="磁盘 (GB)" required>
               <el-input-number v-model="form.disk" :min="50" :max="32768" style="width:100%" />
             </el-form-item>
           </el-col>
@@ -171,7 +223,8 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="时间窗口">
-              <el-input v-model="form.dataGap" placeholder="如: 00:00-23:59 或留空" />
+              <el-input v-model="form.dataGap" placeholder="如: 00:00-23:59" />
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">留空表示全天候运行</div>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -190,8 +243,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Refresh, SetUp, Edit } from '@element-plus/icons-vue'
 import request from '../utils/request'
 
 interface BootTask {
@@ -202,8 +256,10 @@ interface BootTask {
   dataGap: string; notifyFlag: string; nextExecutionTime: string
   failCount: number; successCount: number; remark: string; cloudType: number
 }
-interface SysStatus { totalTasks: number; runningTasks: number; activeKeyCount: number
-  batchSize: number; running: boolean; parentPool: any; apiPool: any }
+interface SysStatus {
+  totalTasks: number; runningTasks: number; activeKeyCount: number
+  batchSize: number; running: boolean; parentPool: any; apiPool: any
+}
 interface Tenant { id: number; name: string; region: string; tenancy: string }
 
 const rows = ref<BootTask[]>([])
@@ -222,21 +278,31 @@ const emptyForm = {
 }
 const form = ref({ ...emptyForm })
 
-function statusTag(s: number) { return s === 1 ? 'warning' : s === 2 ? 'success' : s === 0 ? 'info' : '' }
-function statusText(s: number) { return s === 1 ? '运行中' : s === 2 ? '已完成' : s === 0 ? '已停用' : '未知' }
+const engineRunning = computed(() => sysStatus.value?.running ?? false)
+
+function statusTag(s: number) {
+  return s === 1 ? 'warning' : s === 2 ? 'success' : s === 0 ? 'info' : ''
+}
+function statusText(s: number) {
+  return s === 1 ? '运行中' : s === 2 ? '已完成' : s === 0 ? '已停用' : '未知'
+}
 
 async function load() {
   loading.value = true
   try {
-    rows.value = await request.get('/boot/list') as BootTask[]
-    sysStatus.value = await request.get('/boot/systemStatus') as SysStatus
-  } catch (e: any) { ElMessage.error(e.message)
-  } finally { loading.value = false }
+    const [tasks, status] = await Promise.all([
+      request.get('/boot/list') as Promise<BootTask[]>,
+      request.get('/boot/systemStatus') as Promise<SysStatus>,
+    ])
+    rows.value = tasks
+    sysStatus.value = status
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { loading.value = false }
 }
 
 async function loadTenants() {
-  try { tenantList.value = await request.get('/boot/tenants') as Tenant[]
-  } catch { /* ignore */ }
+  try { tenantList.value = await request.get('/boot/tenants') as Tenant[] }
+  catch { /* ignore */ }
 }
 
 function openAdd() {
@@ -248,14 +314,19 @@ function openAdd() {
 function edit(row: BootTask) {
   editing.value = true
   form.value = {
-    bootId: row.bootId, tenantId: row.tenantId,
+    bootId: row.bootId || '',
+    tenantId: row.tenantId,
     ocpu: row.ocpu, memory: row.memory, disk: row.disk,
     loopTime: row.loopTime, instanceCount: row.instanceCount,
-    architecture: row.architecture, rootPassword: '',
-    imageId: row.imageId, operatingSystem: row.operatingSystem,
-    operatingSystemVersion: row.operatingSystemVersion,
-    dataGap: row.dataGap, notifyFlag: row.notifyFlag,
-    remark: row.remark, cloudType: row.cloudType,
+    architecture: row.architecture,
+    rootPassword: '',
+    imageId: row.imageId || '',
+    operatingSystem: row.operatingSystem || '',
+    operatingSystemVersion: row.operatingSystemVersion || '',
+    dataGap: row.dataGap || '',
+    notifyFlag: row.notifyFlag || 'NO',
+    remark: row.remark || '',
+    cloudType: row.cloudType || 1,
   }
   addVisible.value = true
 }
@@ -269,19 +340,16 @@ async function save() {
     ElMessage.success(editing.value ? '更新成功' : '创建成功')
     addVisible.value = false
     await load()
-  } catch (e: any) { ElMessage.error(e.message)
-  } finally { saving.value = false }
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { saving.value = false }
 }
 
 async function remove(row: BootTask) {
   try {
-    await ElMessageBox.confirm(`删除任务 ${row.bootId}?`, '确认', { type: 'warning' })
     await request.get('/boot/delete', { params: { bootId: row.bootId } })
     ElMessage.success('已删除')
     await load()
-  } catch (e: any) {
-    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
-  }
+  } catch (e: any) { ElMessage.error(e.message) }
 }
 
 async function toggle(row: BootTask) {
@@ -297,109 +365,127 @@ onMounted(() => { load(); loadTenants() })
 </script>
 
 <style scoped>
+.boot-page {
+  padding: 0;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 24px;
+  justify-content: space-between;
+  margin-bottom: var(--space-5);
   flex-wrap: wrap;
+  gap: var(--space-4);
 }
 
-.toolbar h2 {
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.toolbar-left h2 {
   margin: 0;
-  margin-right: auto;
-  font-size: 24px;
-  font-weight: 700;
-  color: #1e293b;
-  background: linear-gradient(135deg, #0066ff, #00bcd4);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  letter-spacing: var(--tracking-tight);
 }
 
+.toolbar-right {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ---- Status Card ---- */
 .status-card {
-  margin-bottom: 20px;
-  border-radius: 12px;
-  border: 1px solid rgba(0, 102, 255, 0.1);
-  background: linear-gradient(135deg, #ffffff, #f8fafc);
-  transition: all 0.3s ease;
+  margin-bottom: var(--space-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
 }
 
-.status-card:hover {
-  box-shadow: 0 8px 16px rgba(0, 102, 255, 0.15);
-  transform: translateY(-2px);
-  border-color: rgba(0, 102, 255, 0.2);
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.status-card :deep(.el-card__header) {
-  padding: 16px 20px;
-  font-weight: 700;
-  background: linear-gradient(90deg, rgba(0, 102, 255, 0.03), rgba(0, 188, 212, 0.03));
-  border-bottom: 1px solid rgba(0, 102, 255, 0.1);
-  color: #1e293b;
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
 }
 
-.status-card :deep(.el-card__body) {
-  padding: 20px;
-  background: #ffffff;
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+
+.status-item {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3);
+  background: var(--bg-raised);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.status-value {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.status-label {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/* ---- Table Card ---- */
+.table-card {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+}
+
+.table-card :deep(.el-card__body) {
+  padding: 0;
 }
 
 :deep(.el-table) {
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   overflow: hidden;
-  background: #ffffff;
-  border: 1px solid rgba(0, 102, 255, 0.1);
 }
 
-:deep(.el-table__header) {
-  background: linear-gradient(90deg, rgba(0, 102, 255, 0.03), rgba(0, 188, 212, 0.03));
+:deep(.el-table th) {
+  background: var(--bg-raised);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
 }
 
-:deep(.el-table__header th) {
-  background: transparent;
-  color: #1e293b;
-  font-weight: 600;
-  border-bottom: 2px solid rgba(0, 102, 255, 0.1);
+:deep(.el-dialog) {
+  border-radius: var(--radius-lg);
 }
 
-:deep(.el-table__body tr:hover > td) {
-  background-color: rgba(0, 102, 255, 0.05);
-}
-
-:deep(.el-button--small) {
-  border-radius: 6px;
-  transition: all 0.3s ease;
-}
-
-:deep(.el-button--primary:hover) {
-  box-shadow: 0 8px 16px rgba(0, 102, 255, 0.3);
-  transform: translateY(-1px);
-}
-
-:deep(.el-button--success:hover) {
-  box-shadow: 0 8px 16px rgba(16, 185, 129, 0.3);
-  transform: translateY(-1px);
-}
-
-:deep(.el-button--danger:hover) {
-  box-shadow: 0 8px 16px rgba(239, 68, 68, 0.3);
-  transform: translateY(-1px);
-}
-
-:deep(.el-tag) {
-  border-radius: 8px;
-  border: none;
-  font-weight: 600;
+:deep(.el-dialog__title) {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
 }
 
 :deep(.el-pagination) {
-  text-align: center;
-  margin-top: 24px;
-}
-
-:deep(.el-pagination__item.active) {
-  background: linear-gradient(135deg, #0066ff, #00bcd4);
-  color: #fff;
+  justify-content: center;
+  margin-top: var(--space-5);
 }
 
 @media (max-width: 768px) {
@@ -408,8 +494,12 @@ onMounted(() => { load(); loadTenants() })
     align-items: flex-start;
   }
 
-  .toolbar h2 {
-    font-size: 20px;
+  .toolbar-left h2 {
+    font-size: var(--text-lg);
+  }
+
+  .status-grid {
+    grid-template-columns: 1fr 1fr;
   }
 }
 </style>

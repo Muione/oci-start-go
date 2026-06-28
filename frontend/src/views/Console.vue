@@ -30,7 +30,7 @@
                   {{ inst.state || 'Unknown' }}
                 </el-tag>
               </div>
-              <div style="font-size:12px;color:#909399;margin-top:2px">
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
                 {{ inst.instanceId }} · {{ inst.shape }} · {{ inst.publicIps || '无公网IP' }}
               </div>
             </el-option>
@@ -75,9 +75,9 @@
         <el-descriptions-item label="VNC 端口">{{ vncInfo.vncPort }}</el-descriptions-item>
         <el-descriptions-item label="规格">{{ vncInfo.shape || '-' }}</el-descriptions-item>
       </el-descriptions>
-      <div style="margin-top:16px; padding:12px; background:#f5f7fa; border-radius:4px">
+      <div style="margin-top:16px; padding:12px; background:var(--bg-raised); border-radius:4px">
         <p>请使用 VNC 客户端连接 <code>{{ vncInfo.vncHost }}:{{ vncInfo.vncPort }}</code></p>
-        <p style="color:#909399; font-size:13px">推荐使用 RealVNC、TigerVNC 或 TightVNC 客户端</p>
+        <p style="color:var(--text-muted); font-size:13px">推荐使用 RealVNC、TigerVNC 或 TightVNC 客户端</p>
         <el-button size="small" style="margin-top:8px" @click="copyVNCAddress">
           <el-icon><CopyDocument /></el-icon> 复制地址
         </el-button>

@@ -16,7 +16,7 @@
         <el-card shadow="hover">
           <el-statistic title="插入成功" :value="stats.inserted || 0">
             <template #suffix>
-              <el-icon style="color: #67c23a"><SuccessFilled /></el-icon>
+              <el-icon style="color: var(--status-up)"><SuccessFilled /></el-icon>
             </template>
           </el-statistic>
         </el-card>
@@ -25,7 +25,7 @@
         <el-card shadow="hover">
           <el-statistic title="跳过" :value="(stats.skipped || 0) + (stats.skippedDups || 0) + (stats.skippedUser || 0)">
             <template #suffix>
-              <el-icon style="color: #e6a23c"><WarningFilled /></el-icon>
+              <el-icon style="color: var(--status-warn)"><WarningFilled /></el-icon>
             </template>
           </el-statistic>
         </el-card>
@@ -34,8 +34,8 @@
         <el-card shadow="hover">
           <el-statistic title="错误" :value="stats.errors || 0">
             <template #suffix>
-              <el-icon v-if="stats.errors > 0" style="color: #f56c6c"><CircleCloseFilled /></el-icon>
-              <el-icon v-else style="color: #67c23a"><SuccessFilled /></el-icon>
+              <el-icon v-if="stats.errors > 0" style="color: var(--status-down)"><CircleCloseFilled /></el-icon>
+              <el-icon v-else style="color: var(--status-up)"><SuccessFilled /></el-icon>
             </template>
           </el-statistic>
         </el-card>
@@ -367,8 +367,8 @@ async function importEncrypted() {
 }
 
 .code-block {
-  background: #1e1e1e;
-  color: #d4d4d4;
+  background: var(--bg-root);
+  color: var(--text-primary);
   padding: 16px;
   border-radius: 8px;
   overflow-x: auto;
