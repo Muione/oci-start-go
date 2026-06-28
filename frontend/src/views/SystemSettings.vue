@@ -155,25 +155,24 @@
       </template>
       <el-row :gutter="16">
         <el-col :md="12" :sm="24" style="margin-bottom:16px">
-          <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('cloudflare.email') }">
+          <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('cloudflare.api.token') }">
             <template #header>
               <div class="channel-header">
                 <span>☁️ Cloudflare</span>
-                <el-tag :type="cfgStr('cloudflare.email') ? 'success' : 'info'" size="small">
-                  {{ cfgStr('cloudflare.email') ? '已配置' : '未配置' }}
+                <el-tag :type="cfgStr('cloudflare.api.token') ? 'success' : 'info'" size="small">
+                  {{ cfgStr('cloudflare.api.token') ? '已配置' : '未配置' }}
                 </el-tag>
               </div>
             </template>
             <el-descriptions :column="1" size="small" border>
-              <el-descriptions-item label="Email">
-                {{ cfgStr('cloudflare.email') || '未配置' }}
-                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('cloudflare.email', cfgStr('cloudflare.email'))">编辑</el-button>
-              </el-descriptions-item>
-              <el-descriptions-item label="API Key">
-                {{ cfgStr('cloudflare.api.key') ? '*** (已设置)' : '未配置' }}
-                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('cloudflare.api.key', cfgStr('cloudflare.api.key'))">编辑</el-button>
+              <el-descriptions-item label="API Token">
+                {{ cfgStr('cloudflare.api.token') ? '*** (已设置)' : '未配置' }}
+                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('cloudflare.api.token', cfgStr('cloudflare.api.token'))">编辑</el-button>
               </el-descriptions-item>
             </el-descriptions>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:8px">
+              <i class="el-icon-info"></i> 请在 Cloudflare 控制台创建 API Token（推荐使用「编辑 DNS」模板）
+            </div>
           </el-card>
         </el-col>
 
@@ -231,7 +230,7 @@
         <el-alert
           title="SSL 证书未配置"
           type="info"
-          description="在系统配置中设置 ssl.domain、ssl.email、cloudflare.email、cloudflare.api.key 以启用 Let's Encrypt 自动签发/续期。"
+          description="在系统配置中设置 ssl.domain、ssl.email、cloudflare.api.token 以启用 Let's Encrypt 自动签发/续期。"
           :closable="false"
           show-icon
         />

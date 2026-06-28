@@ -41,7 +41,7 @@ func NewCertManager(logger zerolog.Logger) *CertManager {
 
 // ObtainCertificate obtains a new certificate via Let's Encrypt using DNS-01
 // challenge with Cloudflare as the DNS provider.
-func (m *CertManager) ObtainCertificate(ctx context.Context, domain, email, cfEmail, cfAPIKey string, staging bool) (*CertResult, error) {
+func (m *CertManager) ObtainCertificate(ctx context.Context, domain, email, cfAPIToken string, staging bool) (*CertResult, error) {
 	// Generate ECDSA private key for the account.
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -71,10 +71,9 @@ func (m *CertManager) ObtainCertificate(ctx context.Context, domain, email, cfEm
 		m.Logger.Debug().Err(err).Msg("acme: register (may be ok)")
 	}
 
-	// Set up Cloudflare DNS-01 provider.
+	// Set up Cloudflare DNS-01 provider using API Token.
 	cfProvider, err := cloudflare.NewDNSProviderConfig(&cloudflare.Config{
-		AuthEmail: cfEmail,
-		AuthKey:   cfAPIKey,
+		AuthToken: cfAPIToken,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cf dns provider: %w", err)
@@ -107,9 +106,9 @@ func (m *CertManager) ObtainCertificate(ctx context.Context, domain, email, cfEm
 }
 
 // RenewCertificate renews an existing certificate.
-func (m *CertManager) RenewCertificate(ctx context.Context, domain, email, cfEmail, cfAPIKey string, staging bool) (*CertResult, error) {
+func (m *CertManager) RenewCertificate(ctx context.Context, domain, email, cfAPIToken string, staging bool) (*CertResult, error) {
 	// lego's Obtain with existing cert auto-renews.
-	return m.ObtainCertificate(ctx, domain, email, cfEmail, cfAPIKey, staging)
+	return m.ObtainCertificate(ctx, domain, email, cfAPIToken, staging)
 }
 
 // acmeUser implements the registration.User interface.

@@ -1,6 +1,6 @@
 // Package dns — cloudflare.go: Cloudflare DNS REST client (SPEC S13.1).
 // Port of CloudflareService.java core. Uses Cloudflare API v4 with
-// X-Auth-Email + X-Auth-Key authentication.
+// Authorization: Bearer <API Token> authentication.
 package dns
 
 import (
@@ -15,19 +15,20 @@ import (
 
 // CfClient wraps the Cloudflare API v4.
 type CfClient struct {
-	APIKey    string
-	Email     string
+	APIToken  string
 	BaseURL   string
 	Client    *http.Client
 }
 
-// NewCfClient creates a Cloudflare API client.
-func NewCfClient(email, apiKey string) *CfClient {
+// NewCfClient creates a Cloudflare API client using an API Token.
+// API Tokens are the recommended authentication method over the
+// legacy Global API Key + Email pair. Create one at:
+// https://dash.cloudflare.com/profile/api-tokens
+func NewCfClient(apiToken string) *CfClient {
 	return &CfClient{
-		APIKey:  apiKey,
-		Email:   email,
-		BaseURL: "https://api.cloudflare.com/client/v4",
-		Client:  &http.Client{Timeout: 15 * time.Second},
+		APIToken: apiToken,
+		BaseURL:  "https://api.cloudflare.com/client/v4",
+		Client:   &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -94,8 +95,7 @@ func (c *CfClient) do(ctx context.Context, method, path string, body any) (*CfRe
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("X-Auth-Email", c.Email)
-	req.Header.Set("X-Auth-Key", c.APIKey)
+	req.Header.Set("Authorization", "Bearer "+c.APIToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.Client.Do(req)
@@ -168,8 +168,7 @@ func (c *CfClient) ListDnsRecordsPage(ctx context.Context, zoneID string, page, 
 	if err != nil {
 		return nil, nil, err
 	}
-	req.Header.Set("X-Auth-Email", c.Email)
-	req.Header.Set("X-Auth-Key", c.APIKey)
+	req.Header.Set("Authorization", "Bearer "+c.APIToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.Client.Do(req)

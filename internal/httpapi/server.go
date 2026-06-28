@@ -130,11 +130,7 @@ func NewServer(deps *Deps) *gin.Engine {
 	pub.POST("/api/monitor/report", monitorReport(deps))
 
 	// Phase 7: DNS, SSL, system config.
-	pro.GET("/dns/list", dnsList(deps))
-	pro.POST("/dns/save", dnsSave(deps))
-	pro.GET("/dns/delete", dnsDelete(deps))
 	pro.POST("/system/config/save", systemConfigSave(deps))
-	pro.POST("/dns/sync", dnsSync(deps))
 	pro.GET("/ssl/list", sslList(deps))
 	pro.POST("/ssl/issue", sslIssue(deps))
 	pro.GET("/system/config", systemConfigGet(deps))
@@ -145,7 +141,6 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/dns/cloudflare/zones/:zoneId/records", cloudflareCreateRecord(deps))
 	pro.PUT("/dns/cloudflare/zones/:zoneId/records/:recordId", cloudflareUpdateRecord(deps))
 	pro.DELETE("/dns/cloudflare/zones/:zoneId/records/:recordId", cloudflareDeleteRecord(deps))
-	pro.POST("/dns/cloudflare/zones/:zoneId/sync", cloudflareSyncZone(deps))
 
 	// EdgeOne DNS management (Phase 7/8).
 	pro.GET("/dns/edgeone/zones", edgeoneZones(deps))
@@ -153,7 +148,6 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/dns/edgeone/records", edgeoneCreateRecord(deps))
 	pro.PUT("/dns/edgeone/records/:recordId", edgeoneUpdateRecord(deps))
 	pro.DELETE("/dns/edgeone/records/:recordId", edgeoneDeleteRecord(deps))
-	pro.POST("/dns/edgeone/sync", edgeoneSync(deps))
 
 	// Phase 8: data migration (import H2 exports into SQLite).
 	pro.POST("/migration/import", deps.Migration.ImportPlain)

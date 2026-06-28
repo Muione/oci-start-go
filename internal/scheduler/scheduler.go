@@ -183,18 +183,17 @@ func (s *Scheduler) sslCertJob() {
 	// Read SSL config from system config.
 	domain := sc.GetString(ctx, "ssl.domain")
 	email := sc.GetString(ctx, "ssl.email")
-	cfEmail := sc.GetString(ctx, "cloudflare.email")
-	cfAPIKey := sc.GetString(ctx, "cloudflare.api.key")
+	cfAPIToken := sc.GetString(ctx, "cloudflare.api.token")
 	staging := sc.GetBool(ctx, "ssl.staging")
 
-	if domain == "" || email == "" || cfEmail == "" || cfAPIKey == "" {
+	if domain == "" || email == "" || cfAPIToken == "" {
 		s.logger.Debug().Msg("scheduler: SslCertJob skipped — SSL/CF config incomplete")
 		return
 	}
 
 	s.logger.Info().Str("domain", domain).Msg("scheduler: SslCertJob checking cert renewal")
 
-	result, err := s.certManager.RenewCertificate(ctx, domain, email, cfEmail, cfAPIKey, staging)
+	result, err := s.certManager.RenewCertificate(ctx, domain, email, cfAPIToken, staging)
 	if err != nil {
 		s.logger.Error().Err(err).Str("domain", domain).Msg("scheduler: SslCertJob cert renewal failed")
 		return

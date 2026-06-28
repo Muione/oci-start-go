@@ -4,13 +4,9 @@
     <div class="toolbar">
       <div class="toolbar-left">
         <h2>DNS 管理</h2>
-        <el-tag type="info" size="small">{{ totalRecords }} 条记录</el-tag>
       </div>
       <div class="toolbar-right">
-        <el-button type="primary" @click="openAdd">
-          <el-icon><Plus /></el-icon> 添加记录
-        </el-button>
-        <el-button @click="loadAll" :loading="loading">
+        <el-button @click="loadCfRecords" :loading="cfLoading">
           <el-icon><RefreshRight /></el-icon> 刷新
         </el-button>
       </div>
@@ -18,62 +14,13 @@
 
     <!-- Provider tabs -->
     <el-tabs v-model="activeTab" @tab-change="onTabChange" type="border-card">
-      <!-- Local Records Tab -->
-      <el-tab-pane label="本地记录" name="local">
-        <el-card shadow="none" class="table-card">
-          <el-table :data="localRecords" v-loading="loading" border stripe size="default">
-            <template #empty>
-              <el-empty description="暂无本地 DNS 记录" :image-size="80">
-                <el-button type="primary" @click="openAdd">手动添加</el-button>
-              </el-empty>
-            </template>
-            <el-table-column prop="domainName" label="域名" min-width="160" show-overflow-tooltip />
-            <el-table-column prop="recordName" label="记录名称" min-width="160" show-overflow-tooltip />
-            <el-table-column label="类型" width="80">
-              <template #default="{ row }">
-                <el-tag :type="typeTag(row.recordType)" size="small" effect="dark">{{ row.recordType }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="recordValue" label="记录值" min-width="200" show-overflow-tooltip />
-            <el-table-column label="TTL" width="80" align="center">
-              <template #default="{ row }">{{ row.ttl || '-' }}</template>
-            </el-table-column>
-            <el-table-column label="代理" width="70" align="center">
-              <template #default="{ row }">
-                <el-icon v-if="row.proxied" color="var(--status-up)"><CircleCheck /></el-icon>
-                <el-icon v-else color="var(--text-muted)"><Remove /></el-icon>
-              </template>
-            </el-table-column>
-            <el-table-column label="状态" width="90">
-              <template #default="{ row }">
-                <el-tag :type="row.status === 'active' ? 'success' : 'warning'" size="small">
-                  {{ row.status || '-' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="providerType" label="来源" width="100" />
-            <el-table-column prop="updateTime" label="更新时间" width="150" />
-            <el-table-column label="操作" width="140" fixed="right">
-              <template #default="{ row }">
-                <el-button size="small" type="primary" link @click="openEdit(row)">编辑</el-button>
-                <el-popconfirm title="确定删除此记录？" @confirm="doDelete(row)">
-                  <template #reference>
-                    <el-button size="small" type="danger" link>删除</el-button>
-                  </template>
-                </el-popconfirm>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
-      </el-tab-pane>
-
       <!-- Cloudflare Tab -->
       <el-tab-pane label="Cloudflare" name="cloudflare">
         <div v-if="!cfConfigured" style="text-align:center;padding:48px 0">
           <el-empty description="Cloudflare 未配置" :image-size="80">
             <template #extra>
               <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">
-                请在系统设置中配置 cloudflare.email 和 cloudflare.api.key
+                请在系统设置中配置 cloudflare.api.token（API Token）
               </p>
               <el-button type="primary" @click="$router.push('/settings')">前往配置</el-button>
             </template>
@@ -81,11 +28,11 @@
         </div>
 
         <template v-else>
-          <!-- Zone selector + sync -->
+          <!-- Zone selector -->
           <div class="provider-toolbar">
             <div class="provider-left">
               <span class="provider-label">Zone:</span>
-              <el-select v-model="cfZoneId" placeholder="选择 Cloudflare 区域" style="width: 360px" @change="loadCfRecords">
+              <el-select v-model="cfZoneId" placeholder="选择 Cloudflare 区域" style="width: 360px" @change="onCfZoneChange">
                 <el-option
                   v-for="z in cfZones"
                   :key="z.id"
@@ -93,15 +40,6 @@
                   :value="z.id"
                 />
               </el-select>
-              <el-button
-                v-if="cfZoneId"
-                type="success"
-                size="small"
-                :loading="cfSyncing"
-                @click="syncCfZone"
-              >
-                <el-icon><Refresh /></el-icon> 同步到本地
-              </el-button>
             </div>
             <div class="provider-right">
               <el-button size="small" @click="loadCfZones" :loading="cfLoadingZones">
@@ -177,14 +115,6 @@
         <template v-else>
           <div class="provider-toolbar">
             <div class="provider-left">
-              <el-button
-                type="success"
-                size="small"
-                :loading="eoSyncing"
-                @click="syncEdgeOne"
-              >
-                <el-icon><Refresh /></el-icon> 同步到本地
-              </el-button>
               <el-button size="small" type="primary" @click="openEoAdd">
                 <el-icon><Plus /></el-icon> 添加记录
               </el-button>
@@ -225,50 +155,6 @@
         </template>
       </el-tab-pane>
     </el-tabs>
-
-    <!-- ================================================================ -->
-    <!-- Add/Edit Dialog (Local) -->
-    <!-- ================================================================ -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑 DNS 记录' : '添加 DNS 记录'" width="560px" destroy-on-close>
-      <el-form :model="form" label-width="100px">
-        <el-form-item label="记录名称" required>
-          <el-input v-model="form.recordName" placeholder="www 或 @ 等" />
-        </el-form-item>
-        <el-form-item label="域名" required>
-          <el-input v-model="form.domainName" placeholder="example.com" />
-        </el-form-item>
-        <el-form-item label="记录类型" required>
-          <el-select v-model="form.recordType" style="width:100%">
-            <el-option v-for="t in dnsTypes" :key="t" :label="t" :value="t" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="记录值" required>
-          <el-input v-model="form.recordValue" placeholder="IP 地址或目标域名" />
-        </el-form-item>
-        <el-form-item label="TTL">
-          <el-input-number v-model="form.ttl" :min="1" :max="86400" style="width:100%" />
-        </el-form-item>
-        <el-form-item label="Cloudflare 代理">
-          <el-switch v-model="form.proxied" />
-        </el-form-item>
-        <el-form-item label="来源">
-          <el-select v-model="form.providerType" style="width:100%">
-            <el-option label="手动" value="manual" />
-            <el-option label="Cloudflare" value="cloudflare" />
-            <el-option label="EdgeOne" value="edgeone" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="Zone ID" v-if="form.providerType !== 'manual'">
-          <el-input v-model="form.zoneId" placeholder="DNS 服务商的 Zone ID" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="doSave">
-          {{ isEdit ? '保存修改' : '添加记录' }}
-        </el-button>
-      </template>
-    </el-dialog>
 
     <!-- ================================================================ -->
     <!-- Cloudflare Add/Edit Dialog -->
@@ -336,20 +222,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Plus, RefreshRight, CircleCheck, Remove } from '@element-plus/icons-vue'
+import { Plus, RefreshRight, CircleCheck, Remove } from '@element-plus/icons-vue'
 import request from '../utils/request'
 
 // ---- Types ----
-interface DnsRecord {
-  id: number
-  providerType: string; domainName: string; recordName: string
-  recordType: string; recordValue: string; ttl: number
-  proxied: boolean; status: string; zoneId: string
-  createTime: string; updateTime: string
-}
-
 interface CfRecord {
   id: string; zone_id: string; zone_name?: string
   type: string; name: string; content: string
@@ -363,21 +241,11 @@ interface CfZone {
 interface EoRecord {
   RecordId?: string; Name?: string; Type?: string
   Content?: string; TTL?: number; Priority?: number
-  // camelCase versions
   recordId?: string; name?: string; type?: string
   content?: string; ttl?: number; priority?: number
 }
 
 const dnsTypes = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV', 'CAA', 'PTR']
-
-// ---- Local Records State ----
-const localRecords = ref<DnsRecord[]>([])
-const loading = ref(false)
-const saving = ref(false)
-const isEdit = ref(false)
-const dialogVisible = ref(false)
-const form = ref<DnsRecord>(emptyLocalForm())
-const activeTab = ref('local')
 
 // ---- Cloudflare State ----
 const cfConfigured = ref(false)
@@ -386,7 +254,6 @@ const cfZoneId = ref('')
 const cfRecords = ref<CfRecord[]>([])
 const cfLoading = ref(false)
 const cfLoadingZones = ref(false)
-const cfSyncing = ref(false)
 const cfSaving = ref(false)
 const cfPage = ref(1)
 const cfPageSize = ref(20)
@@ -401,15 +268,13 @@ const cfEditId = ref('')
 const eoConfigured = ref(false)
 const eoRecords = ref<EoRecord[]>([])
 const eoLoading = ref(false)
-const eoSyncing = ref(false)
 const eoSaving = ref(false)
 const eoDialogVisible = ref(false)
 const eoIsEdit = ref(false)
 const eoForm = ref({ type: 'A', name: '', content: '', ttl: 600, priority: 0 })
 const eoEditId = ref('')
 
-// ---- Computed ----
-const totalRecords = computed(() => localRecords.value.length)
+const activeTab = ref('cloudflare')
 
 function typeTag(type: string): string {
   const map: Record<string, string> = {
@@ -419,62 +284,9 @@ function typeTag(type: string): string {
   return map[type] || ''
 }
 
-function emptyLocalForm(): DnsRecord {
-  return {
-    id: 0, providerType: 'manual', domainName: '', recordName: '',
-    recordType: 'A', recordValue: '', ttl: 120, proxied: false,
-    status: 'active', zoneId: '', createTime: '', updateTime: '',
-  }
-}
-
-// ---- Load all data ----
-async function loadAll() {
-  loading.value = true
-  try {
-    const data = await request.get('/dns/list') as any
-    localRecords.value = Array.isArray(data) ? data : (data?.records || data?.items || [])
-  } catch (e: any) { ElMessage.error(e.message) }
-  finally { loading.value = false }
-}
-
 async function onTabChange(tab: string) {
   if (tab === 'cloudflare') { await loadCfZones() }
   else if (tab === 'edgeone') { await loadEoRecords() }
-}
-
-// ---- Local CRUD ----
-function openAdd() {
-  isEdit.value = false
-  form.value = emptyLocalForm()
-  dialogVisible.value = true
-}
-
-function openEdit(row: DnsRecord) {
-  isEdit.value = true
-  form.value = { ...row }
-  dialogVisible.value = true
-}
-
-async function doSave() {
-  if (!form.value.recordName || !form.value.domainName || !form.value.recordValue) {
-    ElMessage.warning('请填写记录名称、域名和记录值'); return
-  }
-  saving.value = true
-  try {
-    await request.post('/dns/save', form.value)
-    ElMessage.success(isEdit.value ? 'DNS 记录已更新' : 'DNS 记录已添加')
-    dialogVisible.value = false
-    await loadAll()
-  } catch (e: any) { ElMessage.error(e.message) }
-  finally { saving.value = false }
-}
-
-async function doDelete(row: DnsRecord) {
-  try {
-    await request.get('/dns/delete', { params: { id: row.id } })
-    ElMessage.success('DNS 记录已删除')
-    await loadAll()
-  } catch (e: any) { ElMessage.error(e.message) }
 }
 
 // ---- Cloudflare Operations ----
@@ -498,6 +310,14 @@ async function loadCfZones() {
   finally { cfLoadingZones.value = false }
 }
 
+// onCfZoneChange is called when the user switches zones.
+// Resets pagination to page 1 and reloads records — fixes the bug where
+// switching zones with a stale page number returned blank results.
+function onCfZoneChange() {
+  cfPage.value = 1
+  loadCfRecords()
+}
+
 async function loadCfRecords() {
   if (!cfZoneId.value) return
   cfLoading.value = true
@@ -509,20 +329,6 @@ async function loadCfRecords() {
     cfTotalCount.value = res.totalCount || 0
   } catch (e: any) { ElMessage.error(e.message) }
   finally { cfLoading.value = false }
-}
-
-async function syncCfZone() {
-  if (!cfZoneId.value) return
-  const zone = cfZones.value.find(z => z.id === cfZoneId.value)
-  cfSyncing.value = true
-  try {
-    const res = await request.post(`/dns/cloudflare/zones/${cfZoneId.value}/sync`, {
-      domainName: zone?.name || '',
-    }) as any
-    ElMessage.success(`同步完成：${res.synced || 0} 条记录已同步到本地`)
-    await loadAll()
-  } catch (e: any) { ElMessage.error(e.message) }
-  finally { cfSyncing.value = false }
 }
 
 function openCfAdd() {
@@ -585,19 +391,6 @@ async function loadEoRecords() {
   finally { eoLoading.value = false }
 }
 
-async function syncEdgeOne() {
-  eoSyncing.value = true
-  try {
-    // Get the zone name for the sync call
-    const zones = await request.get('/dns/edgeone/zones') as any[]
-    const domainName = zones?.[0]?.name || ''
-    const res = await request.post('/dns/edgeone/sync', { domainName }) as any
-    ElMessage.success(`同步完成：${res.synced || 0} 条记录已同步到本地`)
-    await loadAll()
-  } catch (e: any) { ElMessage.error(e.message) }
-  finally { eoSyncing.value = false }
-}
-
 function openEoAdd() {
   eoIsEdit.value = false
   eoEditId.value = ''
@@ -647,7 +440,7 @@ async function deleteEoRecord(row: EoRecord) {
   } catch (e: any) { ElMessage.error(e.message) }
 }
 
-onMounted(loadAll)
+onMounted(() => { loadCfZones() })
 </script>
 
 <style scoped>

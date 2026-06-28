@@ -1,135 +1,18 @@
 // Package httpapi — dns.go: DNS record management handlers (Phase 7/8).
+// DNS records are managed directly against Cloudflare / EdgeOne APIs
+// without local database storage. Cloudflare uses API Token auth (not
+// the legacy Global API Key).
 package httpapi
 
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/Muione/oci-start-go/internal/dns"
 	"github.com/Muione/oci-start-go/internal/response"
 )
-
-// dnsList returns local DNS records.
-// GET /dns/list
-func dnsList(deps *Deps) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if deps.DnsSvc == nil {
-			response.Fail(c, http.StatusServiceUnavailable, "DNS service not available")
-			return
-		}
-		records, err := deps.DnsSvc.List(c.Request.Context())
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "list dns: "+err.Error())
-			return
-		}
-		response.OK(c, response.SuccessData(records))
-	}
-}
-
-// dnsSync syncs DNS records from Cloudflare.
-// POST /dns/sync  {zoneId: "..."}
-func dnsSync(deps *Deps) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var in struct{ ZoneID string `json:"zoneId"` }
-		if err := c.ShouldBindJSON(&in); err != nil {
-			response.Fail(c, http.StatusBadRequest, "invalid body")
-			return
-		}
-		// Get Cloudflare config from system config.
-		cfEmail := deps.SysConf.GetString(c.Request.Context(), "cloudflare.email")
-		cfKey := deps.SysConf.GetString(c.Request.Context(), "cloudflare.api.key")
-		if cfEmail == "" || cfKey == "" {
-			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured (set cloudflare.email + cloudflare.api.key)")
-			return
-		}
-		if deps.DnsSvc == nil {
-			response.Fail(c, http.StatusServiceUnavailable, "DNS service not available")
-			return
-		}
-
-		client := dns.NewCfClient(cfEmail, cfKey)
-		ctx := c.Request.Context()
-
-		// Sync specific zone if provided, otherwise sync all zones.
-		if in.ZoneID != "" {
-			count, err := deps.DnsSvc.SyncFromCloudflare(ctx, client, in.ZoneID)
-			if err != nil {
-				response.Fail(c, http.StatusInternalServerError, "sync zone failed: "+err.Error())
-				return
-			}
-			response.OK(c, response.SuccessData(gin.H{
-				"synced": count,
-				"zoneId": in.ZoneID,
-			}))
-			return
-		}
-
-		zones, err := client.ListZones(ctx)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "list zones failed: "+err.Error())
-			return
-		}
-
-		totalSynced := 0
-		for _, zone := range zones {
-			count, err := deps.DnsSvc.SyncFromCloudflare(ctx, client, zone.ID)
-			if err != nil {
-				continue
-			}
-			totalSynced += count
-		}
-
-		response.OK(c, response.SuccessData(gin.H{
-			"synced": totalSynced,
-			"zones":  len(zones),
-		}))
-	}
-}
-
-// dnsSave creates or updates a local DNS record.
-// POST /dns/save
-func dnsSave(deps *Deps) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var in dns.DnsRecordResp
-		if err := c.ShouldBindJSON(&in); err != nil {
-			response.Fail(c, http.StatusBadRequest, "invalid body")
-			return
-		}
-		if deps.DnsSvc == nil {
-			response.Fail(c, http.StatusServiceUnavailable, "DNS service not available")
-			return
-		}
-		if err := deps.DnsSvc.Save(c.Request.Context(), in); err != nil {
-			response.Fail(c, http.StatusInternalServerError, "save dns: "+err.Error())
-			return
-		}
-		response.OK(c, response.Success())
-	}
-}
-
-// dnsDelete removes a local DNS record.
-// GET /dns/delete?id=
-func dnsDelete(deps *Deps) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		id, err := strconv.ParseInt(c.Query("id"), 10, 64)
-		if err != nil || id <= 0 {
-			response.Fail(c, http.StatusBadRequest, "valid id required")
-			return
-		}
-		if deps.DnsSvc == nil {
-			response.Fail(c, http.StatusServiceUnavailable, "DNS service not available")
-			return
-		}
-		if err := deps.DnsSvc.Delete(c.Request.Context(), id); err != nil {
-			response.Fail(c, http.StatusInternalServerError, "delete dns: "+err.Error())
-			return
-		}
-		response.OK(c, response.Success())
-	}
-}
 
 // sslList returns configured SSL certificate status.
 // GET /ssl/list
@@ -170,18 +53,17 @@ func sslIssue(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusBadRequest, "invalid body: domain and email required")
 			return
 		}
-		if strings.TrimSpace(in.Domain) == "" || strings.TrimSpace(in.Email) == "" {
+		if in.Domain == "" || in.Email == "" {
 			response.Fail(c, http.StatusBadRequest, "domain and email are required")
 			return
 		}
 
 		ctx := c.Request.Context()
-		cfEmail := deps.SysConf.GetString(ctx, "cloudflare.email")
-		cfKey := deps.SysConf.GetString(ctx, "cloudflare.api.key")
+		cfToken := deps.SysConf.GetString(ctx, "cloudflare.api.token")
 		staging := deps.SysConf.GetBool(ctx, "ssl.staging")
 
-		if cfEmail == "" || cfKey == "" {
-			response.Fail(c, http.StatusBadRequest, "Cloudflare API credentials not configured (cloudflare.email + cloudflare.api.key)")
+		if cfToken == "" {
+			response.Fail(c, http.StatusBadRequest, "Cloudflare API Token not configured (cloudflare.api.token)")
 			return
 		}
 
@@ -190,9 +72,8 @@ func sslIssue(deps *Deps) gin.HandlerFunc {
 			return
 		}
 
-		// Actually obtain the certificate via ACME.
 		result, err := deps.CertManager.ObtainCertificate(ctx,
-			in.Domain, in.Email, cfEmail, cfKey, staging)
+			in.Domain, in.Email, cfToken, staging)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "SSL certificate issuance failed: "+err.Error())
 			return
@@ -231,8 +112,7 @@ func systemConfigGet(deps *Deps) gin.HandlerFunc {
 			"bark.key",
 			"feishu.webhook",
 			"feishu.secret",
-			"cloudflare.email",
-			"cloudflare.api.key",
+			"cloudflare.api.token",
 			"edgeone.secretId",
 			"edgeone.secretKey",
 			"edgeone.zoneId",
@@ -273,8 +153,8 @@ func systemConfigGet(deps *Deps) gin.HandlerFunc {
 		}
 
 		response.OK(c, response.SuccessData(gin.H{
-			"strings": configs,
-			"booleans": bools,
+			"strings":    configs,
+			"booleans":   bools,
 			"appVersion": deps.SysConf.GetString(ctx, "app.version"),
 		}))
 	}
@@ -305,13 +185,12 @@ func systemConfigSave(deps *Deps) gin.HandlerFunc {
 func cloudflareZones(deps *Deps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
-		cfEmail := deps.SysConf.GetString(ctx, "cloudflare.email")
-		cfKey := deps.SysConf.GetString(ctx, "cloudflare.api.key")
-		if cfEmail == "" || cfKey == "" {
-			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured")
+		cfToken := deps.SysConf.GetString(ctx, "cloudflare.api.token")
+		if cfToken == "" {
+			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured (set cloudflare.api.token)")
 			return
 		}
-		client := dns.NewCfClient(cfEmail, cfKey)
+		client := dns.NewCfClient(cfToken)
 		zones, err := client.ListZones(ctx)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "list zones: "+err.Error())
@@ -337,13 +216,12 @@ func cloudflareRecords(deps *Deps) gin.HandlerFunc {
 		content := c.Query("content")
 
 		ctx := c.Request.Context()
-		cfEmail := deps.SysConf.GetString(ctx, "cloudflare.email")
-		cfKey := deps.SysConf.GetString(ctx, "cloudflare.api.key")
-		if cfEmail == "" || cfKey == "" {
-			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured")
+		cfToken := deps.SysConf.GetString(ctx, "cloudflare.api.token")
+		if cfToken == "" {
+			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured (set cloudflare.api.token)")
 			return
 		}
-		client := dns.NewCfClient(cfEmail, cfKey)
+		client := dns.NewCfClient(cfToken)
 		records, resp, err := client.ListDnsRecordsPage(ctx, zoneID, page, perPage, recordType, name, content)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "list records: "+err.Error())
@@ -385,13 +263,12 @@ func cloudflareCreateRecord(deps *Deps) gin.HandlerFunc {
 		}
 
 		ctx := c.Request.Context()
-		cfEmail := deps.SysConf.GetString(ctx, "cloudflare.email")
-		cfKey := deps.SysConf.GetString(ctx, "cloudflare.api.key")
-		if cfEmail == "" || cfKey == "" {
-			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured")
+		cfToken := deps.SysConf.GetString(ctx, "cloudflare.api.token")
+		if cfToken == "" {
+			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured (set cloudflare.api.token)")
 			return
 		}
-		client := dns.NewCfClient(cfEmail, cfKey)
+		client := dns.NewCfClient(cfToken)
 		record, err := client.CreateDnsRecord(ctx, zoneID, dns.DnsRecord{
 			Type:    body.Type,
 			Name:    body.Name,
@@ -402,20 +279,6 @@ func cloudflareCreateRecord(deps *Deps) gin.HandlerFunc {
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "create record: "+err.Error())
 			return
-		}
-		// Save locally too
-		if deps.DnsSvc != nil {
-			_ = deps.DnsSvc.Save(ctx, dns.DnsRecordResp{
-				Provider:    "cloudflare",
-				Domain:      "",
-				RecordName:  record.Name,
-				RecordType:  record.Type,
-				RecordValue: record.Content,
-				TTL:         int64(record.TTL),
-				Proxied:     record.Proxied,
-				Status:      "active",
-				ZoneID:      zoneID,
-			})
 		}
 		response.OK(c, response.SuccessData(record))
 	}
@@ -448,13 +311,12 @@ func cloudflareUpdateRecord(deps *Deps) gin.HandlerFunc {
 		}
 
 		ctx := c.Request.Context()
-		cfEmail := deps.SysConf.GetString(ctx, "cloudflare.email")
-		cfKey := deps.SysConf.GetString(ctx, "cloudflare.api.key")
-		if cfEmail == "" || cfKey == "" {
-			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured")
+		cfToken := deps.SysConf.GetString(ctx, "cloudflare.api.token")
+		if cfToken == "" {
+			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured (set cloudflare.api.token)")
 			return
 		}
-		client := dns.NewCfClient(cfEmail, cfKey)
+		client := dns.NewCfClient(cfToken)
 		record, err := client.UpdateDnsRecord(ctx, zoneID, recordID, dns.DnsRecord{
 			Type:    body.Type,
 			Name:    body.Name,
@@ -481,60 +343,17 @@ func cloudflareDeleteRecord(deps *Deps) gin.HandlerFunc {
 			return
 		}
 		ctx := c.Request.Context()
-		cfEmail := deps.SysConf.GetString(ctx, "cloudflare.email")
-		cfKey := deps.SysConf.GetString(ctx, "cloudflare.api.key")
-		if cfEmail == "" || cfKey == "" {
-			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured")
+		cfToken := deps.SysConf.GetString(ctx, "cloudflare.api.token")
+		if cfToken == "" {
+			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured (set cloudflare.api.token)")
 			return
 		}
-		client := dns.NewCfClient(cfEmail, cfKey)
+		client := dns.NewCfClient(cfToken)
 		if err := client.DeleteDnsRecord(ctx, zoneID, recordID); err != nil {
 			response.Fail(c, http.StatusInternalServerError, "delete record: "+err.Error())
 			return
 		}
 		response.OK(c, response.SuccessMsg("DNS record deleted"))
-	}
-}
-
-// cloudflareSyncZone syncs DNS records from Cloudflare to local DB with full reconciliation.
-// POST /dns/cloudflare/zones/:zoneId/sync  {domainName: "..."}
-func cloudflareSyncZone(deps *Deps) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		zoneID := c.Param("zoneId")
-		if zoneID == "" {
-			response.Fail(c, http.StatusBadRequest, "zoneId required")
-			return
-		}
-		var body struct {
-			DomainName string `json:"domainName"`
-		}
-		_ = c.ShouldBindJSON(&body)
-		if body.DomainName == "" {
-			response.Fail(c, http.StatusBadRequest, "domainName required")
-			return
-		}
-
-		if deps.DnsSvc == nil {
-			response.Fail(c, http.StatusServiceUnavailable, "DNS service not available")
-			return
-		}
-		ctx := c.Request.Context()
-		cfEmail := deps.SysConf.GetString(ctx, "cloudflare.email")
-		cfKey := deps.SysConf.GetString(ctx, "cloudflare.api.key")
-		if cfEmail == "" || cfKey == "" {
-			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured")
-			return
-		}
-		client := dns.NewCfClient(cfEmail, cfKey)
-		count, err := deps.DnsSvc.SyncFromCloudflareFull(ctx, client, zoneID, body.DomainName)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "sync failed: "+err.Error())
-			return
-		}
-		response.OK(c, response.SuccessData(gin.H{
-			"synced": count,
-			"zoneId": zoneID,
-		}))
 	}
 }
 
@@ -550,7 +369,6 @@ func edgeoneZones(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusBadRequest, "EdgeOne not configured")
 			return
 		}
-		// EdgeOne uses a single zone from config; return it
 		response.OK(c, response.SuccessData([]gin.H{
 			{"id": zoneID, "name": zoneID, "status": "active"},
 		}))
@@ -682,42 +500,5 @@ func edgeoneDeleteRecord(deps *Deps) gin.HandlerFunc {
 			return
 		}
 		response.OK(c, response.SuccessMsg("record deleted"))
-	}
-}
-
-// edgeoneSync syncs DNS records from EdgeOne to local DB.
-// POST /dns/edgeone/sync  {domainName: "..."}
-func edgeoneSync(deps *Deps) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var body struct {
-			DomainName string `json:"domainName"`
-		}
-		_ = c.ShouldBindJSON(&body)
-		if body.DomainName == "" {
-			response.Fail(c, http.StatusBadRequest, "domainName required")
-			return
-		}
-		if deps.DnsSvc == nil {
-			response.Fail(c, http.StatusServiceUnavailable, "DNS service not available")
-			return
-		}
-		ctx := c.Request.Context()
-		secretID := deps.SysConf.GetString(ctx, "edgeone.secretId")
-		secretKey := deps.SysConf.GetString(ctx, "edgeone.secretKey")
-		zoneID := deps.SysConf.GetString(ctx, "edgeone.zoneId")
-		if secretID == "" || secretKey == "" {
-			response.Fail(c, http.StatusBadRequest, "EdgeOne not configured")
-			return
-		}
-		client := dns.NewEdgeOneClient(secretID, secretKey, zoneID, deps.Logger)
-		count, err := deps.DnsSvc.SyncFromEdgeOne(ctx, client, body.DomainName)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "sync edgeone: "+err.Error())
-			return
-		}
-		response.OK(c, response.SuccessData(gin.H{
-			"synced": count,
-			"zoneId": zoneID,
-		}))
 	}
 }
