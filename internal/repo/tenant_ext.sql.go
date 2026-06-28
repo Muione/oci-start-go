@@ -94,6 +94,28 @@ type UpdateTenantFieldsParams struct {
 	ID           int64          `json:"id"`
 }
 
+const countBootInstancesByTenantId = `-- name: CountBootInstancesByTenantId :one
+SELECT COUNT(*) FROM boot_instance WHERE tenant_id = ? AND status = 1
+`
+
+func (q *Queries) CountBootInstancesByTenantId(ctx context.Context, tenantID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countBootInstancesByTenantId, tenantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTenantChildren = `-- name: CountTenantChildren :one
+SELECT COUNT(*) FROM tenant WHERE paren_id = ?
+`
+
+func (q *Queries) CountTenantChildren(ctx context.Context, parenID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countTenantChildren, parenID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 // Extended tenant queries (Phase 9). Tenant detail, custom name, active days.
 // ALL COMMENTS MUST BE ASCII-ONLY.
 func (q *Queries) UpdateTenantFields(ctx context.Context, arg UpdateTenantFieldsParams) error {

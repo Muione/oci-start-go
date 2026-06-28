@@ -3,6 +3,13 @@
 // database backing store survives server restarts so the DNS management
 // page can show cached data immediately while a background API refresh
 // completes.
+//
+// Cache strategy (stale-while-revalidate):
+//   - Serve from memory if fresh.
+//   - If memory expired, serve from DB (always considered fresh for read).
+//   - Trigger async API refresh when memory is expired; return stale data
+//     immediately while the refresh completes in background.
+//   - Only invalidate cache on write operations (create/update/delete).
 package dns
 
 import (
@@ -21,7 +28,8 @@ type cacheEntry[T any] struct {
 func (e cacheEntry[T]) expired() bool { return time.Now().After(e.expiresAt) }
 
 // CfCache wraps a CfClient with a two-level TTL cache (memory + optional DB).
-// Safe for concurrent use.
+// Uses stale-while-revalidate: expired data is still served while a background
+// refresh fetches fresh data from the API. Safe for concurrent use.
 type CfCache struct {
 	client *CfClient
 	store  *CacheStore // optional persistent backing store
@@ -31,15 +39,22 @@ type CfCache struct {
 	zoneRecords map[string]*cacheEntry[[]DnsRecord] // zoneID → records
 	zoneTTL     time.Duration
 	recordTTL   time.Duration
+
+	// Refresh guards prevent concurrent API refreshes for the same key.
+	refreshingZones  sync.Mutex
+	refreshingRecords map[string]*sync.Mutex
+	refMu            sync.Mutex
 }
 
 // NewCfCache creates a cached Cloudflare client wrapper.
+// TTLs are intentionally long — cache is only invalidated on writes.
 func NewCfCache(client *CfClient) *CfCache {
 	return &CfCache{
-		client:      client,
-		zoneRecords: make(map[string]*cacheEntry[[]DnsRecord]),
-		zoneTTL:     5 * time.Minute,
-		recordTTL:   2 * time.Minute,
+		client:            client,
+		zoneRecords:       make(map[string]*cacheEntry[[]DnsRecord]),
+		refreshingRecords: make(map[string]*sync.Mutex),
+		zoneTTL:           30 * time.Minute,
+		recordTTL:         15 * time.Minute,
 	}
 }
 
@@ -64,29 +79,90 @@ func (c *CfCache) PreloadFromDB() {
 	}
 }
 
-// ListZones returns cached zones or fetches from API if expired/missing.
-// Reads from memory → DB → API, writing back at each level on miss.
+// getOrCreateRefreshMu returns a mutex for the given zone's record refresh guard.
+func (c *CfCache) getOrCreateRefreshMu(zoneID string) *sync.Mutex {
+	c.refMu.Lock()
+	defer c.refMu.Unlock()
+	if mu, ok := c.refreshingRecords[zoneID]; ok {
+		return mu
+	}
+	mu := &sync.Mutex{}
+	c.refreshingRecords[zoneID] = mu
+	return mu
+}
+
+// ListZones returns cached zones or fetches from API if missing entirely.
+// Uses stale-while-revalidate: if memory is expired but we have DB data,
+// return that and refresh in background.
 func (c *CfCache) ListZones(ctx context.Context) ([]Zone, error) {
-	// 1. Memory
+	// 1. Memory — return immediately if fresh
 	c.mu.RLock()
 	if c.zones != nil && !c.zones.expired() {
 		val := c.zones.value
 		c.mu.RUnlock()
 		return val, nil
 	}
+	// Check if we have stale memory data to return
+	hasStaleMem := c.zones != nil
+	var staleZones []Zone
+	if hasStaleMem {
+		staleZones = c.zones.value
+	}
 	c.mu.RUnlock()
 
-	// 2. DB backing store
+	// 2. DB backing store — if memory is expired/missing, serve from DB
 	if c.store != nil {
 		if zones, ok := c.store.LoadZones(); ok && len(zones) > 0 {
+			// Update memory cache
 			c.mu.Lock()
 			c.zones = &cacheEntry[[]Zone]{value: zones, expiresAt: time.Now().Add(c.zoneTTL)}
 			c.mu.Unlock()
+
+			// If memory was stale, trigger background refresh
+			if hasStaleMem {
+				go c.refreshZonesBg()
+			}
 			return zones, nil
 		}
 	}
 
-	// 3. API
+	// 3. If we have stale memory data, return it and refresh in background
+	if hasStaleMem && len(staleZones) > 0 {
+		go c.refreshZonesBg()
+		return staleZones, nil
+	}
+
+	// 4. API — nothing cached anywhere, must fetch
+	return c.refreshZones(ctx)
+}
+
+// refreshZonesBg performs a background zone list refresh.
+func (c *CfCache) refreshZonesBg() {
+	if !c.refreshingZones.TryLock() {
+		return // already refreshing
+	}
+	defer c.refreshingZones.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	zones, err := c.client.ListZones(ctx)
+	if err != nil {
+		log.Printf("[dns] background zone refresh failed: %v", err)
+		return
+	}
+
+	c.mu.Lock()
+	c.zones = &cacheEntry[[]Zone]{value: zones, expiresAt: time.Now().Add(c.zoneTTL)}
+	c.mu.Unlock()
+
+	if c.store != nil {
+		c.store.SaveZones(zones)
+	}
+}
+
+// refreshZones performs a synchronous zone list fetch from the API.
+func (c *CfCache) refreshZones(ctx context.Context) ([]Zone, error) {
 	zones, err := c.client.ListZones(ctx)
 	if err != nil {
 		return nil, err
@@ -96,7 +172,6 @@ func (c *CfCache) ListZones(ctx context.Context) ([]Zone, error) {
 	c.zones = &cacheEntry[[]Zone]{value: zones, expiresAt: time.Now().Add(c.zoneTTL)}
 	c.mu.Unlock()
 
-	// Persist to DB
 	if c.store != nil {
 		c.store.SaveZones(zones)
 	}
@@ -114,8 +189,9 @@ func (c *CfCache) InvalidateZones() {
 }
 
 // ListRecords returns cached DNS records for a zone or fetches from API.
+// Uses stale-while-revalidate: expired data is still served while background refresh runs.
 func (c *CfCache) ListRecords(ctx context.Context, zoneID, recordType, name string) ([]DnsRecord, error) {
-	// 1. Memory
+	// 1. Memory — return immediately if fresh
 	c.mu.RLock()
 	entry, ok := c.zoneRecords[zoneID]
 	if ok && entry != nil && !entry.expired() {
@@ -123,19 +199,65 @@ func (c *CfCache) ListRecords(ctx context.Context, zoneID, recordType, name stri
 		c.mu.RUnlock()
 		return val, nil
 	}
+	hasStaleMem := ok && entry != nil
+	var staleRecords []DnsRecord
+	if hasStaleMem {
+		staleRecords = entry.value
+	}
 	c.mu.RUnlock()
 
-	// 2. DB backing store
+	// 2. DB backing store — if memory is expired/missing, serve from DB
 	if c.store != nil {
 		if records, ok := c.store.LoadRecords(zoneID); ok && len(records) > 0 {
 			c.mu.Lock()
 			c.zoneRecords[zoneID] = &cacheEntry[[]DnsRecord]{value: records, expiresAt: time.Now().Add(c.recordTTL)}
 			c.mu.Unlock()
+
+			if hasStaleMem {
+				go c.refreshRecordsBg(zoneID, recordType, name)
+			}
 			return records, nil
 		}
 	}
 
-	// 3. API
+	// 3. If we have stale memory data, return it and refresh in background
+	if hasStaleMem && len(staleRecords) > 0 {
+		go c.refreshRecordsBg(zoneID, recordType, name)
+		return staleRecords, nil
+	}
+
+	// 4. API — nothing cached anywhere
+	return c.refreshRecords(ctx, zoneID, recordType, name)
+}
+
+// refreshRecordsBg performs a background DNS records refresh for a zone.
+func (c *CfCache) refreshRecordsBg(zoneID, recordType, name string) {
+	mu := c.getOrCreateRefreshMu(zoneID)
+	if !mu.TryLock() {
+		return // already refreshing for this zone
+	}
+	defer mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	records, err := c.client.ListDnsRecords(ctx, zoneID, recordType, name)
+	if err != nil {
+		log.Printf("[dns] background records refresh failed for zone %s: %v", zoneID, err)
+		return
+	}
+
+	c.mu.Lock()
+	c.zoneRecords[zoneID] = &cacheEntry[[]DnsRecord]{value: records, expiresAt: time.Now().Add(c.recordTTL)}
+	c.mu.Unlock()
+
+	if c.store != nil {
+		c.store.SaveRecords(zoneID, records)
+	}
+}
+
+// refreshRecords performs a synchronous DNS records fetch from the API.
+func (c *CfCache) refreshRecords(ctx context.Context, zoneID, recordType, name string) ([]DnsRecord, error) {
 	records, err := c.client.ListDnsRecords(ctx, zoneID, recordType, name)
 	if err != nil {
 		return nil, err
@@ -145,7 +267,6 @@ func (c *CfCache) ListRecords(ctx context.Context, zoneID, recordType, name stri
 	c.zoneRecords[zoneID] = &cacheEntry[[]DnsRecord]{value: records, expiresAt: time.Now().Add(c.recordTTL)}
 	c.mu.Unlock()
 
-	// Persist to DB
 	if c.store != nil {
 		c.store.SaveRecords(zoneID, records)
 	}

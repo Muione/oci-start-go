@@ -3,8 +3,8 @@
     <div class="toolbar">
       <div class="toolbar-left">
         <h2>抢机任务</h2>
-        <el-tag :type="engineRunning ? 'success' : 'info'" size="small">
-          {{ engineRunning ? '引擎运行中' : '引擎已停止' }}
+        <el-tag :type="engineActive ? 'success' : 'info'" size="small">
+          {{ engineActive ? '引擎运行中' : '引擎已停止' }}
         </el-tag>
       </div>
       <div class="toolbar-right">
@@ -278,7 +278,10 @@ const emptyForm = {
 }
 const form = ref({ ...emptyForm })
 
-const engineRunning = computed(() => sysStatus.value?.running ?? false)
+const engineActive = computed(() => {
+  // Engine is active if it's running AND there are actually tasks
+  return (sysStatus.value?.running ?? false) && (sysStatus.value?.totalTasks ?? 0) > 0
+})
 
 function statusTag(s: number) {
   return s === 1 ? 'warning' : s === 2 ? 'success' : s === 0 ? 'info' : ''

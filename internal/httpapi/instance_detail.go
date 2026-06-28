@@ -90,7 +90,12 @@ func instanceTraffic(deps *Deps) gin.HandlerFunc {
 			return
 		}
 		stats := deps.TrafficSvc.QueryTenantTraffic(c.Request.Context(), tenant)
-		response.OK(c, response.SuccessData(stats))
+		// Frontend expects a flat array, not the wrapped TenantTrafficStats
+		if stats.Instances == nil {
+			response.OK(c, response.SuccessData([]any{}))
+			return
+		}
+		response.OK(c, response.SuccessData(stats.Instances))
 	}
 }
 

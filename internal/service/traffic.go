@@ -53,6 +53,10 @@ type InstanceTraffic struct {
 	PublicIP     string  `json:"publicIp"`
 	VnicCount    int     `json:"vnicCount"`
 	EgressGB     float64 `json:"egressGB"`
+	EgressBytes  int64   `json:"egressBytes"`
+	IngressBytes int64   `json:"ingressBytes"`
+	StatsDate    string  `json:"statsDate"`
+	Region       string  `json:"region"`
 }
 
 // CheckAllTenantsTraffic is the main entry point for the traffic monitoring
@@ -202,6 +206,9 @@ func (s *TrafficSvc) QueryTenantTraffic(ctx context.Context, tenant repo.Tenant)
 			PublicIP:     ns(inst.PublicIps),
 			VnicCount:    1,
 			EgressGB:     oci.BytesToGB(egress),
+			EgressBytes:  int64(egress),
+			StatsDate:    now.Format("2006-01-02"),
+			Region:       stats.Region,
 		}
 		stats.Instances = append(stats.Instances, it)
 		totalEgress += egress

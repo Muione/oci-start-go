@@ -47,6 +47,9 @@ type TenantResp struct {
 	IsHomeRegion bool   `json:"isHomeRegion"`
 	AccountType  string `json:"accountType"`
 	TenancyName  string `json:"tenancyName"`
+	ActiveDays   string `json:"activeDays"`
+	HasBootTask  bool   `json:"hasBootTask"`
+	HasChildren  bool   `json:"hasChildren"`
 }
 
 func (s *TenantService) List(ctx context.Context) ([]TenantResp, error) {
@@ -56,7 +59,16 @@ func (s *TenantService) List(ctx context.Context) ([]TenantResp, error) {
 	}
 	out := make([]TenantResp, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, toTenantResp(r))
+		resp := toTenantResp(r)
+		// Enrich: has boot tasks?
+		if n, e := repo.New(s.store.Read).CountBootInstancesByTenantId(ctx, r.ID); e == nil && n > 0 {
+			resp.HasBootTask = true
+		}
+		// Enrich: has children?
+		if n, e := repo.New(s.store.Read).CountTenantChildren(ctx, r.ID); e == nil && n > 0 {
+			resp.HasChildren = true
+		}
+		out = append(out, resp)
 	}
 	return out, nil
 }
@@ -107,6 +119,7 @@ func (s *TenantService) Save(ctx context.Context, in SaveInput) error {
 		IsHomeRegion: nullInt64(boolToInt(in.IsHomeRegion)),
 		AccountType:  nullStr(in.AccountType),
 		TenancyName:  nullStr(userName),
+		IsActive:     nullInt64(1), // new tenants are active by default
 	}
 	return repo.New(s.store.Write).InsertTenant(ctx, params)
 }
@@ -356,6 +369,7 @@ func tenantToCreds(t repo.Tenant) oci.Credentials {
 }
 
 func toTenantResp(r repo.ListTenantsRow) TenantResp {
+	createdAt := ns(r.CreatedAt)
 	return TenantResp{
 		ID:           r.ID,
 		TenantID:     ns(r.TenantID),
@@ -364,14 +378,41 @@ func toTenantResp(r repo.ListTenantsRow) TenantResp {
 		Tenancy:      ns(r.Tenancy),
 		Region:       ns(r.Region),
 		RegionName:   region.NameByCode(region.CodeByName(ns(r.Region))),
-		CreatedAt:    ns(r.CreatedAt),
+		CreatedAt:    createdAt,
 		ApiSynced:    ni(r.ApiSynced) == 1,
 		CloudType:    ni(r.CloudType),
 		IsActive:     ni(r.IsActive) != 0,
 		IsHomeRegion: ni(r.IsHomeRegion) != 0,
 		AccountType:  ns(r.AccountType),
 		TenancyName:  ns(r.TenancyName),
+		ActiveDays:   calculateActiveDays(createdAt),
 	}
+}
+
+// calculateActiveDays returns the number of days from a timestamp string to now.
+// Uses ceiling division (partial day = 1 day), matching Java DateTimeUtils.
+func calculateActiveDays(timestamp string) string {
+	if timestamp == "" {
+		return "0"
+	}
+	t, err := time.Parse("2006-01-02 15:04:05", timestamp)
+	if err != nil {
+		// Try alternate format (RFC 3339 / ISO 8601)
+		t2, err2 := time.Parse(time.RFC3339, timestamp)
+		if err2 != nil {
+			return "0"
+		}
+		t = t2
+	}
+	d := time.Since(t)
+	days := int64(d.Hours() / 24)
+	if days < 0 {
+		days = 0
+	}
+	if d.Nanoseconds()%int64(24*time.Hour) > 0 {
+		days++ // ceiling: partial day counts as a full day
+	}
+	return fmt.Sprintf("%d", days)
 }
 
 func ns(v sql.NullString) string {

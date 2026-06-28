@@ -37,9 +37,13 @@ type Querier interface {
 	ExistsByUsername(ctx context.Context, username string) (int64, error)
 	FindBootInstanceByBootID(ctx context.Context, bootID sql.NullString) (BootInstance, error)
 	FindBootInstanceByID(ctx context.Context, id int64) (BootInstance, error)
+	CountBootInstancesByTenantId(ctx context.Context, tenantID int64) (int64, error)
+	CountTenantChildren(ctx context.Context, parenID int64) (int64, error)
 	// Cloud tenancy queries (Phase 9). cloud_tenancy stores account cost and
 	// custom name per tenancy.
 	FindCloudTenancyByName(ctx context.Context, tenancyName string) (CloudTenancy, error)
+	FindRegisterDetailByTenantId(ctx context.Context, tenantID string) (RegisterDetail, error)
+	UpsertRegisterDetail(ctx context.Context, arg UpsertRegisterDetailParams) error
 	// oci_computer_info queries
 	FindComputerInfoByBootIDStr(ctx context.Context, bootIDStr sql.NullString) (OciComputerInfo, error)
 	// system_config is the runtime KV store (config_key UNIQUE).

@@ -13,3 +13,9 @@ SELECT id, tenant_id, user_name, fingerprint, tenancy, region, created_at,
        email_address, email_enable, transfer_status, transfer_amount, is_active,
        key_file_blob
 FROM tenant WHERE id = ?;
+
+-- name: CountBootInstancesByTenantId :one
+SELECT COUNT(*) FROM boot_instance WHERE tenant_id = ? AND status = 1;
+
+-- name: CountTenantChildren :one
+SELECT COUNT(*) FROM tenant WHERE paren_id = ?;

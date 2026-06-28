@@ -124,8 +124,9 @@ func (q *Queries) FindTenantsByParenId(ctx context.Context, parenID sql.NullInt6
 const insertTenant = `-- name: InsertTenant :exec
 INSERT INTO tenant (
     tenant_id, user_name, fingerprint, tenancy, region, key_file_blob,
-    created_at, cloud_type, is_home_region, account_type, tenancy_name
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    created_at, cloud_type, is_home_region, account_type, tenancy_name,
+    is_active
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertTenantParams struct {
@@ -140,6 +141,7 @@ type InsertTenantParams struct {
 	IsHomeRegion sql.NullInt64  `json:"is_home_region"`
 	AccountType  sql.NullString `json:"account_type"`
 	TenancyName  sql.NullString `json:"tenancy_name"`
+	IsActive     sql.NullInt64  `json:"is_active"`
 }
 
 func (q *Queries) InsertTenant(ctx context.Context, arg InsertTenantParams) error {
@@ -155,6 +157,7 @@ func (q *Queries) InsertTenant(ctx context.Context, arg InsertTenantParams) erro
 		arg.IsHomeRegion,
 		arg.AccountType,
 		arg.TenancyName,
+		arg.IsActive,
 	)
 	return err
 }

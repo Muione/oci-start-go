@@ -27,12 +27,12 @@ func NewCacheStore(db *sql.DB) *CacheStore {
 
 // LoadZones returns cached zones from the DB, or nil if expired/missing.
 func (s *CacheStore) LoadZones() ([]Zone, bool) {
-	return loadFromDB[[]Zone](s, "dns.zones", 5*time.Minute)
+	return loadFromDB[[]Zone](s, "dns.zones", 2*time.Hour)
 }
 
 // SaveZones writes zones to the DB cache.
 func (s *CacheStore) SaveZones(zones []Zone) {
-	saveToDB(s, "dns.zones", zones, 5*time.Minute)
+	saveToDB(s, "dns.zones", zones, 2*time.Hour)
 }
 
 // ─── Records cache ─────────────────────────────────────────────────────
@@ -40,12 +40,12 @@ func (s *CacheStore) SaveZones(zones []Zone) {
 // LoadRecords returns cached DNS records for a zone from the DB,
 // or nil if expired/missing.
 func (s *CacheStore) LoadRecords(zoneID string) ([]DnsRecord, bool) {
-	return loadFromDB[[]DnsRecord](s, "dns.records."+zoneID, 2*time.Minute)
+	return loadFromDB[[]DnsRecord](s, "dns.records."+zoneID, 1*time.Hour)
 }
 
 // SaveRecords writes DNS records for a zone to the DB cache.
 func (s *CacheStore) SaveRecords(zoneID string, records []DnsRecord) {
-	saveToDB(s, "dns.records."+zoneID, records, 2*time.Minute)
+	saveToDB(s, "dns.records."+zoneID, records, 1*time.Hour)
 }
 
 // InvalidateRecords removes cached records for a zone.
@@ -79,11 +79,14 @@ func loadFromDB[T any](s *CacheStore, key string, ttl time.Duration) (T, bool) {
 	}
 
 	exp, parseErr := time.Parse(time.RFC3339, expiresAt)
-	if parseErr != nil || time.Now().After(exp) {
-		// Expired — clean up
+	if parseErr != nil {
+		// Malformed timestamp — clean up
 		_, _ = s.db.Exec(`DELETE FROM api_cache WHERE cache_key = ?`, key)
 		return zero, false
 	}
+	// Serve even if expired — stale-while-revalidate.
+	// The memory cache layer will trigger a background API refresh.
+	_ = exp // OK to be expired; we still return the data
 
 	var result T
 	if err := json.Unmarshal([]byte(value), &result); err != nil {

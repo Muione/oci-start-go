@@ -68,7 +68,7 @@
         </el-table-column>
         <el-table-column label="存活天数" width="90" align="center">
           <template #default="{ row }">
-            <span class="days-chip">{{ activeDays(row.createdAt) }}</span>
+            <span class="days-chip">{{ row.activeDays || '0' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="开机任务" width="100" align="center">
@@ -252,7 +252,7 @@
                 <el-tag :type="detailData.emailEnable?'success':'info'" size="small">{{ detailData.emailEnable ? '是' : '否' }}</el-tag>
               </el-descriptions-item>
               <el-descriptions-item label="主区域">
-                <el-tag :type="detailData.isHomeRegion?'':'info'" size="small">{{ detailData.isHomeRegion ? '是' : '否' }}</el-tag>
+                {{ detailData.regionName || detailData.region || '—' }}
               </el-descriptions-item>
               <el-descriptions-item label="开启 ICMP">{{ detailData.enableIcmp ? '是' : '否' }}</el-descriptions-item>
               <el-descriptions-item label="所有协议">{{ detailData.enableAllProtocol ? '是' : '否' }}</el-descriptions-item>
@@ -788,7 +788,7 @@ interface Tenant {
   parenId?: number; regionEn?: string; idStr?: string
   transferStatus?: number; transferAmount?: string
   instanceCount?: number; accountCost?: string
-  hasBootTask?: boolean; hasChildren?: boolean
+  hasBootTask?: boolean; hasChildren?: boolean; activeDays?: string
 }
 
 interface RegionItem { code: string; name: string }
@@ -953,13 +953,6 @@ regions.forEach(r => { regionCodeToName[r.code] = r.name })
 function maskedName(n: string): string {
   if (!n || n.length <= 2) return n || '***'
   return n[0] + '***' + n[n.length - 1]
-}
-
-function activeDays(createdAt: string | undefined): string {
-  if (!createdAt) return '0'
-  const d = new Date(createdAt).getTime()
-  if (isNaN(d)) return '0'
-  return String(Math.floor((Date.now() - d) / 86400000))
 }
 
 function accountTypeTag(t: string | undefined): 'success'|'warning'|'info'|'' {
