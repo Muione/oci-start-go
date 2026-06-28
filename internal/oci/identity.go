@@ -1,11 +1,22 @@
 // Package oci — identity.go: IAM domain operations (compartments, users, groups,
 // password policy, MFA, notifications). Ports operations used by OciUtils,
 // MFAUtils, NotificationUtils from the Java reference implementation.
+//
+// Identity Domains (SCIM) API support:
+// The Go SDK v65 does not include the identitydomains subpackage (it exists in
+// the Java SDK as IdentityDomainsClient). Password policy, MFA factor settings,
+// and notification settings are all managed through the Identity Domain's SCIM
+// REST endpoints. This file calls those endpoints directly using OCI-signed HTTP
+// requests, following the same patterns as the Java MFAUtils / NotificationUtils.
 package oci
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -57,6 +68,77 @@ func PingIdentity(ctx context.Context, prov common.ConfigurationProvider, tenanc
 		return fmt.Errorf("get tenancy: %w", err)
 	}
 	return nil
+}
+
+// ─── Identity Domain Discovery ─────────────────────────────────────────────
+
+// getDomainURL returns the Identity Domain URL for the tenancy by calling
+// ListDomains. The domain URL is required to reach SCIM endpoints (password
+// policy, MFA settings, notification settings).
+func getDomainURL(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) (string, error) {
+	client, err := identity.NewIdentityClientWithConfigurationProvider(prov)
+	if err != nil {
+		return "", fmt.Errorf("create identity client: %w", err)
+	}
+	resp, err := client.ListDomains(ctx, identity.ListDomainsRequest{
+		CompartmentId: common.String(tenancyOCID),
+		Limit:         common.Int(10),
+	})
+	if err != nil {
+		return "", fmt.Errorf("list domains: %w", err)
+	}
+	if len(resp.Items) == 0 {
+		return "", fmt.Errorf("no identity domain found for tenancy %s", tenancyOCID)
+	}
+	// Use the first available domain (typically only one).
+	domain := resp.Items[0]
+	if domain.Url == nil || *domain.Url == "" {
+		return "", fmt.Errorf("identity domain has no URL")
+	}
+	return *domain.Url, nil
+}
+
+// httpClient is the shared HTTP client used for Identity Domains SCIM calls.
+var httpClient = &http.Client{Timeout: 60 * time.Second}
+
+// doIdDomainCall makes a signed HTTP request to an Identity Domain SCIM
+// endpoint. The domainURL should end without a trailing slash (e.g.
+// "https://idcs-xxx.identity.oraclecloud.com").
+func doIdDomainCall(ctx context.Context, prov common.ConfigurationProvider, method, domainURL, path string, body interface{}) (*http.Response, error) {
+	url := strings.TrimRight(domainURL, "/") + path
+
+	var bodyReader io.Reader
+	if body != nil {
+		bodyBytes, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshal request body: %w", err)
+		}
+		bodyReader = bytes.NewReader(bodyBytes)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/scim+json")
+	req.Header.Set("Accept", "application/scim+json")
+
+	// Sign the request using the OCI credentials.
+	signer := common.DefaultRequestSigner(prov)
+	if err := signer.Sign(req); err != nil {
+		return nil, fmt.Errorf("sign request: %w", err)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute request: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, fmt.Errorf("id domain API error %d %s: %s", resp.StatusCode, url, string(respBody))
+	}
+	return resp, nil
 }
 
 // ─── User operations ───────────────────────────────────────────────────────
@@ -133,18 +215,18 @@ func ListUsers(ctx context.Context, prov common.ConfigurationProvider, tenancyOC
 
 // CreateUserRequest holds the parameters for creating an IAM user.
 type CreateUserRequest struct {
-	Username    string `json:"username"`
-	Email       string `json:"email"`
-	GroupName   string `json:"groupName"`   // optional: group to add user to
-	GroupOCID   string `json:"groupOcid"`   // optional: group OCID (alternative to GroupName)
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+	GroupName string `json:"groupName"` // optional: group to add user to
+	GroupOCID string `json:"groupOcid"` // optional: group OCID (alternative to GroupName)
 }
 
 // CreateUserResult is returned after a successful user creation.
 type CreateUserResult struct {
-	Username    string `json:"username"`
-	Email       string `json:"email"`
-	UserOCID    string `json:"userOcid"`
-	Password    string `json:"password"` // one-time password
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	UserOCID string `json:"userOcid"`
+	Password string `json:"password"` // one-time password
 }
 
 // CreateUser creates a new IAM user and optionally adds them to a group.
@@ -169,13 +251,12 @@ func CreateUser(ctx context.Context, prov common.ConfigurationProvider, tenancyO
 	}
 	userOCID := *createResp.User.Id
 
-	// 2. Add to group if specified
+	// 2. Add to group if specified (Java reference: createOciAdminUser)
 	if req.GroupName != "" || req.GroupOCID != "" {
 		var groupOCID string
 		if req.GroupOCID != "" {
 			groupOCID = req.GroupOCID
 		} else {
-			// Look up group by name
 			groups, err := ListGroups(ctx, prov, tenancyOCID)
 			if err != nil {
 				return nil, fmt.Errorf("list groups for add-user: %w", err)
@@ -201,7 +282,7 @@ func CreateUser(ctx context.Context, prov common.ConfigurationProvider, tenancyO
 		}
 	}
 
-	// 3. Create/reset UI password to get a one-time password
+	// 3. Create/reset UI password to get a one-time password (Java: SignOnPolicyUtils.resetPass)
 	pwResp, err := client.CreateOrResetUIPassword(ctx, identity.CreateOrResetUIPasswordRequest{
 		UserId: common.String(userOCID),
 	})
@@ -222,6 +303,7 @@ func CreateUser(ctx context.Context, prov common.ConfigurationProvider, tenancyO
 }
 
 // DeleteUser deletes an IAM user by OCID.
+// Java reference: SignOnPolicyUtils.deleteUser → identityClient.deleteUser
 func DeleteUser(ctx context.Context, prov common.ConfigurationProvider, userOCID string) error {
 	client, err := identity.NewIdentityClientWithConfigurationProvider(prov)
 	if err != nil {
@@ -238,6 +320,7 @@ func DeleteUser(ctx context.Context, prov common.ConfigurationProvider, userOCID
 
 // ResetUserPassword resets the console (UI) password for an IAM user.
 // Returns the new one-time password.
+// Java reference: SignOnPolicyUtils.resetPass → identityClient.CreateOrResetUIPassword
 func ResetUserPassword(ctx context.Context, prov common.ConfigurationProvider, userOCID string) (string, error) {
 	client, err := identity.NewIdentityClientWithConfigurationProvider(prov)
 	if err != nil {
@@ -255,7 +338,56 @@ func ResetUserPassword(ctx context.Context, prov common.ConfigurationProvider, u
 	return "", nil
 }
 
+// ResetMfaForAllUsers resets MFA (TOTP devices) for all users in the tenancy.
+// Java reference: TenantServiceImpl.resetAccountFactor → ListMfaTotpDevices + DeleteMfaTotpDevice
+func ResetMfaForAllUsers(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) (int, error) {
+	client, err := identity.NewIdentityClientWithConfigurationProvider(prov)
+	if err != nil {
+		return 0, fmt.Errorf("create identity client: %w", err)
+	}
+
+	// First, list all users
+	users, err := ListUsers(ctx, prov, tenancyOCID)
+	if err != nil {
+		return 0, fmt.Errorf("list users: %w", err)
+	}
+
+	deleted := 0
+	for _, u := range users {
+		var page *string
+		for {
+			resp, err := client.ListMfaTotpDevices(ctx, identity.ListMfaTotpDevicesRequest{
+				UserId: common.String(u.OCID),
+				Page:   page,
+			})
+			if err != nil {
+				// Some users may not support MFA TOTP — skip them
+				break
+			}
+			for _, dev := range resp.Items {
+				if dev.Id == nil {
+					continue
+				}
+				_, err := client.DeleteMfaTotpDevice(ctx, identity.DeleteMfaTotpDeviceRequest{
+					UserId:      common.String(u.OCID),
+					MfaTotpDeviceId: dev.Id,
+				})
+				if err != nil {
+					continue
+				}
+				deleted++
+			}
+			if resp.OpcNextPage == nil {
+				break
+			}
+			page = resp.OpcNextPage
+		}
+	}
+	return deleted, nil
+}
+
 // ListGroups returns all IAM groups in the tenancy.
+// Java reference: OracleInstanceServiceImpl.findGroup → identityClient.listGroups
 func ListGroups(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) ([]OciGroup, error) {
 	client, err := identity.NewIdentityClientWithConfigurationProvider(prov)
 	if err != nil {
@@ -291,101 +423,274 @@ func ListGroups(ctx context.Context, prov common.ConfigurationProvider, tenancyO
 	return out, nil
 }
 
-// ─── Password Policy operations ────────────────────────────────────────────
+// ─── Password Policy operations (Identity Domains SCIM) ────────────────────
+//
+// Java reference: OciUtils.getCurrentPasswordPolicy, OciUtils.enablePasswordExpirationWithAutoDomain,
+// OciUtils.disablePasswordExpirationWithAutoDomain
+//
+// These use the Identity Domain SCIM API at /admin/v1/PasswordPolicies.
 
-// PasswordPolicyDetail holds the password policy configuration for a tenancy.
+// PasswordPolicyDetail holds the password policy configuration.
 type PasswordPolicyDetail struct {
-	IsPasswordExpiryEnabled bool `json:"isPasswordExpiryEnabled"`
-	PasswordExpiryDays      int  `json:"passwordExpiryDays"`
+	Name                   string `json:"name"`
+	IsPasswordExpiryEnabled bool   `json:"isPasswordExpiryEnabled"`
+	PasswordExpiryDays     int    `json:"passwordExpiryDays"`
 }
 
-// GetPasswordPolicy retrieves the authentication policy (password expiry).
+// idDomainPasswordPolicy represents a SCIM PasswordPolicy resource from the
+// Identity Domain list response.
+type idDomainPasswordPolicy struct {
+	ID                   string `json:"id"`
+	Name                 string `json:"name"`
+	PasswordExpiresAfter *int   `json:"passwordExpiresAfter"`
+	PasswordStrength     string `json:"passwordStrength"`
+	Schemas              []string `json:"schemas"`
+	Meta                 *struct {
+		ResourceType string `json:"resourceType"`
+	} `json:"meta"`
+}
+
+type idDomainPwdPolicyListResponse struct {
+	Schemas      []string                 `json:"schemas"`
+	TotalResults int                      `json:"totalResults"`
+	Resources    []idDomainPasswordPolicy `json:"Resources"`
+}
+
+// passwordPolicyPutBody is the PUT body for updating a password policy.
+type passwordPolicyPutBody struct {
+	Schemas              []string `json:"schemas"`
+	PasswordExpiresAfter int      `json:"passwordExpiresAfter"`
+	PasswordExpireWarning int     `json:"passwordExpireWarning"`
+	ForcePasswordReset   bool     `json:"forcePasswordReset"`
+	PasswordStrength     string   `json:"passwordStrength,omitempty"`
+	ID                   string   `json:"id,omitempty"`
+	Name                 string   `json:"name,omitempty"`
+}
+
+// GetPasswordPolicy retrieves the password expiry policy from the Identity
+// Domain SCIM API. Filters to policies with passwordStrength=Custom (the
+// Java reference skips non-Custom policies).
 func GetPasswordPolicy(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) (*PasswordPolicyDetail, error) {
-	client, err := identity.NewIdentityClientWithConfigurationProvider(prov)
+	domainURL, err := getDomainURL(ctx, prov, tenancyOCID)
 	if err != nil {
-		return nil, fmt.Errorf("create identity client: %w", err)
+		return nil, fmt.Errorf("get domain URL: %w", err)
 	}
-	resp, err := client.GetAuthenticationPolicy(ctx, identity.GetAuthenticationPolicyRequest{
-		CompartmentId: common.String(tenancyOCID),
-	})
+
+	resp, err := doIdDomainCall(ctx, prov, "GET", domainURL, "/admin/v1/PasswordPolicies", nil)
 	if err != nil {
-		return nil, fmt.Errorf("get authentication policy: %w", err)
+		return nil, fmt.Errorf("list password policies: %w", err)
 	}
-	detail := &PasswordPolicyDetail{}
-	pp := resp.AuthenticationPolicy.PasswordPolicy
-	if pp != nil {
-		if pp.IsUsernameContainmentAllowed != nil {
-			// We use password expiry settings from the network source / domain config
+	defer resp.Body.Close()
+
+	var listResp idDomainPwdPolicyListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, fmt.Errorf("decode password policies: %w", err)
+	}
+
+	// Find the first Custom-strength policy (Java: filter by PasswordStrength.Custom)
+	for _, p := range listResp.Resources {
+		if p.PasswordStrength == "Custom" {
+			detail := &PasswordPolicyDetail{Name: p.Name}
+			if p.PasswordExpiresAfter != nil && *p.PasswordExpiresAfter > 0 {
+				detail.IsPasswordExpiryEnabled = true
+				detail.PasswordExpiryDays = *p.PasswordExpiresAfter
+			}
+			return detail, nil
 		}
 	}
-	// The OCI SDK's PasswordPolicy struct doesn't directly expose expiry days.
-	// For the Go port, we provide a default. The Java reference also has defaults.
-	detail.IsPasswordExpiryEnabled = true
-	detail.PasswordExpiryDays = 120
-	return detail, nil
+	// Fallback: use the first policy if no Custom one found
+	for _, p := range listResp.Resources {
+		detail := &PasswordPolicyDetail{Name: p.Name}
+		if p.PasswordExpiresAfter != nil && *p.PasswordExpiresAfter > 0 {
+			detail.IsPasswordExpiryEnabled = true
+			detail.PasswordExpiryDays = *p.PasswordExpiresAfter
+		}
+		return detail, nil
+	}
+
+	// No policies found — return defaults
+	return &PasswordPolicyDetail{
+		IsPasswordExpiryEnabled: false,
+		PasswordExpiryDays:      0,
+	}, nil
 }
 
-// UpdatePasswordPolicy updates the authentication policy (password expiry).
+// UpdatePasswordPolicy enables or disables password expiry by updating the
+// Identity Domain password policy.
+// Java reference: OciUtils.enablePasswordExpirationWithAutoDomain / disablePasswordExpirationWithAutoDomain
 func UpdatePasswordPolicy(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string, enableExpiry bool, expiryDays int) error {
-	client, err := identity.NewIdentityClientWithConfigurationProvider(prov)
+	if enableExpiry && (expiryDays < 0 || expiryDays > 365) {
+		return fmt.Errorf("expiry days must be between 0 and 365, got %d", expiryDays)
+	}
+
+	domainURL, err := getDomainURL(ctx, prov, tenancyOCID)
 	if err != nil {
-		return fmt.Errorf("create identity client: %w", err)
+		return fmt.Errorf("get domain URL: %w", err)
 	}
-	// Build policy update request
-	// The OCI Go SDK's UpdateAuthenticationPolicyRequest is used here.
-	// We construct a PasswordPolicy that reflects the desired expiry settings.
-	policy := identity.PasswordPolicy{
-		IsUsernameContainmentAllowed: common.Bool(false),
-		MinimumPasswordLength:        common.Int(8),
-	}
-	authPolicy := identity.UpdateAuthenticationPolicyDetails{
-		PasswordPolicy: &policy,
-	}
-	_, err = client.UpdateAuthenticationPolicy(ctx, identity.UpdateAuthenticationPolicyRequest{
-		CompartmentId:                      common.String(tenancyOCID),
-		UpdateAuthenticationPolicyDetails:  authPolicy,
-	})
+
+	// 1. List password policies to find a Custom one to update
+	resp, err := doIdDomainCall(ctx, prov, "GET", domainURL, "/admin/v1/PasswordPolicies", nil)
 	if err != nil {
-		return fmt.Errorf("update authentication policy: %w", err)
+		return fmt.Errorf("list password policies: %w", err)
 	}
-	// Note: The OCI Identity API does not support direct expiry-day configuration
-	// through AuthenticationPolicy. Password expiry is managed at the identity
-	// domain level (IDCS). The Java reference stores this in system_config.
+	defer resp.Body.Close()
+
+	var listResp idDomainPwdPolicyListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return fmt.Errorf("decode password policies: %w", err)
+	}
+
+	if len(listResp.Resources) == 0 {
+		return fmt.Errorf("no password policies found in identity domain")
+	}
+
+	// Find Custom policy (Java: filter by PasswordStrength.Custom)
+	var targetPolicy *idDomainPasswordPolicy
+	for i, p := range listResp.Resources {
+		if p.PasswordStrength == "Custom" {
+			targetPolicy = &listResp.Resources[i]
+			break
+		}
+	}
+	if targetPolicy == nil {
+		// Use the first one as fallback
+		targetPolicy = &listResp.Resources[0]
+	}
+
+	// 2. Determine expiry settings
+	newExpiry := 0
+	if enableExpiry {
+		if expiryDays > 0 {
+			newExpiry = expiryDays
+		} else {
+			newExpiry = 120 // default
+		}
+	}
+
+	// 3. PUT updated policy
+	putBody := passwordPolicyPutBody{
+		Schemas:              []string{"urn:ietf:params:scim:schemas:oracle:idcs:PasswordPolicy"},
+		PasswordExpiresAfter: newExpiry,
+		PasswordExpireWarning: 7,  // 7-day warning before expiry
+		ForcePasswordReset:   false,
+	}
+
+	putResp, err := doIdDomainCall(ctx, prov, "PUT", domainURL,
+		"/admin/v1/PasswordPolicies/"+targetPolicy.ID, putBody)
+	if err != nil {
+		return fmt.Errorf("update password policy: %w", err)
+	}
+	putResp.Body.Close()
 	return nil
 }
 
-// ─── MFA operations ────────────────────────────────────────────────────────
+// ─── MFA operations (Identity Domains SCIM) ────────────────────────────────
+//
+// Java reference: MFAUtils.getMFAConfiguration, MFAUtils.enableEmailMFA
+//
+// These use the Identity Domain SCIM endpoint at
+// /admin/v1/AuthenticationFactorSettings/AuthenticationFactorSettings
 
 // MfaStatus holds the MFA configuration state for a tenancy.
 type MfaStatus struct {
-	TotpEnabled    bool `json:"totpEnabled"`
-	EmailEnabled   bool `json:"emailEnabled"`
-	SmsEnabled     bool `json:"smsEnabled"`
+	TotpEnabled             bool `json:"totpEnabled"`
+	EmailEnabled            bool `json:"emailEnabled"`
+	SmsEnabled              bool `json:"smsEnabled"`
+	PushEnabled             bool `json:"pushEnabled"`
 	SecurityQuestionsEnabled bool `json:"securityQuestionsEnabled"`
+	FidoAuthenticatorEnabled bool `json:"fidoAuthenticatorEnabled"`
+	PhoneCallEnabled        bool `json:"phoneCallEnabled"`
 }
 
+// idDomainAuthFactorSetting represents a SCIM AuthenticationFactorSetting
+// resource from the Identity Domain.
+type idDomainAuthFactorSetting struct {
+	ID                          string   `json:"id"`
+	EmailEnabled                *bool    `json:"emailEnabled"`
+	SmsEnabled                  *bool    `json:"smsEnabled"`
+	TotpEnabled                 *bool    `json:"totpEnabled"`
+	PushEnabled                 *bool    `json:"pushEnabled"`
+	SecurityQuestionsEnabled    *bool    `json:"securityQuestionsEnabled"`
+	FidoAuthenticatorEnabled    *bool    `json:"fidoAuthenticatorEnabled"`
+	PhoneCallEnabled            *bool    `json:"phoneCallEnabled"`
+	Schemas                     []string `json:"schemas"`
+}
+
+type idDomainAuthFactorPutBody struct {
+	Schemas                   []string `json:"schemas"`
+	EmailEnabled              *bool    `json:"emailEnabled,omitempty"`
+	SmsEnabled                *bool    `json:"smsEnabled,omitempty"`
+	TotpEnabled               *bool    `json:"totpEnabled,omitempty"`
+	PushEnabled               *bool    `json:"pushEnabled,omitempty"`
+	SecurityQuestionsEnabled  *bool    `json:"securityQuestionsEnabled,omitempty"`
+	FidoAuthenticatorEnabled  *bool    `json:"fidoAuthenticatorEnabled,omitempty"`
+	PhoneCallEnabled          *bool    `json:"phoneCallEnabled,omitempty"`
+}
+
+const authFactorSettingsID = "AuthenticationFactorSettings"
+
 // GetMfaStatus retrieves the current MFA configuration.
+// Java reference: MFAUtils.getMFAConfiguration
 func GetMfaStatus(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) (*MfaStatus, error) {
-	// The OCI Go SDK v65 provides authentication policy but not per-domain MFA.
-	// This is a stub that returns safe defaults. Full MFA support requires
-	// the identity domain (IDCS) API which is not in the core SDK.
+	domainURL, err := getDomainURL(ctx, prov, tenancyOCID)
+	if err != nil {
+		return nil, fmt.Errorf("get domain URL: %w", err)
+	}
+
+	resp, err := doIdDomainCall(ctx, prov, "GET", domainURL,
+		"/admin/v1/AuthenticationFactorSettings/"+authFactorSettingsID, nil)
+	if err != nil {
+		// If the SCIM endpoint is unavailable, return safe defaults
+		return &MfaStatus{}, nil
+	}
+	defer resp.Body.Close()
+
+	var settings idDomainAuthFactorSetting
+	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
+		return &MfaStatus{}, nil
+	}
+
 	return &MfaStatus{
-		TotpEnabled:             false,
-		EmailEnabled:            false,
-		SmsEnabled:              false,
-		SecurityQuestionsEnabled: false,
+		TotpEnabled:              boolPtrVal(settings.TotpEnabled),
+		EmailEnabled:             boolPtrVal(settings.EmailEnabled),
+		SmsEnabled:               boolPtrVal(settings.SmsEnabled),
+		PushEnabled:              boolPtrVal(settings.PushEnabled),
+		SecurityQuestionsEnabled: boolPtrVal(settings.SecurityQuestionsEnabled),
+		FidoAuthenticatorEnabled: boolPtrVal(settings.FidoAuthenticatorEnabled),
+		PhoneCallEnabled:         boolPtrVal(settings.PhoneCallEnabled),
 	}, nil
 }
 
 // ToggleEmailMFA enables or disables email-based MFA for the tenancy.
-// Returns the new state.
+// Returns the new state (true = enabled, false = disabled).
+// Java reference: MFAUtils.enableEmailMFA
 func ToggleEmailMFA(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string, enable bool) (bool, error) {
-	// Stub: Full MFA toggle requires IDCS/identity domain API.
-	// The Java reference uses MFAUtils which calls identity domain endpoints.
+	domainURL, err := getDomainURL(ctx, prov, tenancyOCID)
+	if err != nil {
+		return false, fmt.Errorf("get domain URL: %w", err)
+	}
+
+	putBody := idDomainAuthFactorPutBody{
+		Schemas:      []string{"urn:ietf:params:scim:schemas:oracle:idcs:AuthenticationFactorSettings"},
+		EmailEnabled: common.Bool(enable),
+	}
+
+	resp, err := doIdDomainCall(ctx, prov, "PUT", domainURL,
+		"/admin/v1/AuthenticationFactorSettings/"+authFactorSettingsID, putBody)
+	if err != nil {
+		return false, fmt.Errorf("update auth factor settings: %w", err)
+	}
+	resp.Body.Close()
 	return enable, nil
 }
 
-// ─── Notification Recipients ───────────────────────────────────────────────
+// ─── Notification Recipients (Identity Domains SCIM) ───────────────────────
+//
+// Java reference: NotificationUtils.getCurrentRecipients,
+// NotificationUtils.updateNotificationRecipients
+//
+// Uses the Identity Domain SCIM endpoint at
+// /admin/v1/NotificationSettings/NotificationSettings
 
 // NotifRecipient holds a notification email recipient entry.
 type NotifRecipient struct {
@@ -394,15 +699,82 @@ type NotifRecipient struct {
 	State string `json:"state"`
 }
 
+// idDomainNotificationSetting represents a SCIM NotificationSettings resource.
+type idDomainNotificationSetting struct {
+	ID                              string    `json:"id"`
+	NotificationEnabled             *bool     `json:"notificationEnabled"`
+	TestModeEnabled                 *bool     `json:"testModeEnabled"`
+	TestRecipients                  []string  `json:"testRecipients"`
+	SendNotificationsToSecondaryEmail *bool   `json:"sendNotificationsToSecondaryEmail"`
+	Schemas                         []string  `json:"schemas"`
+}
+
+const notificationSettingsID = "NotificationSettings"
+
+// notifPutBody is the PUT body for updating notification settings.
+type notifPutBody struct {
+	Schemas      []string `json:"schemas"`
+	TestModeEnabled bool   `json:"testModeEnabled"`
+	TestRecipients  []string `json:"testRecipients"`
+}
+
 // GetNotificationRecipients returns the current notification email recipients.
+// Java reference: NotificationUtils.getCurrentRecipients
 func GetNotificationRecipients(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) ([]NotifRecipient, error) {
-	// The notification recipients are stored locally (not in OCI API directly).
-	// This function is kept for API consistency; actual data is managed via
-	// system_config or a separate local table.
-	return []NotifRecipient{}, nil
+	domainURL, err := getDomainURL(ctx, prov, tenancyOCID)
+	if err != nil {
+		return nil, fmt.Errorf("get domain URL: %w", err)
+	}
+
+	resp, err := doIdDomainCall(ctx, prov, "GET", domainURL,
+		"/admin/v1/NotificationSettings/"+notificationSettingsID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get notification settings: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var settings idDomainNotificationSetting
+	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
+		return nil, fmt.Errorf("decode notification settings: %w", err)
+	}
+
+	out := make([]NotifRecipient, 0, len(settings.TestRecipients))
+	for i, email := range settings.TestRecipients {
+		out = append(out, NotifRecipient{
+			ID:    i + 1,
+			Email: email,
+			State: "active",
+		})
+	}
+	return out, nil
+}
+
+// UpdateNotificationRecipients replaces the entire notification recipients list.
+// Java reference: NotificationUtils.updateNotificationRecipients
+func UpdateNotificationRecipients(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string, emails []string) error {
+	domainURL, err := getDomainURL(ctx, prov, tenancyOCID)
+	if err != nil {
+		return fmt.Errorf("get domain URL: %w", err)
+	}
+
+	putBody := notifPutBody{
+		Schemas:        []string{"urn:ietf:params:scim:schemas:oracle:idcs:NotificationSettings"},
+		TestModeEnabled: true,
+		TestRecipients:  emails,
+	}
+
+	resp, err := doIdDomainCall(ctx, prov, "PUT", domainURL,
+		"/admin/v1/NotificationSettings/"+notificationSettingsID, putBody)
+	if err != nil {
+		return fmt.Errorf("update notification settings: %w", err)
+	}
+	resp.Body.Close()
+	return nil
 }
 
 // ─── Tenancy Detail (for auto-fetch) ───────────────────────────────────────
+//
+// Java reference: OciClassLoader.loadManyRegions / TenancyDetail
 
 // TenancyDetail holds descriptive information about an OCI tenancy,
 // fetched from the Identity API for auto-populating local fields.
@@ -414,6 +786,9 @@ type TenancyDetail struct {
 }
 
 // GetTenancyDetail fetches the tenancy metadata from OCI.
+// Java reference: OciClassLoader.loadManyRegions uses Identity API + OSP Gateway
+// for account type. We use GetTenancy for basic info and infer account type
+// from description or subscription metadata.
 func GetTenancyDetail(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) (*TenancyDetail, error) {
 	client, err := identity.NewIdentityClientWithConfigurationProvider(prov)
 	if err != nil {
@@ -432,16 +807,24 @@ func GetTenancyDetail(ctx context.Context, prov common.ConfigurationProvider, te
 	if resp.Tenancy.Description != nil {
 		detail.Description = *resp.Tenancy.Description
 	}
+
 	// Account type is inferred from the tenancy metadata or subscription.
-	// We default to "paid" unless the description indicates otherwise.
+	// The Java reference uses OciGateWayUtils.getAccountTypeInfo which calls
+	// the OSP Gateway API for subscription details. For the Go port, we infer
+	// from the tenancy description as a reasonable approximation.
 	detail.AccountType = "paid"
-	if strings.Contains(strings.ToLower(detail.Description), "trial") ||
-		strings.Contains(strings.ToLower(detail.Description), "试用") {
+	descLower := strings.ToLower(detail.Description)
+	if strings.Contains(descLower, "trial") || strings.Contains(descLower, "试用") {
 		detail.AccountType = "trial"
-	} else if strings.Contains(strings.ToLower(detail.Description), "free") ||
-		strings.Contains(strings.ToLower(detail.Description), "免费") {
+	} else if strings.Contains(descLower, "free") || strings.Contains(descLower, "免费") {
 		detail.AccountType = "free"
+	} else if strings.Contains(descLower, "enterprise") || strings.Contains(descLower, "企业") {
+		detail.AccountType = "enterprise"
 	}
+
+	// Email address is not directly available from GetTenancy.
+	// The Java reference gets it from subscription details via OSP Gateway.
+	// We leave it empty; frontend can populate if needed.
 	return detail, nil
 }
 
@@ -459,4 +842,11 @@ func lastLoginTime(t *common.SDKTime) time.Time {
 		return time.Time{}
 	}
 	return t.Time
+}
+
+func boolPtrVal(b *bool) bool {
+	if b == nil {
+		return false
+	}
+	return *b
 }

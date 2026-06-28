@@ -503,6 +503,15 @@
                 <el-descriptions-item label="安全提问">
                   <el-tag :type="mfaStatus?.securityQuestionsEnabled?'success':'info'" size="small">{{ mfaStatus?.securityQuestionsEnabled ? '已启用' : '未启用' }}</el-tag>
                 </el-descriptions-item>
+                <el-descriptions-item label="推送通知">
+                  <el-tag :type="mfaStatus?.pushEnabled?'success':'info'" size="small">{{ mfaStatus?.pushEnabled ? '已启用' : '未启用' }}</el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="FIDO 认证">
+                  <el-tag :type="mfaStatus?.fidoAuthenticatorEnabled?'success':'info'" size="small">{{ mfaStatus?.fidoAuthenticatorEnabled ? '已启用' : '未启用' }}</el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="电话呼叫">
+                  <el-tag :type="mfaStatus?.phoneCallEnabled?'success':'info'" size="small">{{ mfaStatus?.phoneCallEnabled ? '已启用' : '未启用' }}</el-tag>
+                </el-descriptions-item>
               </el-descriptions>
             </template>
           </div>
@@ -1359,8 +1368,16 @@ async function doAddNotifEmail() {
   if (!addNotifEmailForm.value.email) { ElMessage.warning('请输入邮箱地址'); return }
   notifSaving.value = true
   try {
-    await request.post(`/tenants/${userMgmtTenantId.value}/notification-recipients`, {
-      emails: [addNotifEmailForm.value.email]
+    // Build full list: current recipients + new email
+    const currentEmails = notifRecipients.value.map((r: any) => r.email)
+    if (currentEmails.includes(addNotifEmailForm.value.email)) {
+      ElMessage.warning('该邮箱已存在')
+      notifSaving.value = false
+      return
+    }
+    currentEmails.push(addNotifEmailForm.value.email)
+    await request.post(`/tenants/${userMgmtTenantId.value}/notification-recipients/update`, {
+      emails: currentEmails
     })
     ElMessage.success('已添加')
     showAddNotifEmailForm.value = false
@@ -1373,9 +1390,15 @@ async function doAddNotifEmail() {
 async function deleteNotifEmail(row: any) {
   try {
     await ElMessageBox.confirm(`确定删除通知邮箱 ${row.email}？`, '确认删除', { type: 'warning' })
-    // Remove by filtering
-    notifRecipients.value = notifRecipients.value.filter(r => r.email !== row.email)
+    // Build list without the deleted email
+    const updatedEmails = notifRecipients.value
+      .filter((r: any) => r.email !== row.email)
+      .map((r: any) => r.email)
+    await request.post(`/tenants/${userMgmtTenantId.value}/notification-recipients/update`, {
+      emails: updatedEmails
+    })
     ElMessage.success('已删除')
+    await refreshNotifRecipients()
   } catch (e: any) {
     if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
   }
@@ -1404,9 +1427,13 @@ async function toggleEmailMfa(enable: boolean) {
 
 async function resetMfa() {
   try {
-    await ElMessageBox.confirm('确定重置租户的 MFA 配置？此操作将影响该租户下的所有用户。', '确认重置 MFA', { type: 'warning' })
-    ElMessage.info('MFA 重置功能暂未实现')
-  } catch {}
+    await ElMessageBox.confirm('确定重置租户的 MFA 配置？此操作将删除该租户下所有用户的 MFA TOTP 设备。', '确认重置 MFA', { type: 'warning' })
+    const res = await request.post(`/tenants/${userMgmtTenantId.value}/mfa/reset`) as any
+    ElMessage.success(`MFA 已重置，已删除 ${res?.deletedDevices ?? 0} 个设备`)
+    await refreshMfaStatus()
+  } catch (e: any) {
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
+  }
 }
 
 // --- password policy ---

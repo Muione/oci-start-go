@@ -153,6 +153,20 @@ func (s *TenantUserService) ToggleEmailMFA(ctx context.Context, tenantID int64, 
 	return oci.ToggleEmailMFA(ctx, prov, creds.Tenancy, enable)
 }
 
+// ResetMfa deletes all MFA TOTP devices for all users in the tenancy.
+// Java reference: TenantServiceImpl.resetAccountFactor
+func (s *TenantUserService) ResetMfa(ctx context.Context, tenantID int64) (int, error) {
+	creds, err := s.getProvider(ctx, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	prov, err := oci.NewProvider(creds, s.masterKey)
+	if err != nil {
+		return 0, fmt.Errorf("create provider: %w", err)
+	}
+	return oci.ResetMfaForAllUsers(ctx, prov, creds.Tenancy)
+}
+
 // ─── Notification Recipients ────────────────────────────────────────────
 
 // GetNotificationRecipients returns current notification emails.
@@ -166,6 +180,20 @@ func (s *TenantUserService) GetNotificationRecipients(ctx context.Context, tenan
 		return nil, fmt.Errorf("create provider: %w", err)
 	}
 	return oci.GetNotificationRecipients(ctx, prov, creds.Tenancy)
+}
+
+// UpdateNotificationRecipients replaces the notification recipient list.
+// Java reference: NotificationUtils.updateNotificationRecipients
+func (s *TenantUserService) UpdateNotificationRecipients(ctx context.Context, tenantID int64, emails []string) error {
+	creds, err := s.getProvider(ctx, tenantID)
+	if err != nil {
+		return err
+	}
+	prov, err := oci.NewProvider(creds, s.masterKey)
+	if err != nil {
+		return fmt.Errorf("create provider: %w", err)
+	}
+	return oci.UpdateNotificationRecipients(ctx, prov, creds.Tenancy, emails)
 }
 
 // ─── Tenancy Auto-fetch ─────────────────────────────────────────────────

@@ -1,5 +1,19 @@
 // Package httpapi — tenant_user.go: IAM user management, password policy,
 // MFA, notification recipients, and auto-fetch tenancy detail handlers.
+// API surface follows the Java reference (TenantController.java):
+//   - GET    /tenants/:id/users                          → tenantUsersList
+//   - POST   /tenants/:id/users                          → tenantUserCreate
+//   - DELETE /tenants/:id/users/:userOcid                → tenantUserDelete
+//   - POST   /tenants/:id/users/:userOcid/reset-password → tenantUserResetPassword
+//   - GET    /tenants/:id/groups                         → tenantGroupsList
+//   - GET    /tenants/:id/password-policy                → tenantPasswordPolicyGet
+//   - POST   /tenants/:id/password-policy                → tenantPasswordPolicyUpdate
+//   - GET    /tenants/:id/mfa/status                     → tenantMfaStatus
+//   - POST   /tenants/:id/mfa/toggle                     → tenantMfaToggle
+//   - POST   /tenants/:id/mfa/reset                      → tenantMfaReset
+//   - GET    /tenants/:id/notification-recipients        → tenantNotifRecipientsGet
+//   - POST   /tenants/:id/notification-recipients/update → tenantNotifRecipientsUpdate
+//   - POST   /tenants/:id/update-detail                  → tenantUpdateDetail
 package httpapi
 
 import (
@@ -219,6 +233,24 @@ func tenantMfaToggle(deps *Deps) gin.HandlerFunc {
 	}
 }
 
+// tenantMfaReset — POST /tenants/:id/mfa/reset
+// Java reference: POST /tenants/resetAccountFactor
+func tenantMfaReset(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "参数 id 无效")
+			return
+		}
+		count, err := deps.TenantUser.ResetMfa(c.Request.Context(), id)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "重置MFA失败: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessData(map[string]int{"deletedDevices": count}))
+	}
+}
+
 // --- Notification Recipients ---
 
 // tenantNotifRecipientsGet — GET /tenants/:id/notification-recipients
@@ -235,6 +267,35 @@ func tenantNotifRecipientsGet(deps *Deps) gin.HandlerFunc {
 			return
 		}
 		response.OK(c, response.SuccessData(recipients))
+	}
+}
+
+// tenantNotifRecipientsUpdate — POST /tenants/:id/notification-recipients/update
+// Java reference: POST /tenants/notification/update
+func tenantNotifRecipientsUpdate(deps *Deps) gin.HandlerFunc {
+	type updateReq struct {
+		Emails []string `json:"emails"`
+	}
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "参数 id 无效")
+			return
+		}
+		var req updateReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.Fail(c, http.StatusBadRequest, "请求数据无效: "+err.Error())
+			return
+		}
+		if len(req.Emails) == 0 {
+			response.Fail(c, http.StatusBadRequest, "邮箱列表不能为空")
+			return
+		}
+		if err := deps.TenantUser.UpdateNotificationRecipients(c.Request.Context(), id, req.Emails); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "更新通知邮箱失败: "+err.Error())
+			return
+		}
+		response.OK(c, response.Success())
 	}
 }
 
