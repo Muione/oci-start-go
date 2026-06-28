@@ -3,8 +3,12 @@
 package httpapi
 
 import (
+	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -243,6 +247,489 @@ func instanceModify(deps *Deps) gin.HandlerFunc {
 	}
 }
 
+// instanceStart starts a stopped OCI instance.
+// POST /instances/:id/start
+func instanceStart(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid id")
+			return
+		}
+		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "instance not found")
+			return
+		}
+		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "tenant not found")
+			return
+		}
+		creds := tenantToCreds(t)
+		prov, err := oci.NewProvider(creds, deps.MasterKey)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
+			return
+		}
+		clients, err := oci.NewClients(prov)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			return
+		}
+		if err := oci.StartInstance(c.Request.Context(), clients, inst.InstanceID); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "start instance: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessMsg("instance start request sent"))
+	}
+}
+
+// instanceStop stops a running OCI instance.
+// POST /instances/:id/stop
+func instanceStop(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid id")
+			return
+		}
+		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "instance not found")
+			return
+		}
+		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "tenant not found")
+			return
+		}
+		creds := tenantToCreds(t)
+		prov, err := oci.NewProvider(creds, deps.MasterKey)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
+			return
+		}
+		clients, err := oci.NewClients(prov)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			return
+		}
+		if err := oci.StopInstance(c.Request.Context(), clients, inst.InstanceID); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "stop instance: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessMsg("instance stop request sent"))
+	}
+}
+
+// instanceTerminate terminates an OCI instance and deletes the local record.
+// POST /instances/:id/terminate
+func instanceTerminate(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid id")
+			return
+		}
+		var body struct {
+			PreserveBootVolume bool `json:"preserveBootVolume"`
+		}
+		_ = c.ShouldBindJSON(&body) // optional
+
+		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "instance not found")
+			return
+		}
+		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "tenant not found")
+			return
+		}
+		creds := tenantToCreds(t)
+		prov, err := oci.NewProvider(creds, deps.MasterKey)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
+			return
+		}
+		clients, err := oci.NewClients(prov)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			return
+		}
+		// Terminate via OCI API (preserveBootVolume=false by default)
+		if err := oci.TerminateInstance(c.Request.Context(), clients, inst.InstanceID, body.PreserveBootVolume); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "terminate instance: "+err.Error())
+			return
+		}
+		// Delete local record
+		_ = repo.New(deps.Store.Write).DeleteInstanceDetail(c.Request.Context(), id)
+		response.OK(c, response.SuccessMsg("instance termination request sent"))
+	}
+}
+
+// instanceDeleteRecord deletes only the local instance detail record (no cloud operation).
+// DELETE /instances/:id
+func instanceDeleteRecord(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid id")
+			return
+		}
+		if err := repo.New(deps.Store.Write).DeleteInstanceDetail(c.Request.Context(), id); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "delete instance record: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessMsg("instance record deleted"))
+	}
+}
+
+// instanceChangeIP reassigns the public IP of an instance.
+// POST /instances/:id/change-ip
+func instanceChangeIP(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid id")
+			return
+		}
+		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "instance not found")
+			return
+		}
+		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "tenant not found")
+			return
+		}
+		creds := tenantToCreds(t)
+		prov, err := oci.NewProvider(creds, deps.MasterKey)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
+			return
+		}
+		clients, err := oci.NewClients(prov)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			return
+		}
+		oldIP := inst.PublicIps
+		newIP, err := oci.ReassignPublicIP(c.Request.Context(), clients, ns(t.Tenancy), inst.InstanceID)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "change ip: "+err.Error())
+			return
+		}
+		// Update local DB with new IP
+		_ = repo.New(deps.Store.Write).UpdateInstanceDetailPublicIp(c.Request.Context(), repo.UpdateInstanceDetailPublicIpParams{
+			PublicIps: sql.NullString{String: newIP, Valid: true},
+			ID:        id,
+		})
+		response.OK(c, response.SuccessData(gin.H{
+			"oldIp": oldIP,
+			"newIp": newIP,
+		}))
+	}
+}
+
+// instanceEnableIPv6 enables IPv6 on an instance's VNIC.
+// POST /instances/:id/enable-ipv6
+func instanceEnableIPv6(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid id")
+			return
+		}
+		var body struct {
+			ForceNew bool `json:"forceNew"`
+		}
+		_ = c.ShouldBindJSON(&body)
+
+		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "instance not found")
+			return
+		}
+		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "tenant not found")
+			return
+		}
+		creds := tenantToCreds(t)
+		prov, err := oci.NewProvider(creds, deps.MasterKey)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
+			return
+		}
+		clients, err := oci.NewClients(prov)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			return
+		}
+		// Get the primary VNIC
+		vnic, err := oci.GetPrimaryVnic(c.Request.Context(), clients, inst.InstanceID, ns(t.Tenancy))
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "get vnic: "+err.Error())
+			return
+		}
+		if vnic.Id == nil {
+			response.Fail(c, http.StatusInternalServerError, "vnic has no id")
+			return
+		}
+		ipv6, err := oci.AssignIpv6ToVnic(c.Request.Context(), clients.Vcn, *vnic.Id, body.ForceNew)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "enable ipv6: "+err.Error())
+			return
+		}
+		// Update local DB with new IPv6
+		_ = repo.New(deps.Store.Write).UpdateInstanceDetailIpv6(c.Request.Context(), repo.UpdateInstanceDetailIpv6Params{
+			Ipv6Addresses: sql.NullString{String: ipv6, Valid: true},
+			ID:            id,
+		})
+		response.OK(c, response.SuccessData(gin.H{
+			"ipv6Address": ipv6,
+		}))
+	}
+}
+
+// instanceExport exports all instances as a plaintext file (includes root passwords).
+// GET /instances/export?tenantId=
+func instanceExport(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		tenantIDStr := c.Query("tenantId")
+
+		// Get all tenants
+		tenants, err := repo.New(deps.Store.Read).ListTenants(ctx)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "list tenants: "+err.Error())
+			return
+		}
+		tenantMap := make(map[int64]repo.ListTenantsRow)
+		for _, t := range tenants {
+			tenantMap[t.ID] = t
+		}
+
+		// Get all instances or filter by tenant
+		var instances []repo.InstanceDetail
+		if tenantIDStr != "" {
+			tid, err := strconv.ParseInt(tenantIDStr, 10, 64)
+			if err != nil {
+				response.Fail(c, http.StatusBadRequest, "invalid tenantId")
+				return
+			}
+			rows, err := repo.New(deps.Store.Read).FindInstancesByTenantId(ctx, sql.NullInt64{Int64: tid, Valid: true})
+			if err != nil {
+				response.Fail(c, http.StatusInternalServerError, "list instances: "+err.Error())
+				return
+			}
+			for _, r := range rows {
+				instances = append(instances, repo.InstanceDetail{
+					ID:                  r.ID,
+					TenantID:            r.TenantID,
+					InstanceID:          r.InstanceID,
+					DisplayName:         r.DisplayName,
+					Shape:               r.Shape,
+					State:               r.State,
+					Ocpus:               r.Ocpus,
+					MemoryInGbs:         r.MemoryInGbs,
+					BootVolumeSizeInGbs: r.BootVolumeSizeInGbs,
+					PublicIps:           r.PublicIps,
+					PrivateIps:          r.PrivateIps,
+					AvailabilityDomain:  r.AvailabilityDomain,
+					Ipv6Addresses:       r.Ipv6Addresses,
+					Username:            r.Username,
+					Port:                r.Port,
+					Password:            r.Password,
+					Architecture:        r.Architecture,
+					VpusPerGb:           r.VpusPerGb,
+					CreateTime:          r.CreateTime,
+				})
+			}
+		} else {
+			// List all - use ListAllInstanceDetails with large limit
+			rows, err := repo.New(deps.Store.Read).ListAllInstanceDetails(ctx, repo.ListAllInstanceDetailsParams{
+				Limit:  99999,
+				Offset: 0,
+			})
+			if err != nil {
+				response.Fail(c, http.StatusInternalServerError, "list instances: "+err.Error())
+				return
+			}
+			for _, r := range rows {
+				instances = append(instances, repo.InstanceDetail{
+					ID:                  r.ID,
+					TenantID:            r.TenantID,
+					InstanceID:          r.InstanceID,
+					DisplayName:         r.DisplayName,
+					Shape:               r.Shape,
+					State:               r.State,
+					Ocpus:               r.Ocpus,
+					MemoryInGbs:         r.MemoryInGbs,
+					BootVolumeSizeInGbs: r.BootVolumeSizeInGbs,
+					PublicIps:           r.PublicIps,
+					PrivateIps:          r.PrivateIps,
+					AvailabilityDomain:  r.AvailabilityDomain,
+					Ipv6Addresses:       r.Ipv6Addresses,
+					Username:            r.Username,
+					Port:                r.Port,
+					Password:            r.Password,
+					Architecture:        r.Architecture,
+					VpusPerGb:           r.VpusPerGb,
+					CreateTime:          r.CreateTime,
+				})
+			}
+		}
+
+		// Build plaintext export
+		var sb strings.Builder
+		sb.WriteString("# OCI Instance Export\n")
+		sb.WriteString(fmt.Sprintf("# Export Time: %s\n", time.Now().Format("2006-01-02 15:04:05")))
+		sb.WriteString(fmt.Sprintf("# Total Instances: %d\n\n", len(instances)))
+
+		// Group by tenant
+		grouped := make(map[int64][]repo.InstanceDetail)
+		for _, inst := range instances {
+			tid := ni(inst.TenantID)
+			grouped[tid] = append(grouped[tid], inst)
+		}
+
+		tIdx := 1
+		for tid, insts := range grouped {
+			t := tenantMap[tid]
+			sb.WriteString("================================================================\n")
+			sb.WriteString(fmt.Sprintf("Tenant #%d: %s", tIdx, ns(t.TenancyName)))
+			if ns(t.UserName) != "" {
+				sb.WriteString(fmt.Sprintf(" / User: %s", ns(t.UserName)))
+			}
+			if ns(t.Region) != "" {
+				sb.WriteString(fmt.Sprintf(" / Region: %s", ns(t.Region)))
+			}
+			sb.WriteString(fmt.Sprintf(" (Total: %d)\n", len(insts)))
+			sb.WriteString("================================================================\n")
+			tIdx++
+
+			iIdx := 1
+			for _, inst := range insts {
+				sb.WriteString(fmt.Sprintf("\n[%d] %s\n", iIdx, dash(ns(inst.DisplayName))))
+				if ns(inst.Remark) != "" {
+					sb.WriteString(fmt.Sprintf("  Remark:     %s\n", ns(inst.Remark)))
+				}
+				sb.WriteString(fmt.Sprintf("  State:      %s\n", dash(ns(inst.State))))
+				sb.WriteString(fmt.Sprintf("  Arch:       %s\n", dash(ns(inst.Architecture))))
+				sb.WriteString(fmt.Sprintf("  CPU/MEM:    %dC/%dG\n", ni(inst.Ocpus), ni(inst.MemoryInGbs)))
+				sb.WriteString(fmt.Sprintf("  Disk/VPU:   %dGB / %s\n", ni(inst.BootVolumeSizeInGbs), dash(ns(inst.VpusPerGb))))
+				sb.WriteString(fmt.Sprintf("  IPv4:       %s\n", dash(ns(inst.PublicIps))))
+				sb.WriteString(fmt.Sprintf("  Private:    %s\n", dash(ns(inst.PrivateIps))))
+				if ns(inst.Ipv6Addresses) != "" {
+					sb.WriteString(fmt.Sprintf("  IPv6:       %s\n", ns(inst.Ipv6Addresses)))
+				}
+				sb.WriteString(fmt.Sprintf("  AD:         %s\n", dash(ns(inst.AvailabilityDomain))))
+				usr := ns(inst.Username)
+				if usr == "" {
+					usr = "root"
+				}
+				sb.WriteString(fmt.Sprintf("  SSH User:   %s\n", usr))
+				port := ni(inst.Port)
+				if port == 0 {
+					port = 22
+				}
+				sb.WriteString(fmt.Sprintf("  SSH Port:   %d\n", port))
+				sb.WriteString(fmt.Sprintf("  Root Pass:  %s\n", dash(ns(inst.Password))))
+				if ns(inst.CreateTime) != "" {
+					sb.WriteString(fmt.Sprintf("  Created:    %s\n", ns(inst.CreateTime)))
+				}
+				iIdx++
+			}
+			sb.WriteString("\n")
+		}
+
+		filename := fmt.Sprintf("oci-instances-%s.txt", time.Now().Format("20060102-150405"))
+		c.Header("Content-Type", "text/plain; charset=utf-8")
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+		c.String(http.StatusOK, sb.String())
+	}
+}
+
+// instanceSaveSSHConfig saves SSH connection configuration for an instance.
+// POST /instances/:id/ssh-config  {username: "...", port: 22, password: "..."}
+func instanceSaveSSHConfig(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid id")
+			return
+		}
+		var body struct {
+			Username string `json:"username"`
+			Port     int64  `json:"port"`
+			Password string `json:"password"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid body")
+			return
+		}
+		if body.Username == "" {
+			response.Fail(c, http.StatusBadRequest, "username required")
+			return
+		}
+		if body.Port < 1 || body.Port > 65535 {
+			response.Fail(c, http.StatusBadRequest, "port must be 1-65535")
+			return
+		}
+		if err := repo.New(deps.Store.Write).UpdateInstanceSSHConfig(c.Request.Context(), repo.UpdateInstanceSSHConfigParams{
+			Username: sql.NullString{String: body.Username, Valid: true},
+			Port:     sql.NullInt64{Int64: body.Port, Valid: true},
+			Password: sql.NullString{String: body.Password, Valid: true},
+			ID:       id,
+		}); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "save ssh config: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessMsg("SSH config saved"))
+	}
+}
+
+// instanceGetSSHConfig returns SSH connection configuration for an instance.
+// GET /instances/:id/ssh-config
+func instanceGetSSHConfig(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid id")
+			return
+		}
+		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "instance not found")
+			return
+		}
+		// Need full detail for SSH fields - query directly
+		detail, err := repo.New(deps.Store.Read).FindInstanceDetailByID(c.Request.Context(), id)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "instance not found")
+			return
+		}
+		username := ns(detail.Username)
+		if username == "" {
+			username = "root"
+		}
+		port := ni(detail.Port)
+		if port == 0 {
+			port = 22
+		}
+		response.OK(c, response.SuccessData(gin.H{
+			"instanceId": inst.InstanceID,
+			"username":   username,
+			"port":       port,
+			"publicIp":   inst.PublicIps,
+		}))
+	}
+}
+
 // tenantToCreds converts a repo.Tenant to oci.Credentials (used by instanceModify).
 func tenantToCreds(t repo.Tenant) oci.Credentials {
 	return oci.Credentials{
@@ -253,4 +740,12 @@ func tenantToCreds(t repo.Tenant) oci.Credentials {
 		KeyFileBlob: ns(t.KeyFileBlob),
 		KeyFile:     ns(t.KeyFile),
 	}
+}
+
+// dash returns s if non-blank, otherwise "-".
+func dash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }

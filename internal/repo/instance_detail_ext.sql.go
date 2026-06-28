@@ -30,6 +30,15 @@ func (q *Queries) DeleteInstanceBackupDetail(ctx context.Context, id int64) erro
 	return err
 }
 
+const deleteInstanceDetail = `-- name: DeleteInstanceDetail :exec
+DELETE FROM instance_detail WHERE id = ?
+`
+
+func (q *Queries) DeleteInstanceDetail(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteInstanceDetail, id)
+	return err
+}
+
 const deleteInstanceTrafficByTenantId = `-- name: DeleteInstanceTrafficByTenantId :exec
 DELETE FROM instance_traffic WHERE tenant_id = ?
 `
@@ -699,6 +708,34 @@ func (q *Queries) UpdateInstanceConnTime(ctx context.Context, arg UpdateInstance
 	return err
 }
 
+const updateInstanceDetailIpv6 = `-- name: UpdateInstanceDetailIpv6 :exec
+UPDATE instance_detail SET ipv6_addresses = ? WHERE id = ?
+`
+
+type UpdateInstanceDetailIpv6Params struct {
+	Ipv6Addresses sql.NullString `json:"ipv6_addresses"`
+	ID            int64          `json:"id"`
+}
+
+func (q *Queries) UpdateInstanceDetailIpv6(ctx context.Context, arg UpdateInstanceDetailIpv6Params) error {
+	_, err := q.db.ExecContext(ctx, updateInstanceDetailIpv6, arg.Ipv6Addresses, arg.ID)
+	return err
+}
+
+const updateInstanceDetailPublicIp = `-- name: UpdateInstanceDetailPublicIp :exec
+UPDATE instance_detail SET public_ips = ? WHERE id = ?
+`
+
+type UpdateInstanceDetailPublicIpParams struct {
+	PublicIps sql.NullString `json:"public_ips"`
+	ID        int64          `json:"id"`
+}
+
+func (q *Queries) UpdateInstanceDetailPublicIp(ctx context.Context, arg UpdateInstanceDetailPublicIpParams) error {
+	_, err := q.db.ExecContext(ctx, updateInstanceDetailPublicIp, arg.PublicIps, arg.ID)
+	return err
+}
+
 const updateInstanceDetailRemark = `-- name: UpdateInstanceDetailRemark :exec
 UPDATE instance_detail SET remark = ? WHERE id = ?
 `
@@ -734,6 +771,27 @@ UPDATE instance_detail SET resume_notify = 0, on_line_enable = 1 WHERE id = ?
 
 func (q *Queries) UpdateInstanceResumeNotify(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, updateInstanceResumeNotify, id)
+	return err
+}
+
+const updateInstanceSSHConfig = `-- name: UpdateInstanceSSHConfig :exec
+UPDATE instance_detail SET username = ?, port = ?, password = ? WHERE id = ?
+`
+
+type UpdateInstanceSSHConfigParams struct {
+	Username sql.NullString `json:"username"`
+	Port     sql.NullInt64  `json:"port"`
+	Password sql.NullString `json:"password"`
+	ID       int64          `json:"id"`
+}
+
+func (q *Queries) UpdateInstanceSSHConfig(ctx context.Context, arg UpdateInstanceSSHConfigParams) error {
+	_, err := q.db.ExecContext(ctx, updateInstanceSSHConfig,
+		arg.Username,
+		arg.Port,
+		arg.Password,
+		arg.ID,
+	)
 	return err
 }
 

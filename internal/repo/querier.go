@@ -18,6 +18,7 @@ type Querier interface {
 	CountTotalTasks(ctx context.Context) (int64, error)
 	DeleteComputerInfo(ctx context.Context, bootIDStr sql.NullString) error
 	DeleteInstanceBackupDetail(ctx context.Context, id int64) error
+	DeleteInstanceDetail(ctx context.Context, id int64) error
 	// instance_detail queries (Phase 3 instance sync). Sync is delete-by-tenant
 	// then insert-all (parity with Java syncOci: deleteByTenantId then saveAll).
 	DeleteInstanceDetailsByTenantId(ctx context.Context, tenantID sql.NullInt64) error
@@ -104,9 +105,12 @@ type Querier interface {
 	UpdateBootInstanceStatus(ctx context.Context, arg UpdateBootInstanceStatusParams) error
 	UpdateComputerInfo(ctx context.Context, arg UpdateComputerInfoParams) error
 	UpdateInstanceConnTime(ctx context.Context, arg UpdateInstanceConnTimeParams) error
+	UpdateInstanceDetailIpv6(ctx context.Context, arg UpdateInstanceDetailIpv6Params) error
+	UpdateInstanceDetailPublicIp(ctx context.Context, arg UpdateInstanceDetailPublicIpParams) error
 	UpdateInstanceDetailRemark(ctx context.Context, arg UpdateInstanceDetailRemarkParams) error
 	UpdateInstanceOffline(ctx context.Context, arg UpdateInstanceOfflineParams) error
 	UpdateInstanceResumeNotify(ctx context.Context, id int64) error
+	UpdateInstanceSSHConfig(ctx context.Context, arg UpdateInstanceSSHConfigParams) error
 	UpdateLastLoginAt(ctx context.Context, arg UpdateLastLoginAtParams) error
 	UpdateLockSuccess(ctx context.Context, arg UpdateLockSuccessParams) error
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) error

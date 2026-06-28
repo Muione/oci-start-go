@@ -299,3 +299,425 @@ func systemConfigSave(deps *Deps) gin.HandlerFunc {
 		response.OK(c, response.SuccessData(gin.H{"key": in.Key, "saved": true}))
 	}
 }
+
+// cloudflareZones returns all Cloudflare zones.
+// GET /dns/cloudflare/zones
+func cloudflareZones(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		cfEmail := deps.SysConf.GetString(ctx, "cloudflare.email")
+		cfKey := deps.SysConf.GetString(ctx, "cloudflare.api.key")
+		if cfEmail == "" || cfKey == "" {
+			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured")
+			return
+		}
+		client := dns.NewCfClient(cfEmail, cfKey)
+		zones, err := client.ListZones(ctx)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "list zones: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessData(zones))
+	}
+}
+
+// cloudflareRecords returns paginated DNS records for a Cloudflare zone.
+// GET /dns/cloudflare/zones/:zoneId/records?page=1&perPage=20&type=&name=&content=
+func cloudflareRecords(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		zoneID := c.Param("zoneId")
+		if zoneID == "" {
+			response.Fail(c, http.StatusBadRequest, "zoneId required")
+			return
+		}
+		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+		perPage, _ := strconv.Atoi(c.DefaultQuery("perPage", "20"))
+		recordType := c.Query("type")
+		name := c.Query("name")
+		content := c.Query("content")
+
+		ctx := c.Request.Context()
+		cfEmail := deps.SysConf.GetString(ctx, "cloudflare.email")
+		cfKey := deps.SysConf.GetString(ctx, "cloudflare.api.key")
+		if cfEmail == "" || cfKey == "" {
+			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured")
+			return
+		}
+		client := dns.NewCfClient(cfEmail, cfKey)
+		records, resp, err := client.ListDnsRecordsPage(ctx, zoneID, page, perPage, recordType, name, content)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "list records: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessData(gin.H{
+			"records":    records,
+			"page":       resp.ResultInfo.Page,
+			"perPage":    resp.ResultInfo.PerPage,
+			"totalPages": resp.ResultInfo.TotalPages,
+			"totalCount": resp.ResultInfo.TotalCount,
+		}))
+	}
+}
+
+// cloudflareCreateRecord creates a DNS record in Cloudflare.
+// POST /dns/cloudflare/zones/:zoneId/records
+func cloudflareCreateRecord(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		zoneID := c.Param("zoneId")
+		if zoneID == "" {
+			response.Fail(c, http.StatusBadRequest, "zoneId required")
+			return
+		}
+		var body struct {
+			Type    string `json:"type"`
+			Name    string `json:"name"`
+			Content string `json:"content"`
+			TTL     int    `json:"ttl"`
+			Proxied bool   `json:"proxied"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid body")
+			return
+		}
+		if body.Type == "" || body.Name == "" || body.Content == "" {
+			response.Fail(c, http.StatusBadRequest, "type, name, content are required")
+			return
+		}
+
+		ctx := c.Request.Context()
+		cfEmail := deps.SysConf.GetString(ctx, "cloudflare.email")
+		cfKey := deps.SysConf.GetString(ctx, "cloudflare.api.key")
+		if cfEmail == "" || cfKey == "" {
+			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured")
+			return
+		}
+		client := dns.NewCfClient(cfEmail, cfKey)
+		record, err := client.CreateDnsRecord(ctx, zoneID, dns.DnsRecord{
+			Type:    body.Type,
+			Name:    body.Name,
+			Content: body.Content,
+			TTL:     body.TTL,
+			Proxied: body.Proxied,
+		})
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "create record: "+err.Error())
+			return
+		}
+		// Save locally too
+		if deps.DnsSvc != nil {
+			_ = deps.DnsSvc.Save(ctx, dns.DnsRecordResp{
+				Provider:    "cloudflare",
+				Domain:      "",
+				RecordName:  record.Name,
+				RecordType:  record.Type,
+				RecordValue: record.Content,
+				TTL:         int64(record.TTL),
+				Proxied:     record.Proxied,
+				Status:      "active",
+				ZoneID:      zoneID,
+			})
+		}
+		response.OK(c, response.SuccessData(record))
+	}
+}
+
+// cloudflareUpdateRecord updates a DNS record in Cloudflare.
+// PUT /dns/cloudflare/zones/:zoneId/records/:recordId
+func cloudflareUpdateRecord(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		zoneID := c.Param("zoneId")
+		recordID := c.Param("recordId")
+		if zoneID == "" || recordID == "" {
+			response.Fail(c, http.StatusBadRequest, "zoneId and recordId required")
+			return
+		}
+		var body struct {
+			Type    string `json:"type"`
+			Name    string `json:"name"`
+			Content string `json:"content"`
+			TTL     int    `json:"ttl"`
+			Proxied bool   `json:"proxied"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid body")
+			return
+		}
+		if body.Content == "" {
+			response.Fail(c, http.StatusBadRequest, "content required")
+			return
+		}
+
+		ctx := c.Request.Context()
+		cfEmail := deps.SysConf.GetString(ctx, "cloudflare.email")
+		cfKey := deps.SysConf.GetString(ctx, "cloudflare.api.key")
+		if cfEmail == "" || cfKey == "" {
+			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured")
+			return
+		}
+		client := dns.NewCfClient(cfEmail, cfKey)
+		record, err := client.UpdateDnsRecord(ctx, zoneID, recordID, dns.DnsRecord{
+			Type:    body.Type,
+			Name:    body.Name,
+			Content: body.Content,
+			TTL:     body.TTL,
+			Proxied: body.Proxied,
+		})
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "update record: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessData(record))
+	}
+}
+
+// cloudflareDeleteRecord deletes a DNS record from Cloudflare.
+// DELETE /dns/cloudflare/zones/:zoneId/records/:recordId
+func cloudflareDeleteRecord(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		zoneID := c.Param("zoneId")
+		recordID := c.Param("recordId")
+		if zoneID == "" || recordID == "" {
+			response.Fail(c, http.StatusBadRequest, "zoneId and recordId required")
+			return
+		}
+		ctx := c.Request.Context()
+		cfEmail := deps.SysConf.GetString(ctx, "cloudflare.email")
+		cfKey := deps.SysConf.GetString(ctx, "cloudflare.api.key")
+		if cfEmail == "" || cfKey == "" {
+			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured")
+			return
+		}
+		client := dns.NewCfClient(cfEmail, cfKey)
+		if err := client.DeleteDnsRecord(ctx, zoneID, recordID); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "delete record: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessMsg("DNS record deleted"))
+	}
+}
+
+// cloudflareSyncZone syncs DNS records from Cloudflare to local DB with full reconciliation.
+// POST /dns/cloudflare/zones/:zoneId/sync  {domainName: "..."}
+func cloudflareSyncZone(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		zoneID := c.Param("zoneId")
+		if zoneID == "" {
+			response.Fail(c, http.StatusBadRequest, "zoneId required")
+			return
+		}
+		var body struct {
+			DomainName string `json:"domainName"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		if body.DomainName == "" {
+			response.Fail(c, http.StatusBadRequest, "domainName required")
+			return
+		}
+
+		if deps.DnsSvc == nil {
+			response.Fail(c, http.StatusServiceUnavailable, "DNS service not available")
+			return
+		}
+		ctx := c.Request.Context()
+		cfEmail := deps.SysConf.GetString(ctx, "cloudflare.email")
+		cfKey := deps.SysConf.GetString(ctx, "cloudflare.api.key")
+		if cfEmail == "" || cfKey == "" {
+			response.Fail(c, http.StatusBadRequest, "Cloudflare not configured")
+			return
+		}
+		client := dns.NewCfClient(cfEmail, cfKey)
+		count, err := deps.DnsSvc.SyncFromCloudflareFull(ctx, client, zoneID, body.DomainName)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "sync failed: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessData(gin.H{
+			"synced": count,
+			"zoneId": zoneID,
+		}))
+	}
+}
+
+// edgeoneZones returns EdgeOne zone info.
+// GET /dns/edgeone/zones
+func edgeoneZones(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		secretID := deps.SysConf.GetString(ctx, "edgeone.secretId")
+		secretKey := deps.SysConf.GetString(ctx, "edgeone.secretKey")
+		zoneID := deps.SysConf.GetString(ctx, "edgeone.zoneId")
+		if secretID == "" || secretKey == "" {
+			response.Fail(c, http.StatusBadRequest, "EdgeOne not configured")
+			return
+		}
+		// EdgeOne uses a single zone from config; return it
+		response.OK(c, response.SuccessData([]gin.H{
+			{"id": zoneID, "name": zoneID, "status": "active"},
+		}))
+	}
+}
+
+// edgeoneRecords returns DNS records from EdgeOne.
+// GET /dns/edgeone/records
+func edgeoneRecords(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		secretID := deps.SysConf.GetString(ctx, "edgeone.secretId")
+		secretKey := deps.SysConf.GetString(ctx, "edgeone.secretKey")
+		zoneID := deps.SysConf.GetString(ctx, "edgeone.zoneId")
+		if secretID == "" || secretKey == "" {
+			response.Fail(c, http.StatusBadRequest, "EdgeOne not configured")
+			return
+		}
+		client := dns.NewEdgeOneClient(secretID, secretKey, zoneID, deps.Logger)
+		records, err := client.ListRecords()
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "list edgeone records: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessData(records))
+	}
+}
+
+// edgeoneCreateRecord creates a DNS record in EdgeOne.
+// POST /dns/edgeone/records
+func edgeoneCreateRecord(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			Type     string `json:"type"`
+			Name     string `json:"name"`
+			Content  string `json:"content"`
+			TTL      int    `json:"ttl"`
+			Priority int    `json:"priority"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid body")
+			return
+		}
+		if body.Type == "" || body.Name == "" || body.Content == "" {
+			response.Fail(c, http.StatusBadRequest, "type, name, content required")
+			return
+		}
+
+		ctx := c.Request.Context()
+		secretID := deps.SysConf.GetString(ctx, "edgeone.secretId")
+		secretKey := deps.SysConf.GetString(ctx, "edgeone.secretKey")
+		zoneID := deps.SysConf.GetString(ctx, "edgeone.zoneId")
+		if secretID == "" || secretKey == "" {
+			response.Fail(c, http.StatusBadRequest, "EdgeOne not configured")
+			return
+		}
+		client := dns.NewEdgeOneClient(secretID, secretKey, zoneID, deps.Logger)
+		record, err := client.CreateRecord(body.Name, body.Type, body.Content, body.TTL, body.Priority)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "create edgeone record: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessData(record))
+	}
+}
+
+// edgeoneUpdateRecord updates a DNS record in EdgeOne.
+// PUT /dns/edgeone/records/:recordId
+func edgeoneUpdateRecord(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		recordID := c.Param("recordId")
+		if recordID == "" {
+			response.Fail(c, http.StatusBadRequest, "recordId required")
+			return
+		}
+		var body struct {
+			Type     string `json:"type"`
+			Name     string `json:"name"`
+			Content  string `json:"content"`
+			TTL      int    `json:"ttl"`
+			Priority int    `json:"priority"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid body")
+			return
+		}
+		if body.Content == "" {
+			response.Fail(c, http.StatusBadRequest, "content required")
+			return
+		}
+
+		ctx := c.Request.Context()
+		secretID := deps.SysConf.GetString(ctx, "edgeone.secretId")
+		secretKey := deps.SysConf.GetString(ctx, "edgeone.secretKey")
+		zoneID := deps.SysConf.GetString(ctx, "edgeone.zoneId")
+		if secretID == "" || secretKey == "" {
+			response.Fail(c, http.StatusBadRequest, "EdgeOne not configured")
+			return
+		}
+		client := dns.NewEdgeOneClient(secretID, secretKey, zoneID, deps.Logger)
+		if err := client.UpdateRecord(recordID, body.Name, body.Type, body.Content, body.TTL, body.Priority); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "update edgeone record: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessMsg("record updated"))
+	}
+}
+
+// edgeoneDeleteRecord deletes a DNS record from EdgeOne.
+// DELETE /dns/edgeone/records/:recordId
+func edgeoneDeleteRecord(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		recordID := c.Param("recordId")
+		if recordID == "" {
+			response.Fail(c, http.StatusBadRequest, "recordId required")
+			return
+		}
+		ctx := c.Request.Context()
+		secretID := deps.SysConf.GetString(ctx, "edgeone.secretId")
+		secretKey := deps.SysConf.GetString(ctx, "edgeone.secretKey")
+		zoneID := deps.SysConf.GetString(ctx, "edgeone.zoneId")
+		if secretID == "" || secretKey == "" {
+			response.Fail(c, http.StatusBadRequest, "EdgeOne not configured")
+			return
+		}
+		client := dns.NewEdgeOneClient(secretID, secretKey, zoneID, deps.Logger)
+		if err := client.DeleteRecord(recordID); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "delete edgeone record: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessMsg("record deleted"))
+	}
+}
+
+// edgeoneSync syncs DNS records from EdgeOne to local DB.
+// POST /dns/edgeone/sync  {domainName: "..."}
+func edgeoneSync(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			DomainName string `json:"domainName"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		if body.DomainName == "" {
+			response.Fail(c, http.StatusBadRequest, "domainName required")
+			return
+		}
+		if deps.DnsSvc == nil {
+			response.Fail(c, http.StatusServiceUnavailable, "DNS service not available")
+			return
+		}
+		ctx := c.Request.Context()
+		secretID := deps.SysConf.GetString(ctx, "edgeone.secretId")
+		secretKey := deps.SysConf.GetString(ctx, "edgeone.secretKey")
+		zoneID := deps.SysConf.GetString(ctx, "edgeone.zoneId")
+		if secretID == "" || secretKey == "" {
+			response.Fail(c, http.StatusBadRequest, "EdgeOne not configured")
+			return
+		}
+		client := dns.NewEdgeOneClient(secretID, secretKey, zoneID, deps.Logger)
+		count, err := deps.DnsSvc.SyncFromEdgeOne(ctx, client, body.DomainName)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "sync edgeone: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessData(gin.H{
+			"synced": count,
+			"zoneId": zoneID,
+		}))
+	}
+}

@@ -114,5 +114,17 @@ INSERT INTO instance_traffic (
     region, threshold, auto_shutdown, cloud_type, alert_sent, created_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
+-- name: DeleteInstanceDetail :exec
+DELETE FROM instance_detail WHERE id = ?;
+
+-- name: UpdateInstanceDetailPublicIp :exec
+UPDATE instance_detail SET public_ips = ? WHERE id = ?;
+
+-- name: UpdateInstanceDetailIpv6 :exec
+UPDATE instance_detail SET ipv6_addresses = ? WHERE id = ?;
+
+-- name: UpdateInstanceSSHConfig :exec
+UPDATE instance_detail SET username = ?, port = ?, password = ? WHERE id = ?;
+
 -- name: DeleteInstanceTrafficByTenantId :exec
 DELETE FROM instance_traffic WHERE tenant_id = ?;

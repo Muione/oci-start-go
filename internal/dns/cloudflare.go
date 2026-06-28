@@ -64,6 +64,22 @@ type DnsRecord struct {
 	Priority int    `json:"priority"`
 }
 
+// CfListRecordsResponse is the Cloudflare API response for listing DNS records
+// with pagination info.
+type CfListRecordsResponse struct {
+	Success  bool        `json:"success"`
+	Errors   []CfError   `json:"errors"`
+	Messages []string    `json:"messages"`
+	Result   []DnsRecord `json:"result"`
+	ResultInfo struct {
+		Page       int `json:"page"`
+		PerPage    int `json:"per_page"`
+		TotalPages int `json:"total_pages"`
+		Count      int `json:"count"`
+		TotalCount int `json:"total_count"`
+	} `json:"result_info"`
+}
+
 func (c *CfClient) do(ctx context.Context, method, path string, body any) (*CfResponse, error) {
 	var reqBody io.Reader
 	if body != nil {
@@ -133,6 +149,47 @@ func (c *CfClient) ListDnsRecords(ctx context.Context, zoneID, recordType, name 
 		return nil, fmt.Errorf("unmarshal records: %w", err)
 	}
 	return records, nil
+}
+
+// ListDnsRecordsPage returns paginated DNS records for a zone.
+func (c *CfClient) ListDnsRecordsPage(ctx context.Context, zoneID string, page, perPage int, recordType, name, content string) ([]DnsRecord, *CfListRecordsResponse, error) {
+	path := fmt.Sprintf("/zones/%s/dns_records?page=%d&per_page=%d", zoneID, page, perPage)
+	if recordType != "" {
+		path += "&type=" + recordType
+	}
+	if name != "" {
+		path += "&name=" + name
+	}
+	if content != "" {
+		path += "&content=" + content
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Header.Set("X-Auth-Email", c.Email)
+	req.Header.Set("X-Auth-Key", c.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.Client.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cf request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var cfResp CfListRecordsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cfResp); err != nil {
+		return nil, nil, fmt.Errorf("cf decode: %w", err)
+	}
+	if !cfResp.Success {
+		errMsgs := ""
+		for _, e := range cfResp.Errors {
+			errMsgs += fmt.Sprintf("[%d] %s; ", e.Code, e.Message)
+		}
+		return nil, &cfResp, fmt.Errorf("cf error: %s", errMsgs)
+	}
+	return cfResp.Result, &cfResp, nil
 }
 
 // CreateDnsRecord creates a new DNS record.

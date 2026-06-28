@@ -96,3 +96,61 @@ func ListAllVnicsForInstance(ctx context.Context, computeClient *core.ComputeCli
 	}
 	return out, nil
 }
+
+// AssignIpv6ToVnic assigns an IPv6 address to a VNIC. If forceNew is true, it
+// unassigns all existing IPv6 addresses first. Returns the new/current IPv6 address.
+// Port of OciIpv6Utils.enableOrRefreshVnicIpv6.
+func AssignIpv6ToVnic(ctx context.Context, vcnClient *core.VirtualNetworkClient, vnicID string, forceNew bool) (string, error) {
+	if forceNew {
+		// List and detach existing IPv6 addresses from the VNIC
+		var page *string
+		for {
+			resp, err := vcnClient.ListIpv6s(ctx, core.ListIpv6sRequest{
+				VnicId: common.String(vnicID),
+				Page:   page,
+			})
+			if err != nil {
+				return "", fmt.Errorf("list ipv6s for vnic %s: %w", vnicID, err)
+			}
+			for _, ipv6 := range resp.Items {
+				if ipv6.Id != nil {
+					_, err := vcnClient.Ipv6VnicDetach(ctx, core.Ipv6VnicDetachRequest{
+						Ipv6Id: ipv6.Id,
+					})
+					if err != nil {
+						// Non-fatal per-address error
+						continue
+					}
+				}
+			}
+			if resp.OpcNextPage == nil {
+				break
+			}
+			page = resp.OpcNextPage
+		}
+	}
+
+	// Assign a new IPv6
+	resp, err := vcnClient.CreateIpv6(ctx, core.CreateIpv6Request{
+		CreateIpv6Details: core.CreateIpv6Details{
+			VnicId: common.String(vnicID),
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("assign ipv6 to vnic %s: %w", vnicID, err)
+	}
+	if resp.IpAddress != nil {
+		return *resp.IpAddress, nil
+	}
+	// Fallback: list to find assigned IPv6
+	listResp, err := vcnClient.ListIpv6s(ctx, core.ListIpv6sRequest{
+		VnicId: common.String(vnicID),
+	})
+	if err != nil {
+		return "", fmt.Errorf("list ipv6s after assign: %w", err)
+	}
+	if len(listResp.Items) > 0 && listResp.Items[0].IpAddress != nil {
+		return *listResp.Items[0].IpAddress, nil
+	}
+	return "", fmt.Errorf("no ipv6 address assigned")
+}

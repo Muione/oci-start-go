@@ -58,3 +58,99 @@ func ListVcns(ctx context.Context, c Clients, compartmentID string) ([]core.Vcn,
 	}
 	return resp.Items, nil
 }
+
+// ReassignPublicIP assigns a new ephemeral public IP to an instance by deleting
+// the old reserved public IP and creating a new one on the primary VNIC's private IP.
+// Returns the new public IP address. Port of OracleInstanceServiceImpl.changePublicIp.
+func ReassignPublicIP(ctx context.Context, c Clients, compartmentID, instanceID string) (string, error) {
+	// 1. Get the primary VNIC
+	vnic, err := GetPrimaryVnic(ctx, c, instanceID, compartmentID)
+	if err != nil {
+		return "", fmt.Errorf("get primary vnic: %w", err)
+	}
+
+	oldPublicIP := ""
+	if vnic.PublicIp != nil {
+		oldPublicIP = *vnic.PublicIp
+	}
+
+	// 2. Find and delete the old reserved public IP
+	if oldPublicIP != "" {
+		var page *string
+		for {
+			resp, err := c.Vcn.ListPublicIps(ctx, core.ListPublicIpsRequest{
+				CompartmentId: common.String(compartmentID),
+				Scope:         core.ListPublicIpsScopeRegion,
+				Page:          page,
+			})
+			if err != nil {
+				return "", fmt.Errorf("list public ips: %w", err)
+			}
+			for _, ip := range resp.Items {
+				if ip.IpAddress != nil && *ip.IpAddress == oldPublicIP {
+					_, err := c.Vcn.DeletePublicIp(ctx, core.DeletePublicIpRequest{
+						PublicIpId: ip.Id,
+					})
+					if err != nil {
+						return "", fmt.Errorf("delete old public ip %s: %w", oldPublicIP, err)
+					}
+					break
+				}
+			}
+			if resp.OpcNextPage == nil {
+				break
+			}
+			page = resp.OpcNextPage
+		}
+	}
+
+	// 3. Get the private IP ID
+	if vnic.PrivateIp == nil || *vnic.PrivateIp == "" {
+		return "", fmt.Errorf("vnic has no private ip")
+	}
+	privateIP := *vnic.PrivateIp
+
+	// Find the private IP OCID
+	var privateIPID string
+	{
+		var page *string
+		for {
+			resp, err := c.Vcn.ListPrivateIps(ctx, core.ListPrivateIpsRequest{
+				VnicId: vnic.Id,
+				Page:   page,
+			})
+			if err != nil {
+				return "", fmt.Errorf("list private ips: %w", err)
+			}
+			for _, pip := range resp.Items {
+				if pip.IpAddress != nil && *pip.IpAddress == privateIP {
+					privateIPID = *pip.Id
+					break
+				}
+			}
+			if privateIPID != "" || resp.OpcNextPage == nil {
+				break
+			}
+			page = resp.OpcNextPage
+		}
+	}
+	if privateIPID == "" {
+		return "", fmt.Errorf("private ip ocid not found for %s", privateIP)
+	}
+
+	// 4. Create a new reserved public IP
+	createResp, err := c.Vcn.CreatePublicIp(ctx, core.CreatePublicIpRequest{
+		CreatePublicIpDetails: core.CreatePublicIpDetails{
+			CompartmentId: common.String(compartmentID),
+			Lifetime:      core.CreatePublicIpDetailsLifetimeReserved,
+			PrivateIpId:   common.String(privateIPID),
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("create public ip: %w", err)
+	}
+	if createResp.PublicIp.IpAddress == nil {
+		return "", fmt.Errorf("created public ip has nil address")
+	}
+	return *createResp.PublicIp.IpAddress, nil
+}

@@ -67,10 +67,19 @@ func NewServer(deps *Deps) *gin.Engine {
 
 	// Phase 5: instance details + traffic + backups.
 	pro.GET("/instances/list", instanceList(deps))
+	pro.GET("/instances/export", instanceExport(deps))
+	pro.GET("/instances/traffic", instanceTraffic(deps))
 	pro.GET("/instances/:id", instanceGet(deps))
 	pro.POST("/instances/:id/remark", instanceUpdateRemark(deps))
 	pro.POST("/instances/:id/modify", instanceModify(deps))
-	pro.GET("/instances/traffic", instanceTraffic(deps))
+	pro.POST("/instances/:id/start", instanceStart(deps))
+	pro.POST("/instances/:id/stop", instanceStop(deps))
+	pro.POST("/instances/:id/terminate", instanceTerminate(deps))
+	pro.DELETE("/instances/:id", instanceDeleteRecord(deps))
+	pro.POST("/instances/:id/change-ip", instanceChangeIP(deps))
+	pro.POST("/instances/:id/enable-ipv6", instanceEnableIPv6(deps))
+	pro.GET("/instances/:id/ssh-config", instanceGetSSHConfig(deps))
+	pro.POST("/instances/:id/ssh-config", instanceSaveSSHConfig(deps))
 	pro.GET("/backup/list", backupList(deps))
 	pro.GET("/backup/delete", backupDelete(deps))
 	pro.POST("/boot-instance/gcp/launch", gcpBootLaunch(deps))
@@ -101,6 +110,22 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.GET("/ssl/list", sslList(deps))
 	pro.POST("/ssl/issue", sslIssue(deps))
 	pro.GET("/system/config", systemConfigGet(deps))
+
+	// Cloudflare DNS management (Phase 7).
+	pro.GET("/dns/cloudflare/zones", cloudflareZones(deps))
+	pro.GET("/dns/cloudflare/zones/:zoneId/records", cloudflareRecords(deps))
+	pro.POST("/dns/cloudflare/zones/:zoneId/records", cloudflareCreateRecord(deps))
+	pro.PUT("/dns/cloudflare/zones/:zoneId/records/:recordId", cloudflareUpdateRecord(deps))
+	pro.DELETE("/dns/cloudflare/zones/:zoneId/records/:recordId", cloudflareDeleteRecord(deps))
+	pro.POST("/dns/cloudflare/zones/:zoneId/sync", cloudflareSyncZone(deps))
+
+	// EdgeOne DNS management (Phase 7/8).
+	pro.GET("/dns/edgeone/zones", edgeoneZones(deps))
+	pro.GET("/dns/edgeone/records", edgeoneRecords(deps))
+	pro.POST("/dns/edgeone/records", edgeoneCreateRecord(deps))
+	pro.PUT("/dns/edgeone/records/:recordId", edgeoneUpdateRecord(deps))
+	pro.DELETE("/dns/edgeone/records/:recordId", edgeoneDeleteRecord(deps))
+	pro.POST("/dns/edgeone/sync", edgeoneSync(deps))
 
 	// Phase 8: data migration (import H2 exports into SQLite).
 	pro.POST("/migration/import", deps.Migration.ImportPlain)

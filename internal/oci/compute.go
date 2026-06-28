@@ -46,6 +46,19 @@ func GetInstance(ctx context.Context, c Clients, instanceID string) (core.Instan
 	return resp.Instance, nil
 }
 
+// TerminateInstance terminates an OCI compute instance and optionally preserves
+// the boot volume. Parity with OracleInstanceServiceImpl.killInstance.
+func TerminateInstance(ctx context.Context, c Clients, instanceID string, preserveBootVolume bool) error {
+	_, err := c.Compute.TerminateInstance(ctx, core.TerminateInstanceRequest{
+		InstanceId:         common.String(instanceID),
+		PreserveBootVolume: common.Bool(preserveBootVolume),
+	})
+	if err != nil {
+		return fmt.Errorf("terminate instance %s: %w", instanceID, err)
+	}
+	return nil
+}
+
 // instanceArchitecture derives the architecture label ("ARM"/"AMD"/...) from
 // the instance's ShapeConfig.ProcessorDescription, parity with the Java logic.
 // Returns "NONE" when unavailable (matches the InstanceDetails default).
