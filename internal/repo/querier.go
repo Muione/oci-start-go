@@ -29,12 +29,17 @@ type Querier interface {
 	DeleteSessionsByUsername(ctx context.Context, username string) error
 	DeleteTemInstancesByTenancy(ctx context.Context, tenancy sql.NullString) error
 	DeleteTenant(ctx context.Context, id int64) error
+	DeleteTenantEmailConfig(ctx context.Context, tenantID sql.NullInt64) error
+	DeleteTenantSocial(ctx context.Context, id int64) error
 	DeleteVpnProxyRecord(ctx context.Context, id int64) error
 	DisableBootInstance(ctx context.Context, arg DisableBootInstanceParams) error
 	EnableBootInstance(ctx context.Context, arg EnableBootInstanceParams) error
 	ExistsByUsername(ctx context.Context, username string) (int64, error)
 	FindBootInstanceByBootID(ctx context.Context, bootID sql.NullString) (BootInstance, error)
 	FindBootInstanceByID(ctx context.Context, id int64) (BootInstance, error)
+	// Cloud tenancy queries (Phase 9). cloud_tenancy stores account cost and
+	// custom name per tenancy.
+	FindCloudTenancyByName(ctx context.Context, tenancyName string) (CloudTenancy, error)
 	// oci_computer_info queries
 	FindComputerInfoByBootIDStr(ctx context.Context, bootIDStr sql.NullString) (OciComputerInfo, error)
 	// system_config is the runtime KV store (config_key UNIQUE).
@@ -63,6 +68,11 @@ type Querier interface {
 	FindRandomAvailableProxy(ctx context.Context) (VpnProxyRecord, error)
 	FindSessionByToken(ctx context.Context, token string) (LoginSession, error)
 	FindTenantByID(ctx context.Context, id int64) (Tenant, error)
+	// Tenant email config queries (Phase 9). tenant_email_config stores SES/SMTP
+	// configuration per tenant for email service.
+	FindTenantEmailConfigByTenantId(ctx context.Context, tenantID sql.NullInt64) (TenantEmailConfig, error)
+	FindTenantFullByID(ctx context.Context, id int64) (FindTenantFullByIDRow, error)
+	FindTenantSocialByType(ctx context.Context, arg FindTenantSocialByTypeParams) (TenantSocial, error)
 	FindTenantsByParenId(ctx context.Context, parenID sql.NullInt64) ([]FindTenantsByParenIdRow, error)
 	FindTopBanByIpAddress(ctx context.Context, ipAddress string) (BanRecord, error)
 	// traffic_alert queries
@@ -84,10 +94,14 @@ type Querier interface {
 	// tem_instance queries (temp instance tracking during grab)
 	InsertTemInstance(ctx context.Context, arg InsertTemInstanceParams) error
 	InsertTenant(ctx context.Context, arg InsertTenantParams) error
+	InsertTenantSocial(ctx context.Context, arg InsertTenantSocialParams) error
 	InsertVpnProxyRecord(ctx context.Context, arg InsertVpnProxyRecordParams) error
 	ListAllInstanceDetails(ctx context.Context, arg ListAllInstanceDetailsParams) ([]ListAllInstanceDetailsRow, error)
 	ListBootInstances(ctx context.Context) ([]BootInstance, error)
 	ListInstanceDetailsByTenantId(ctx context.Context, tenantID sql.NullInt64) ([]ListInstanceDetailsByTenantIdRow, error)
+	// Tenant social config queries (Phase 9). tenant_social stores third-party OAuth
+	// configuration per tenant (Google, GitHub, Microsoft, etc.).
+	ListTenantSocialByTenantId(ctx context.Context, tenantID sql.NullInt64) ([]TenantSocial, error)
 	// Tenant queries (Phase 3). key_file_blob holds the AES-256-GCM encrypted
 	// PEM (base64). List/mask queries deliberately omit key_file/key_file_blob.
 	ListTenants(ctx context.Context) ([]ListTenantsRow, error)
@@ -103,6 +117,7 @@ type Querier interface {
 	UpdateBanStatus(ctx context.Context, arg UpdateBanStatusParams) error
 	UpdateBootInstance(ctx context.Context, arg UpdateBootInstanceParams) error
 	UpdateBootInstanceStatus(ctx context.Context, arg UpdateBootInstanceStatusParams) error
+	UpdateCloudTenancyCost(ctx context.Context, arg UpdateCloudTenancyCostParams) error
 	UpdateComputerInfo(ctx context.Context, arg UpdateComputerInfoParams) error
 	UpdateInstanceConnTime(ctx context.Context, arg UpdateInstanceConnTimeParams) error
 	UpdateInstanceDetailIpv6(ctx context.Context, arg UpdateInstanceDetailIpv6Params) error
@@ -114,11 +129,19 @@ type Querier interface {
 	UpdateLastLoginAt(ctx context.Context, arg UpdateLastLoginAtParams) error
 	UpdateLockSuccess(ctx context.Context, arg UpdateLockSuccessParams) error
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) error
+	UpdateTenantEmailActive(ctx context.Context, arg UpdateTenantEmailActiveParams) error
+	// Extended tenant queries (Phase 9). Tenant detail, custom name, active days.
+	// ALL COMMENTS MUST BE ASCII-ONLY.
+	UpdateTenantFields(ctx context.Context, arg UpdateTenantFieldsParams) error
+	UpdateTenantSocial(ctx context.Context, arg UpdateTenantSocialParams) error
+	UpdateTenantSocialStatus(ctx context.Context, arg UpdateTenantSocialStatusParams) error
 	UpdateUserCredentials(ctx context.Context, arg UpdateUserCredentialsParams) error
 	UpdateVpnProxyRecord(ctx context.Context, arg UpdateVpnProxyRecordParams) error
+	UpsertCloudTenancy(ctx context.Context, arg UpsertCloudTenancyParams) error
 	UpsertConfig(ctx context.Context, arg UpsertConfigParams) error
 	UpsertConfigEnabled(ctx context.Context, arg UpsertConfigEnabledParams) error
 	UpsertConfigValue(ctx context.Context, arg UpsertConfigValueParams) error
+	UpsertTenantEmailConfig(ctx context.Context, arg UpsertTenantEmailConfigParams) error
 	UpsertTrafficAlert(ctx context.Context, arg UpsertTrafficAlertParams) error
 }
 

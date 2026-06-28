@@ -69,4 +69,8 @@ type Deps struct {
 
 	// Phase 8: GCP Compute Engine boot instance service.
 	GcpSvc *gcp.GcpService
+
+	// Phase 9: tenant email & social config services.
+	TenantEmail  *service.TenantEmailService
+	TenantSocial *service.TenantSocialService
 }

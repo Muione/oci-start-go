@@ -200,6 +200,148 @@ func (s *TenantService) ListInstances(ctx context.Context, id int64) ([]Instance
 	return out, nil
 }
 
+// TenantFullResp is the detailed tenant view for the detail dialog.
+type TenantFullResp struct {
+	ID                int64  `json:"id"`
+	TenantID          string `json:"tenantId"`
+	UserName          string `json:"userName"`
+	Fingerprint       string `json:"fingerprint"`
+	Tenancy           string `json:"tenancy"`
+	Region            string `json:"region"`
+	RegionName        string `json:"regionName"`
+	CreatedAt         string `json:"createdAt"`
+	ApiSynced         bool   `json:"apiSynced"`
+	EnableIcmp        bool   `json:"enableIcmp"`
+	EnableAllProtocol bool   `json:"enableAllProtocol"`
+	IsHomeRegion      bool   `json:"isHomeRegion"`
+	ParenID           int64  `json:"parenId"`
+	TenancyName       string `json:"tenancyName"`
+	TenancyDes        string `json:"tenancyDes"`
+	AccountType       string `json:"accountType"`
+	CloudType         int64  `json:"cloudType"`
+	RegionEn          string `json:"regionEn"`
+	IDStr             string `json:"idStr"`
+	EmailAddress      string `json:"emailAddress"`
+	EmailEnable       bool   `json:"emailEnable"`
+	TransferStatus    int64  `json:"transferStatus"`
+	TransferAmount    string `json:"transferAmount"`
+	IsActive          bool   `json:"isActive"`
+}
+
+// UpdateInput carries the tenant update payload.
+type UpdateInput struct {
+	ID           int64  `json:"id"`
+	TenancyName  string `json:"tenancyName"`
+	TenancyDes   string `json:"tenancyDes"`
+	AccountType  string `json:"accountType"`
+	EmailAddress string `json:"emailAddress"`
+	IsActive     bool   `json:"isActive"`
+}
+
+// CheckResult holds the connectivity check result for a tenant.
+type CheckResult struct {
+	TenantID int64  `json:"tenantId"`
+	UserName string `json:"userName"`
+	Alive    bool   `json:"alive"`
+	Error    string `json:"error,omitempty"`
+}
+
+// GetFull returns the full tenant detail (including key_file_blob).
+func (s *TenantService) GetFull(ctx context.Context, id int64) (TenantFullResp, error) {
+	t, err := repo.New(s.store.Read).FindTenantFullByID(ctx, id)
+	if err != nil {
+		return TenantFullResp{}, fmt.Errorf("find tenant full: %w", err)
+	}
+	return TenantFullResp{
+		ID:                t.ID,
+		TenantID:          ns(t.TenantID),
+		UserName:          ns(t.UserName),
+		Fingerprint:       ns(t.Fingerprint),
+		Tenancy:           ns(t.Tenancy),
+		Region:            ns(t.Region),
+		RegionName:        region.NameByCode(region.CodeByName(ns(t.Region))),
+		CreatedAt:         ns(t.CreatedAt),
+		ApiSynced:         ni(t.ApiSynced) == 1,
+		EnableIcmp:        ni(t.EnableIcmp) != 0,
+		EnableAllProtocol: ni(t.EnableAllProtocol) != 0,
+		IsHomeRegion:      ni(t.IsHomeRegion) != 0,
+		ParenID:           ni(t.ParenID),
+		TenancyName:       ns(t.TenancyName),
+		TenancyDes:        ns(t.TenancyDes),
+		AccountType:       ns(t.AccountType),
+		CloudType:         ni(t.CloudType),
+		RegionEn:          ns(t.RegionEn),
+		IDStr:             ns(t.IDStr),
+		EmailAddress:      ns(t.EmailAddress),
+		EmailEnable:       ni(t.EmailEnable) != 0,
+		TransferStatus:    ni(t.TransferStatus),
+		TransferAmount:    ns(t.TransferAmount),
+		IsActive:          ni(t.IsActive) != 0,
+	}, nil
+}
+
+// Update modifies tenant fields (custom name, account type, email, active).
+func (s *TenantService) Update(ctx context.Context, in UpdateInput) error {
+	return repo.New(s.store.Write).UpdateTenantFields(ctx, repo.UpdateTenantFieldsParams{
+		TenancyName:  nullStr(in.TenancyName),
+		TenancyDes:   nullStr(in.TenancyDes),
+		AccountType:  nullStr(in.AccountType),
+		EmailAddress: nullStr(in.EmailAddress),
+		IsActive:     nullInt64(boolToInt(in.IsActive)),
+		ID:           in.ID,
+	})
+}
+
+// UpdateCost updates the account cost for a tenancy via cloud_tenancy table.
+func (s *TenantService) UpdateCost(ctx context.Context, tenancyName, accountCost string) error {
+	now := time.Now().Format(httpTimeFmt)
+	return repo.New(s.store.Write).UpdateCloudTenancyCost(ctx, repo.UpdateCloudTenancyCostParams{
+		TenancyName: tenancyName,
+		AccountCost: nullStr(accountCost),
+		UpdateTime:  nullStr(now),
+	})
+}
+
+// Check tests whether a tenant's credentials are still valid by attempting
+// to list compartments via the OCI Identity API.
+func (s *TenantService) Check(ctx context.Context, id int64) CheckResult {
+	result := CheckResult{TenantID: id}
+	t, err := repo.New(s.store.Read).FindTenantByID(ctx, id)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	result.UserName = ns(t.UserName)
+	creds := tenantToCreds(t)
+	prov, err := oci.NewProvider(creds, s.masterKey)
+	if err != nil {
+		result.Error = "无法创建认证提供者: " + err.Error()
+		return result
+	}
+	if err := oci.PingIdentity(ctx, prov, creds.Tenancy); err != nil {
+		result.Error = "OCI 认证失败: " + err.Error()
+		return result
+	}
+	result.Alive = true
+	return result
+}
+
+// Export returns the full tenant data (including instances) as a JSON-serializable map.
+func (s *TenantService) Export(ctx context.Context, id int64) (map[string]any, error) {
+	full, err := s.GetFull(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	instances, err := s.ListInstances(ctx, id)
+	if err != nil {
+		instances = []InstanceDetailResp{}
+	}
+	return map[string]any{
+		"tenant":    full,
+		"instances": instances,
+	}, nil
+}
+
 // --- helpers ---
 
 func tenantToCreds(t repo.Tenant) oci.Credentials {

@@ -37,3 +37,19 @@ func ListCompartments(ctx context.Context, c Clients, tenancyOCID string) ([]ide
 	}
 	return out, nil
 }
+
+// PingIdentity tests whether the given credentials are valid by calling
+// GetTenancy on the Identity API. Returns nil on success.
+func PingIdentity(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) error {
+	client, err := identity.NewIdentityClientWithConfigurationProvider(prov)
+	if err != nil {
+		return fmt.Errorf("create identity client: %w", err)
+	}
+	_, err = client.GetTenancy(ctx, identity.GetTenancyRequest{
+		TenancyId: common.String(tenancyOCID),
+	})
+	if err != nil {
+		return fmt.Errorf("get tenancy: %w", err)
+	}
+	return nil
+}

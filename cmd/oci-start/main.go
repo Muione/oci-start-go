@@ -241,6 +241,10 @@ func main() {
 	migImporter := migration.NewImporter(store.Write, logger, migSplitter)
 	migHandler := httpapi.NewMigrationHandler(migImporter, migSplitter, cfg.MasterKeyPath()+"/keys", store.Write)
 
+	// Phase 9 wiring: tenant email & social config services.
+	tenantEmailSvc := service.NewTenantEmailService(store)
+	tenantSocialSvc := service.NewTenantSocialService(store)
+
 	sched := scheduler.New(engine, store, logger, &scheduler.SvcSet{
 		Traffic:     trafficSvc,
 		CheckLive:   checkLiveSvc,
@@ -277,6 +281,8 @@ func main() {
 		CertManager:  certManager,
 		Migration:    migHandler,
 		GcpSvc:       gcpSvc,
+		TenantEmail:  tenantEmailSvc,
+		TenantSocial: tenantSocialSvc,
 	}
 	router := httpapi.NewServer(deps)
 
