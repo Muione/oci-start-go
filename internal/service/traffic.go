@@ -192,6 +192,19 @@ func (s *TrafficSvc) QueryTenantTraffic(ctx context.Context, tenant repo.Tenant,
 		}
 	}
 
+	// Adaptive resolution based on time range.
+	// OCI Monitoring returns 400 if resolution is incompatible with the range.
+	rangeHours := endTime.Sub(startTime).Hours()
+	var period oci.TrafficPeriod
+	switch {
+	case rangeHours <= 6:
+		period = oci.TrafficPeriodOneHour
+	case rangeHours <= 168: // 7 days
+		period = oci.TrafficPeriodOneHour
+	default:
+		period = oci.TrafficPeriodOneDay
+	}
+
 	var totalEgress float64
 	for _, inst := range instances {
 		if !inst.InstanceID.Valid || !inst.CompartmentID.Valid {
@@ -208,8 +221,9 @@ func (s *TrafficSvc) QueryTenantTraffic(ctx context.Context, tenant repo.Tenant,
 		}
 
 		egress, err := oci.GetInstanceTrafficTotal(ctx, monClient, ns(inst.CompartmentID),
-			vnics, false, startTime, endTime, oci.TrafficPeriodOneDay)
+			vnics, false, startTime, endTime, period)
 		if err != nil {
+			stats.Message = fmt.Sprintf("traffic query error: %v", err)
 			continue
 		}
 

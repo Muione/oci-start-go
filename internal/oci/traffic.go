@@ -61,12 +61,23 @@ func GetInstanceTrafficTotal(
 		metricName = "VnicToNetworkBytes"
 	}
 
+	// Map period to a MQL-compatible interval string for the range selector.
+	interval := "1h"
+	switch period {
+	case TrafficPeriodOneHour:
+		interval = "5m"
+	case TrafficPeriodOneDay:
+		interval = "1h"
+	case TrafficPeriodOneMonth:
+		interval = "1d"
+	}
+
 	var total float64
 	for _, vnic := range vnics {
 		if vnic.VnicID == "" {
 			continue
 		}
-		val, err := queryVnicTraffic(ctx, client, compartmentID, vnic.VnicID, metricName, startTime, endTime, period)
+		val, err := queryVnicTraffic(ctx, client, compartmentID, vnic.VnicID, metricName, startTime, endTime, period, interval)
 		if err != nil {
 			continue // per-VNIC failure non-fatal
 		}
@@ -83,12 +94,13 @@ func queryVnicTraffic(
 	compartmentID, vnicID, metricName string,
 	startTime, endTime time.Time,
 	period TrafficPeriod,
+	interval string,
 ) (float64, error) {
 	req := monitoring.SummarizeMetricsDataRequest{
 		CompartmentId: common.String(compartmentID),
 		SummarizeMetricsDataDetails: monitoring.SummarizeMetricsDataDetails{
 			Namespace: common.String("oci_vcn"),
-			Query:     common.String(fmt.Sprintf("%s[1m]{%s}.sum()", metricName, `resourceId="`+vnicID+`"`)),
+			Query:     common.String(fmt.Sprintf("%s[%s]{%s}.sum()", metricName, interval, `resourceId="`+vnicID+`"`)),
 			StartTime: &common.SDKTime{Time: startTime},
 			EndTime:   &common.SDKTime{Time: endTime},
 			Resolution: common.String(string(period)),

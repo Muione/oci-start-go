@@ -1019,7 +1019,7 @@ function handleAction(cmd: string, row: Tenant) {
     case 'detail': showDetail(row); break
     case 'update': openUpdate(row); break
     case 'check': checkTenant(row.id); break
-    case 'boot': router.push('/boot-tasks'); break
+    case 'boot': router.push('/boot'); break
     case 'instances': showInstances(row); break
     case 'trafficAlert': openTrafficAlert(row); break
     case 'trafficQuery': openTrafficQuery(row); break
@@ -1293,12 +1293,11 @@ async function openTrafficQuery(row: Tenant) {
   trafficQueryName.value = row.userName || row.tenancyName || `#${row.id}`
   trafficQueryTenantId.value = row.id
   trafficDateRange.value = null
+  trafficQueryData.value = []
   trafficQueryVisible.value = true
-  await doTrafficQuery()
 }
 
 async function queryTrafficWithDate() {
-  trafficQueryLoading.value = true
   await doTrafficQuery()
 }
 
@@ -1311,7 +1310,7 @@ async function doTrafficQuery() {
       params.endDate = trafficDateRange.value[1]
     }
     trafficQueryData.value = await request.get('/instances/traffic', { params }) as any[]
-  } catch (e: any) { ElMessage.error(e.message) }
+  } catch (e: any) { ElMessage.error('流量查询失败: ' + (e?.message || e)) }
   finally { trafficQueryLoading.value = false }
 }
 
