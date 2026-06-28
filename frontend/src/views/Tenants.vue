@@ -742,6 +742,26 @@
     <!-- Traffic Query Dialog -->
     <!-- ================================================================ -->
     <el-dialog v-model="trafficQueryVisible" :title="`流量查询 — ${trafficQueryName}`" width="80%" destroy-on-close>
+      <div style="margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--text-secondary)">日期范围：</span>
+        <el-date-picker
+          v-model="trafficDateRange"
+          type="daterange"
+          range-separator="至"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          format="YYYY-MM-DD"
+          value-format="YYYY-MM-DD"
+          size="small"
+          style="width:280px"
+        />
+        <el-button size="small" type="primary" @click="queryTrafficWithDate" :loading="trafficQueryLoading">
+          <el-icon><Search /></el-icon> 查询
+        </el-button>
+        <span v-if="trafficDateRange" style="font-size:12px;color:var(--text-secondary)">
+          {{ trafficDateRange[0] }} ~ {{ trafficDateRange[1] }}
+        </span>
+      </div>
       <template v-if="trafficQueryLoading">
         <el-skeleton :rows="5" animated/>
       </template>
@@ -754,7 +774,7 @@
         <el-table-column label="出站流量" width="140" align="right">
           <template #default="{ row }">{{ formatBytes(row.egressBytes) }}</template>
         </el-table-column>
-        <el-table-column label="统计日期" width="120">
+        <el-table-column label="统计日期" width="180">
           <template #default="{ row }">{{ row.statsDate || '—' }}</template>
         </el-table-column>
         <el-table-column label="区域" width="100">
@@ -911,6 +931,8 @@ const instances = ref<any[]>([])
 const trafficQueryVisible = ref(false)
 const trafficQueryLoading = ref(false)
 const trafficQueryName = ref('')
+const trafficQueryTenantId = ref(0)
+const trafficDateRange = ref<string[] | null>(null)
 const trafficQueryData = ref<any[]>([])
 
 // --- computed ---
@@ -1171,7 +1193,7 @@ async function saveCustomName() {
       tenancyDes: editNameValue.value,
       accountType: editTarget.value.accountType || '',
       emailAddress: editTarget.value.emailAddress || '',
-      isActive: editTarget.value.isActive !== false,
+      isActive: editTarget.value.isActive ?? true,
     })
     ElMessage.success('已更新')
     editTarget.value.tenancyDes = editNameValue.value
@@ -1198,7 +1220,7 @@ async function saveAccountCost() {
       tenancyDes: editTarget.value.tenancyDes || '',
       accountType: editTarget.value.accountType || '',
       emailAddress: editTarget.value.emailAddress || '',
-      isActive: editTarget.value.isActive !== false,
+      isActive: editTarget.value.isActive ?? true,
     })
     ElMessage.success('已更新')
     editTarget.value.accountCost = editCostValue.value
@@ -1269,10 +1291,26 @@ async function saveTrafficAlert() {
 // --- traffic query ---
 async function openTrafficQuery(row: Tenant) {
   trafficQueryName.value = row.userName || row.tenancyName || `#${row.id}`
+  trafficQueryTenantId.value = row.id
+  trafficDateRange.value = null
   trafficQueryVisible.value = true
+  await doTrafficQuery()
+}
+
+async function queryTrafficWithDate() {
+  trafficQueryLoading.value = true
+  await doTrafficQuery()
+}
+
+async function doTrafficQuery() {
   trafficQueryLoading.value = true
   try {
-    trafficQueryData.value = await request.get('/instances/traffic', { params:{tenantId:row.id} }) as any[]
+    const params: any = { tenantId: trafficQueryTenantId.value }
+    if (trafficDateRange.value && trafficDateRange.value.length === 2) {
+      params.startDate = trafficDateRange.value[0]
+      params.endDate = trafficDateRange.value[1]
+    }
+    trafficQueryData.value = await request.get('/instances/traffic', { params }) as any[]
   } catch (e: any) { ElMessage.error(e.message) }
   finally { trafficQueryLoading.value = false }
 }

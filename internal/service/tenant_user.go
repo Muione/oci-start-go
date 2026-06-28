@@ -6,6 +6,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Muione/oci-start-go/internal/db"
 	"github.com/Muione/oci-start-go/internal/oci"
@@ -222,5 +223,15 @@ func (s *TenantUserService) UpdateAccountDetail(ctx context.Context, tenantID in
 	if err != nil {
 		return nil, fmt.Errorf("update tenant fields: %w", err)
 	}
+	// Also update register_detail with current timestamp for active-days calculation.
+	// The register_time should ideally come from OCI Subscription.getTimeStart(),
+	// but we use the current time as a proxy when fetching tenant details from OCI.
+	now := time.Now().Format("2006-01-02 15:04:05")
+	_ = repo.New(s.store.Write).UpsertRegisterDetail(ctx, repo.UpsertRegisterDetailParams{
+		TenantID:     creds.UserID, // User OCID == tenant.tenant_id
+		RegisterTime: nullStr(now),
+		CreatedTime:  nullStr(now),
+		UpdatedTime:  nullStr(now),
+	})
 	return detail, nil
 }

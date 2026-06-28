@@ -96,7 +96,7 @@ func (s *TrafficSvc) CheckAllTenantsTraffic(ctx context.Context) {
 }
 
 func (s *TrafficSvc) checkTenantTraffic(ctx context.Context, tenant repo.Tenant, alert repo.TrafficAlert) {
-	stats := s.QueryTenantTraffic(ctx, tenant)
+	stats := s.QueryTenantTraffic(ctx, tenant, "", "")
 	if !stats.Success || len(stats.Instances) == 0 {
 		return
 	}
@@ -137,9 +137,10 @@ func (s *TrafficSvc) checkTenantTraffic(ctx context.Context, tenant repo.Tenant,
 	}
 }
 
-// QueryTenantTraffic queries the current month's egress traffic for all
-// instances belonging to a tenant.
-func (s *TrafficSvc) QueryTenantTraffic(ctx context.Context, tenant repo.Tenant) TenantTrafficStats {
+// QueryTenantTraffic queries traffic for all instances belonging to a tenant.
+// startDate and endDate are optional (format: "2006-01-02"). When omitted,
+// defaults to the current month (1st of month → now).
+func (s *TrafficSvc) QueryTenantTraffic(ctx context.Context, tenant repo.Tenant, startDate, endDate string) TenantTrafficStats {
 	stats := TenantTrafficStats{
 		TenantID:          tenant.ID,
 		Tenancy:           ns(tenant.Tenancy),
@@ -177,7 +178,19 @@ func (s *TrafficSvc) QueryTenantTraffic(ctx context.Context, tenant repo.Tenant)
 	}
 
 	now := time.Now().UTC()
-	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	// Parse date range or default to current month
+	startTime := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	endTime := now
+	if startDate != "" {
+		if t, err := time.Parse("2006-01-02", startDate); err == nil {
+			startTime = t
+		}
+	}
+	if endDate != "" {
+		if t, err := time.Parse("2006-01-02", endDate); err == nil {
+			endTime = t.Add(24*time.Hour - time.Second) // end of day
+		}
+	}
 
 	var totalEgress float64
 	for _, inst := range instances {
@@ -195,7 +208,7 @@ func (s *TrafficSvc) QueryTenantTraffic(ctx context.Context, tenant repo.Tenant)
 		}
 
 		egress, err := oci.GetInstanceTrafficTotal(ctx, monClient, ns(inst.CompartmentID),
-			vnics, false, startOfMonth, now, oci.TrafficPeriodOneDay)
+			vnics, false, startTime, endTime, oci.TrafficPeriodOneDay)
 		if err != nil {
 			continue
 		}
@@ -207,7 +220,7 @@ func (s *TrafficSvc) QueryTenantTraffic(ctx context.Context, tenant repo.Tenant)
 			VnicCount:    1,
 			EgressGB:     oci.BytesToGB(egress),
 			EgressBytes:  int64(egress),
-			StatsDate:    now.Format("2006-01-02"),
+			StatsDate:    fmt.Sprintf("%s ~ %s", startTime.Format("2006-01-02"), endTime.Format("2006-01-02")),
 			Region:       stats.Region,
 		}
 		stats.Instances = append(stats.Instances, it)

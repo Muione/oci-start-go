@@ -76,7 +76,8 @@ func instanceUpdateRemark(deps *Deps) gin.HandlerFunc {
 }
 
 // instanceTraffic returns traffic stats for a specific tenant.
-// GET /instances/traffic?tenantId=
+// GET /instances/traffic?tenantId=&startDate=&endDate=
+// startDate and endDate are optional (format: 2006-01-02).
 func instanceTraffic(deps *Deps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tenantID, err := strconv.ParseInt(c.Query("tenantId"), 10, 64)
@@ -89,7 +90,9 @@ func instanceTraffic(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusNotFound, "tenant not found")
 			return
 		}
-		stats := deps.TrafficSvc.QueryTenantTraffic(c.Request.Context(), tenant)
+		startDate := c.Query("startDate")
+		endDate := c.Query("endDate")
+		stats := deps.TrafficSvc.QueryTenantTraffic(c.Request.Context(), tenant, startDate, endDate)
 		// Frontend expects a flat array, not the wrapped TenantTrafficStats
 		if stats.Instances == nil {
 			response.OK(c, response.SuccessData([]any{}))

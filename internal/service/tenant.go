@@ -59,7 +59,12 @@ func (s *TenantService) List(ctx context.Context) ([]TenantResp, error) {
 	}
 	out := make([]TenantResp, 0, len(rows))
 	for _, r := range rows {
-		resp := toTenantResp(r)
+		// Look up register_detail for active days (register_time = OCI subscription start)
+		registerTime := ""
+		if rd, e := repo.New(s.store.Read).FindRegisterDetailByTenantId(ctx, ns(r.TenantID)); e == nil {
+			registerTime = ns(rd.RegisterTime)
+		}
+		resp := toTenantResp(r, registerTime)
 		// Enrich: has boot tasks?
 		if n, e := repo.New(s.store.Read).CountBootInstancesByTenantId(ctx, r.ID); e == nil && n > 0 {
 			resp.HasBootTask = true
@@ -121,7 +126,20 @@ func (s *TenantService) Save(ctx context.Context, in SaveInput) error {
 		TenancyName:  nullStr(userName),
 		IsActive:     nullInt64(1), // new tenants are active by default
 	}
-	return repo.New(s.store.Write).InsertTenant(ctx, params)
+	now := time.Now().Format(httpTimeFmt)
+	if err := repo.New(s.store.Write).InsertTenant(ctx, params); err != nil {
+		return err
+	}
+	// Also insert register_detail with current time as register_time (OCI subscription timeStart).
+	// This is used for active-days calculation and matches Java register_time behavior.
+	_ = repo.New(s.store.Write).UpsertRegisterDetail(ctx, repo.UpsertRegisterDetailParams{
+		TenantID:     in.TenantID,
+		RegisterTime: nullStr(now),
+		CloudType:    nullInt64(cloudType),
+		CreatedTime:  nullStr(now),
+		UpdatedTime:  nullStr(now),
+	})
+	return nil
 }
 
 func (s *TenantService) Delete(ctx context.Context, id int64) error {
@@ -289,7 +307,7 @@ func (s *TenantService) GetFull(ctx context.Context, id int64) (TenantFullResp, 
 		EmailEnable:       ni(t.EmailEnable) != 0,
 		TransferStatus:    ni(t.TransferStatus),
 		TransferAmount:    ns(t.TransferAmount),
-		IsActive:          ni(t.IsActive) != 0,
+		IsActive:          isActive(t.IsActive),
 	}, nil
 }
 
@@ -368,8 +386,13 @@ func tenantToCreds(t repo.Tenant) oci.Credentials {
 	}
 }
 
-func toTenantResp(r repo.ListTenantsRow) TenantResp {
+func toTenantResp(r repo.ListTenantsRow, registerTime string) TenantResp {
 	createdAt := ns(r.CreatedAt)
+	// Use register_detail.register_time (OCI subscription timeStart) for active days when available
+	activeDaysInput := registerTime
+	if activeDaysInput == "" {
+		activeDaysInput = createdAt
+	}
 	return TenantResp{
 		ID:           r.ID,
 		TenantID:     ns(r.TenantID),
@@ -381,11 +404,11 @@ func toTenantResp(r repo.ListTenantsRow) TenantResp {
 		CreatedAt:    createdAt,
 		ApiSynced:    ni(r.ApiSynced) == 1,
 		CloudType:    ni(r.CloudType),
-		IsActive:     ni(r.IsActive) != 0,
+		IsActive:     isActive(r.IsActive),
 		IsHomeRegion: ni(r.IsHomeRegion) != 0,
 		AccountType:  ns(r.AccountType),
 		TenancyName:  ns(r.TenancyName),
-		ActiveDays:   calculateActiveDays(createdAt),
+		ActiveDays:   calculateActiveDays(activeDaysInput),
 	}
 }
 
@@ -427,6 +450,14 @@ func ni(v sql.NullInt64) int64 {
 		return v.Int64
 	}
 	return 0
+}
+
+// isActive returns true if the value is non-zero OR NULL (default active per schema).
+func isActive(v sql.NullInt64) bool {
+	if !v.Valid {
+		return true // DEFAULT 1 in schema
+	}
+	return v.Int64 != 0
 }
 
 func nullStr(s string) sql.NullString  { return sql.NullString{String: s, Valid: s != ""} }
