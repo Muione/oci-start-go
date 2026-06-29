@@ -294,6 +294,18 @@ func main() {
 	// Phase 12.2 wiring: Email Delivery service.
 	emailSvc := service.NewEmailService(store, dnsSvc, sc, proxyPool, masterKey)
 
+	// Phase 13.1/13.2 wiring: IP quality + Quick DD.
+	ipQualitySvc := service.NewIPQualityService(store, masterKey, proxyPool, logger)
+	quickDDSvc := service.NewQuickDDService(store, logger)
+
+	// Phase 13.3/14 wiring: OCI wrapper services.
+	bastionSvc := service.NewBastionService(store, masterKey, proxyPool)
+	ctrRegSvc := service.NewContainerRegistryService(store, masterKey, proxyPool)
+	aiVisionSvc := service.NewAIVisionService(store, masterKey, proxyPool)
+	noSQLSvc := service.NewNoSQLService(store, masterKey)
+	mySQLSvc := service.NewMySQLService(store, masterKey, proxyPool)
+	resourceMgrSvc := service.NewResourceMgrService(store, masterKey)
+
 	sched := scheduler.New(engine, store, logger, &scheduler.SvcSet{
 		Traffic:        trafficSvc,
 		CheckLive:      checkLiveSvc,
@@ -344,6 +356,14 @@ func main() {
 		SSHConfig:       sshConfig,
 		NginxSvc:        nginxSvc,
 		EmailSvc:        emailSvc,
+		IpQualitySvc:    ipQualitySvc,
+		QuickDDSvc:      quickDDSvc,
+		BastionSvc:      bastionSvc,
+		CtrRegSvc:       ctrRegSvc,
+		AiVisionSvc:     aiVisionSvc,
+		NoSQLSvc:        noSQLSvc,
+		MySQLSvc:        mySQLSvc,
+		ResourceMgrSvc:  resourceMgrSvc,
 	}
 	router := httpapi.NewServer(deps)
 

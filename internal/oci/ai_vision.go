@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"net/http"
 
 	"github.com/oracle/oci-go-sdk/v65/aivision"
 	"github.com/oracle/oci-go-sdk/v65/common"
@@ -282,7 +281,7 @@ func AnalyzeVideo(ctx context.Context, c *aivision.AIServiceVisionClient, in Ana
 	}
 
 	return &AnalyzeVideoOutput{
-		WorkRequestID: derefStr(resp.OpcWorkRequestId),
+		WorkRequestID: derefStr(resp.Id),
 	}, nil
 }
 
@@ -368,7 +367,7 @@ func buildDocumentFeatures(featureNames []string) ([]aivision.DocumentFeature, e
 		case "TABLE_DETECTION":
 			features = append(features, aivision.DocumentTableDetectionFeature{})
 		case "KEY_VALUE_EXTRACTION":
-			features = append(features, aivision.DocumentKeyValueExtractionFeature{})
+			features = append(features, aivision.DocumentKeyValueDetectionFeature{})
 		case "LANGUAGE_CLASSIFICATION":
 			features = append(features, aivision.DocumentLanguageClassificationFeature{})
 		default:
@@ -449,48 +448,72 @@ func buildAnalyzeDocumentOutput(result aivision.AnalyzeDocumentResult) *AnalyzeD
 		pvo := DocumentPageVO{
 			PageNumber: derefInt(page.PageNumber),
 		}
-		if page.DocumentPageMetadata != nil {
-			if page.DocumentPageMetadata.PageDimensions != nil {
-				pvo.Width = derefFloat32(page.DocumentPageMetadata.PageDimensions.Width)
-				pvo.Height = derefFloat32(page.DocumentPageMetadata.PageDimensions.Height)
-			}
-			for _, lang := range page.DocumentPageMetadata.DetectedLanguages {
-				pvo.Languages = append(pvo.Languages, DocumentLanguageVO{
-					Language:   derefStr(lang.Language),
-					Confidence: derefFloat32(lang.Confidence),
-				})
-			}
+		// Page has Dimensions directly (not DocumentPageMetadata).
+		if page.Dimensions != nil {
+			pvo.Width = float32(derefFloat64(page.Dimensions.Width))
+			pvo.Height = float32(derefFloat64(page.Dimensions.Height))
+		}
+		// DetectedLanguages is directly on Page.
+		for _, lang := range page.DetectedLanguages {
+			pvo.Languages = append(pvo.Languages, DocumentLanguageVO{
+				Language:   string(lang.LanguageCode),
+				Confidence: derefFloat32(lang.Confidence),
+			})
 		}
 
-		// Tables.
+		// Tables: Table has HeaderRows/BodyRows/FooterRows, each row has Cells.
 		for _, table := range page.Tables {
 			tvo := DocumentTableVO{
 				RowCount:    derefInt(table.RowCount),
 				ColumnCount: derefInt(table.ColumnCount),
 			}
-			for _, cell := range table.Cells {
-				tvo.Cells = append(tvo.Cells, TableCellVO{
-					Text:        derefStr(cell.Text),
-					RowIndex:    derefInt(cell.RowIndex),
-					ColumnIndex: derefInt(cell.ColumnIndex),
-					Confidence:  derefFloat32(cell.Confidence),
-				})
+			for _, row := range table.BodyRows {
+				for _, cell := range row.Cells {
+					tvo.Cells = append(tvo.Cells, TableCellVO{
+						Text:        derefStr(cell.Text),
+						RowIndex:    derefInt(cell.RowIndex),
+						ColumnIndex: derefInt(cell.ColumnIndex),
+						Confidence:  derefFloat32(cell.Confidence),
+					})
+				}
+			}
+			for _, row := range table.HeaderRows {
+				for _, cell := range row.Cells {
+					tvo.Cells = append(tvo.Cells, TableCellVO{
+						Text:        derefStr(cell.Text),
+						RowIndex:    derefInt(cell.RowIndex),
+						ColumnIndex: derefInt(cell.ColumnIndex),
+						Confidence:  derefFloat32(cell.Confidence),
+					})
+				}
 			}
 			pvo.Tables = append(pvo.Tables, tvo)
 		}
 
-		// Key-value pairs.
+		// Key-value pairs from DocumentFields.
+		// DocumentField has FieldType (enum), FieldValue (interface), FieldLabel, FieldName.
 		for _, kv := range page.DocumentFields {
-			kvp := KeyValuePairVO{
-				Key: FieldVO{
-					Text:       derefStr(kv.FieldType),
-					Confidence: derefFloat32(kv.FieldConfidence),
-				},
-				Value: FieldVO{
-					Text:       derefStr(kv.FieldValue),
-					Confidence: derefFloat32(kv.FieldValueConfidence),
-				},
+			kvp := KeyValuePairVO{}
+			// Key: use FieldLabel if available, else FieldName.
+			if kv.FieldLabel != nil {
+				kvp.Key = FieldVO{
+					Text:       derefStr(kv.FieldLabel.Name),
+					Confidence: derefFloat32(kv.FieldLabel.Confidence),
+				}
+			} else if kv.FieldName != nil {
+				kvp.Key = FieldVO{
+					Text:       derefStr(kv.FieldName.Name),
+					Confidence: derefFloat32(kv.FieldName.Confidence),
+				}
 			}
+			// Value: FieldValue is an interface with GetText()/GetConfidence().
+			if kv.FieldValue != nil {
+				kvp.Value = FieldVO{
+					Text:       derefStr(kv.FieldValue.GetText()),
+					Confidence: derefFloat32(kv.FieldValue.GetConfidence()),
+				}
+			}
+			kvp.Key.Text = string(kv.FieldType) + ":" + kvp.Key.Text
 			pvo.KeyValuePairs = append(pvo.KeyValuePairs, kvp)
 		}
 
@@ -518,19 +541,3 @@ func convertPolygon(p aivision.BoundingPolygon) *PolygonVO {
 	return pvo
 }
 
-func derefFloat32(v *float32) float32 {
-	if v == nil {
-		return 0
-	}
-	return *v
-}
-
-func derefInt(v *int) int {
-	if v == nil {
-		return 0
-	}
-	return *v
-}
-
-// ensure unused import does not fail compilation.
-var _ = http.StatusOK

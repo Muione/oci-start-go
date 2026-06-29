@@ -140,8 +140,8 @@ func GetContainerImage(ctx context.Context, c *artifacts.ArtifactsClient, imageI
 		DisplayName:      derefStr(resp.DisplayName),
 		Version:          derefStr(resp.Version),
 		LayersSizeInBytes: derefInt64(resp.LayersSizeInBytes),
-		SizeInBytes:      derefInt64(resp.SizeInBytes),
-		LifecycleState:   derefStr(resp.LifecycleState),
+		SizeInBytes:      derefInt64(resp.LayersSizeInBytes),
+		LifecycleState:   string(resp.LifecycleState),
 	}
 	if resp.TimeCreated != nil {
 		vo.TimeCreated = resp.TimeCreated.Time.Format(timeLayout)
@@ -218,9 +218,9 @@ func containerRepoToVO(r artifacts.ContainerRepositorySummary) ContainerReposito
 		ID:             derefStr(r.Id),
 		CompartmentID:  derefStr(r.CompartmentId),
 		DisplayName:    derefStr(r.DisplayName),
-		NamespaceName:  derefStr(r.NamespaceName),
-		RepositoryName: derefStr(r.RepositoryName),
-		LifecycleState: derefStr(r.LifecycleState),
+		NamespaceName:  derefStr(r.Namespace),
+		RepositoryName: derefStr(r.DisplayName),
+		LifecycleState: string(r.LifecycleState),
 	}
 	if r.ImageCount != nil {
 		vo.ImageCount = *r.ImageCount
@@ -231,28 +231,20 @@ func containerRepoToVO(r artifacts.ContainerRepositorySummary) ContainerReposito
 	if r.TimeCreated != nil {
 		vo.TimeCreated = r.TimeCreated.Time.Format(timeLayout)
 	}
-	if r.TimeLastPushed != nil {
-		vo.TimeLastPushed = r.TimeLastPushed.Time.Format(timeLayout)
-	}
 	return vo
 }
 
 func containerImageToVO(img artifacts.ContainerImageSummary) ContainerImageVO {
 	vo := ContainerImageVO{
-		ID:               derefStr(img.Id),
-		CompartmentID:    derefStr(img.CompartmentId),
-		RepositoryName:   derefStr(img.RepositoryName),
-		DisplayName:      derefStr(img.DisplayName),
-		Version:          derefStr(img.Version),
-		LayersSizeInBytes: derefInt64(img.LayersSizeInBytes),
-		SizeInBytes:      derefInt64(img.SizeInBytes),
-		LifecycleState:   derefStr(img.LifecycleState),
+		ID:              derefStr(img.Id),
+		CompartmentID:   derefStr(img.CompartmentId),
+		RepositoryName:  derefStr(img.RepositoryName),
+		DisplayName:     derefStr(img.DisplayName),
+		Version:         derefStr(img.Version),
+		LifecycleState:  string(img.LifecycleState),
 	}
 	if img.TimeCreated != nil {
 		vo.TimeCreated = img.TimeCreated.Time.Format(timeLayout)
-	}
-	if img.TimeLastPulled != nil {
-		vo.TimeLastPulled = img.TimeLastPulled.Time.Format(timeLayout)
 	}
 	return vo
 }

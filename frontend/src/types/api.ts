@@ -420,3 +420,323 @@ export interface NginxConfigStatus {
   currentVersion: number | null
   latestVersion: number | null
 }
+
+// --- Bastion (Phase 14) ---
+
+/** Bastion from GET /oci/bastion/list */
+export interface Bastion {
+  id: string
+  bastionId: string
+  displayName: string
+  bastionType: string
+  targetSubnetId: string
+  targetSubnetDisplayName?: string
+  maxSessionsAllowed: number
+  lifecycleState: string
+  timeCreated: string
+  compartmentId: string
+}
+
+/** Bastion session from GET /oci/bastion/session/list */
+export interface BastionSession {
+  sessionId: string
+  bastionId: string
+  displayName: string
+  sessionType: string
+  targetResourceDetails: string
+  lifecycleState: string
+  sessionTtlInSeconds: number
+  sshMetadata?: Record<string, string>
+  timeCreated: string
+  timeUpdated: string
+}
+
+/** Create bastion session request body */
+export interface CreateSessionRequest {
+  bastionId: string
+  sessionType: string
+  targetResourceId: string
+  targetPort?: number
+  sessionTtlInSeconds: number
+  publicKeyContent?: string
+}
+
+// --- Container Registry (Phase 14) ---
+
+/** Repository from GET /oci/registry/repos */
+export interface RegistryRepository {
+  name: string
+  namespace: string
+  compartmentId: string
+  compartmentName?: string
+  imageCount?: number
+  timeCreated: string
+}
+
+/** Image from GET /oci/registry/images */
+export interface RegistryImage {
+  digest: string
+  tags: string[]
+  sizeInBytes: number
+  layersCount: number
+  timeCreated: string
+  repositoryName: string
+}
+
+/** Cleanup old images request body */
+export interface RegistryCleanupRequest {
+  keepDays: number
+  repositoryName?: string
+  compartmentName?: string
+}
+
+// --- AI Vision (Phase 14) ---
+
+/** Vision job from GET /oci/vision/jobs */
+export interface VisionJob {
+  jobId: string
+  jobType: string
+  lifecycleState: string
+  features: string[]
+  timeCreated: string
+  timeUpdated: string
+  outputLocation?: any
+}
+
+/** Image classification label */
+export interface ImageClassificationLabel {
+  name: string
+  confidence: number
+}
+
+/** Detected object */
+export interface DetectedObject {
+  name: string
+  confidence: number
+  boundingPolygon?: {
+    normalizedVertices?: Array<{ x: number; y: number }>
+    vertices?: Array<{ x: number; y: number }>
+  }
+}
+
+/** Vision analysis result */
+export interface VisionAnalysisResult {
+  imageClassification?: {
+    labels: ImageClassificationLabel[]
+  }
+  objectDetection?: {
+    detectedObjects: DetectedObject[]
+  }
+  faceDetection?: {
+    faceCount?: number
+    faces?: Array<{
+      confidence: number
+      boundingPolygon?: any
+    }>
+  }
+  textDetection?: {
+    text?: string
+    words?: Array<{
+      text: string
+      confidence: number
+    }>
+  }
+  textExtraction?: {
+    text: string
+  }
+  tableExtraction?: {
+    tables?: Array<{
+      headerRows?: string[][]
+      rows: string[][]
+    }>
+  }
+  keyValueExtraction?: {
+    fields?: Array<{
+      key: string
+      value: string
+      confidence?: number
+    }>
+    keyValuePairs?: Array<{
+      key: string
+      value: string
+      confidence?: number
+    }>
+  }
+  languageDetection?: {
+    language: string
+    confidence: number
+  }
+}
+
+// --- IP Quality (Phase 13) ---
+
+/** IP quality test result from POST /oci/ip-quality/test */
+export interface IpQualityTestResult {
+  score: number
+  latency: number
+  packetLoss: number
+  downloadSpeed?: number
+  uploadSpeed?: number
+  location?: string
+  isp?: string
+  testTime?: string
+}
+
+/** IP auto-switch config from GET/POST /oci/ip-quality/auto-switch */
+export interface IpAutoSwitchConfig {
+  enabled: boolean
+  threshold: number
+  intervalMinutes: number
+}
+
+/** IP switch history record from GET /oci/ip-quality/history */
+export interface IpSwitchHistory {
+  instanceName: string
+  oldIp: string
+  newIp: string
+  reason: string
+  oldScore: number
+  newScore: number
+  switchTime: string
+}
+
+// --- Quick DD (Phase 13) ---
+
+/** Quick DD start request body */
+export interface QuickDdRequest {
+  instanceId: string
+  osImage?: string
+  imageUrl?: string
+  rootPassword?: string
+}
+
+/** Quick DD SSE progress event */
+export interface QuickDdProgress {
+  percent?: number
+  speed?: string
+  eta?: string
+  step?: string
+  message?: string
+  status?: string
+}
+
+// --- NoSQL Database (Phase 13) ---
+
+/** NoSQL table from GET /oci/nosql/tables */
+export interface NosqlTable {
+  name: string
+  compartmentName: string
+  compartmentId: string
+  lifecycleState: string
+  storageUsed: number
+  timeCreated: string
+}
+
+/** Create NoSQL table request */
+export interface CreateNosqlTableRequest {
+  tenantId: number
+  name: string
+  ddl?: string
+  readUnits?: number
+  writeUnits?: number
+  storageGB?: number
+}
+
+/** NoSQL query request */
+export interface NosqlQueryRequest {
+  tenantId: number
+  statement: string
+}
+
+// --- MySQL Database (Phase 13) ---
+
+/** MySQL DB System from GET /oci/mysql/systems */
+export interface MysqlSystem {
+  id: string
+  displayName: string
+  shapeName: string
+  mysqlVersion: string
+  lifecycleState: string
+  availabilityDomain: string
+  dataStorageSizeInGBs: number
+  hostname: string
+  ipAddress: string
+  port: number
+  timeCreated: string
+}
+
+/** Create MySQL DB System request */
+export interface CreateMysqlSystemRequest {
+  tenantId: number
+  displayName: string
+  shapeName: string
+  mysqlVersion: string
+  adminUsername: string
+  adminPassword: string
+  subnetId: string
+  availabilityDomain?: string
+  dataStorageSizeInGBs?: number
+  hostname?: string
+}
+
+/** MySQL backup from GET /oci/mysql/backups */
+export interface MysqlBackup {
+  id: string
+  displayName: string
+  lifecycleState: string
+  backupType: string
+  sizeInBytes: number
+  timeCreated: string
+}
+
+/** MySQL channel from GET /oci/mysql/channels */
+export interface MysqlChannel {
+  id: string
+  displayName: string
+  sourceDisplayName: string
+  targetDisplayName: string
+  lifecycleState: string
+}
+
+// --- Resource Manager / Terraform (Phase 13) ---
+
+/** Stack from GET /oci/resmgr/stacks */
+export interface ResmgrStack {
+  id: string
+  displayName: string
+  description: string
+  lifecycleState: string
+  timeCreated: string
+  compartmentId: string
+}
+
+/** Create stack request */
+export interface CreateStackRequest {
+  tenantId: number
+  displayName: string
+  description?: string
+  sourceType: 'zip' | 'git'
+  gitUrl?: string
+  gitBranch?: string
+  workingDirectory?: string
+  variables?: Record<string, any>
+}
+
+/** Job from GET /oci/resmgr/stack/jobs */
+export interface ResmgrJob {
+  id: string
+  stackId: string
+  operation: string
+  lifecycleState: string
+  timeCreated: string
+  timeFinished: string
+  failureDetails?: string
+}
+
+/** Create job request */
+export interface CreateJobRequest {
+  tenantId: number
+  stackId: string
+  operation: 'PLAN' | 'APPLY' | 'DESTROY'
+  variables?: Record<string, any>
+}

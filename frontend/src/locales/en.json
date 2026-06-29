@@ -1,5 +1,76 @@
 {
   "app": { "title": "oci-start" },
   "common": { "login": "Login", "logout": "Logout", "dashboard": "Dashboard" },
-  "nav": { "vnic": "VNIC Management", "email": "Email Management", "storage": "Object Storage" }
+  "nav": {
+    "vnic": "VNIC Management",
+    "email": "Email Management",
+    "storage": "Object Storage",
+    "bastion": "Bastion",
+    "registry": "Container Registry",
+    "vision": "AI Vision"
+  },
+  "bastion": {
+    "title": "Bastion Management",
+    "sessionType": { "managedSsh": "Managed SSH", "portForwarding": "Port Forwarding" },
+    "createSession": "Create Session",
+    "copySsh": "Copy SSH"
+  },
+  "registry": {
+    "title": "Container Registry",
+    "repo": "Repository",
+    "image": "Image",
+    "cleanup": "Cleanup Old Images",
+    "keepDays": "Keep Days"
+  },
+  "ipQuality": {
+    "title": "IP Quality Detection",
+    "testType": { "ping": "Ping", "http": "HTTP", "tcp": "TCP" },
+    "autoSwitch": "Auto IP Switch",
+    "score": "Score",
+    "latency": "Latency",
+    "packetLoss": "Packet Loss"
+  },
+  "quickDd": {
+    "title": "Quick DD Reinstall",
+    "selectOs": "Select OS",
+    "progress": "Reinstall Progress",
+    "completed": "Completed",
+    "failed": "Failed"
+  },
+  "nosql": {
+    "title": "NoSQL Database Management",
+    "table": "Table",
+    "createTable": "Create Table",
+    "query": "Query"
+  },
+  "mysql": {
+    "title": "MySQL Database Management",
+    "dbSystem": "DB System",
+    "backup": "Backup",
+    "channel": "Channel"
+  },
+  "resmgr": {
+    "title": "Resource Manager",
+    "stack": "Stack",
+    "job": "Job",
+    "plan": "Plan",
+    "apply": "Apply",
+    "destroy": "Destroy"
+  },
+  "vision": {
+    "title": "AI Vision Analysis",
+    "imageAnalysis": "Image Analysis",
+    "documentAnalysis": "Document Analysis",
+    "jobHistory": "Job History",
+    "features": {
+      "imageClassification": "Image Classification",
+      "objectDetection": "Object Detection",
+      "faceDetection": "Face Detection",
+      "textDetection": "Text Detection",
+      "textExtraction": "Text Extraction",
+      "tableExtraction": "Table Extraction",
+      "keyValueExtraction": "Key-Value Extraction",
+      "languageDetection": "Language Detection"
+    }
+  }
 }

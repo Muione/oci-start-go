@@ -99,4 +99,18 @@ type Deps struct {
 
 	// Phase 12.2: Email Delivery service.
 	EmailSvc *service.EmailService
+
+	// Phase 13.1: IP quality detection + auto switch.
+	IpQualitySvc *service.IPQualityService
+
+	// Phase 13.2: Quick DD one-click reinstall.
+	QuickDDSvc *service.QuickDDService
+
+	// Phase 13.3/14: OCI wrapper services.
+	BastionSvc   *service.BastionService
+	CtrRegSvc    *service.ContainerRegistryService
+	AiVisionSvc  *service.AIVisionService
+	NoSQLSvc     *service.NoSQLService
+	MySQLSvc     *service.MySQLService
+	ResourceMgrSvc *service.ResourceMgrService
 }

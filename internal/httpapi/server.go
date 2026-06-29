@@ -242,6 +242,61 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/api/email/enable", emailEnable(deps))
 	pro.POST("/api/email/disable", emailDisable(deps))
 
+	// Phase 13.3: NoSQL Database management.
+	pro.GET("/oci/nosql/tables", nosqlTableList(deps))
+	pro.GET("/oci/nosql/table/get", nosqlTableGet(deps))
+	pro.POST("/oci/nosql/table/create", nosqlTableCreate(deps))
+	pro.POST("/oci/nosql/table/delete", nosqlTableDelete(deps))
+	pro.POST("/oci/nosql/row/get", nosqlRowGet(deps))
+	pro.POST("/oci/nosql/row/put", nosqlRowPut(deps))
+	pro.POST("/oci/nosql/row/delete", nosqlRowDelete(deps))
+	pro.POST("/oci/nosql/query", nosqlQuery(deps))
+
+	// Phase 13.3: MySQL Database Service management.
+	pro.GET("/oci/mysql/db-systems", mysqlDbSystemList(deps))
+	pro.GET("/oci/mysql/db-system/get", mysqlDbSystemGet(deps))
+	pro.POST("/oci/mysql/db-system/create", mysqlDbSystemCreate(deps))
+	pro.POST("/oci/mysql/db-system/delete", mysqlDbSystemDelete(deps))
+	pro.POST("/oci/mysql/db-system/start", mysqlDbSystemStart(deps))
+	pro.POST("/oci/mysql/db-system/stop", mysqlDbSystemStop(deps))
+	pro.POST("/oci/mysql/db-system/restart", mysqlDbSystemRestart(deps))
+	pro.GET("/oci/mysql/backups", mysqlBackupList(deps))
+	pro.POST("/oci/mysql/backup/create", mysqlBackupCreate(deps))
+	pro.POST("/oci/mysql/backup/delete", mysqlBackupDelete(deps))
+	pro.GET("/oci/mysql/channels", mysqlChannelList(deps))
+	pro.POST("/oci/mysql/channel/delete", mysqlChannelDelete(deps))
+
+	// Phase 13.3: Resource Manager management.
+	pro.GET("/oci/resourcemgr/stacks", resMgrStackList(deps))
+	pro.GET("/oci/resourcemgr/stack/get", resMgrStackGet(deps))
+	pro.POST("/oci/resourcemgr/stack/delete", resMgrStackDelete(deps))
+	pro.POST("/oci/resourcemgr/job/create", resMgrJobCreate(deps))
+	pro.GET("/oci/resourcemgr/job/get", resMgrJobGet(deps))
+	pro.GET("/oci/resourcemgr/jobs", resMgrJobList(deps))
+	pro.GET("/oci/resourcemgr/job/logs", resMgrJobLogs(deps))
+	pro.POST("/oci/resourcemgr/job/cancel", resMgrJobCancel(deps))
+
+	// Phase 14.1: Bastion management.
+	pro.GET("/oci/bastion/list", bastionList(deps))
+	pro.POST("/oci/bastion/session/create", bastionSessionCreate(deps))
+	pro.GET("/oci/bastion/session/list", bastionSessionList(deps))
+	pro.GET("/oci/bastion/session/get", bastionSessionGet(deps))
+	pro.POST("/oci/bastion/session/delete", bastionSessionDelete(deps))
+
+	// Phase 14.2: Container Registry management.
+	pro.GET("/oci/container/repositories", ctrRegListRepos(deps))
+	pro.GET("/oci/container/images", ctrRegListImages(deps))
+	pro.POST("/oci/container/image/delete", ctrRegDeleteImage(deps))
+	pro.POST("/oci/container/repository/delete", ctrRegDeleteRepo(deps))
+	pro.POST("/oci/container/cleanup", ctrRegCleanup(deps))
+
+	// Phase 14.3: AI Vision management.
+	pro.POST("/oci/aivision/image/analyze", aiVisionAnalyzeImage(deps))
+	pro.POST("/oci/aivision/document/analyze", aiVisionAnalyzeDocument(deps))
+	pro.POST("/oci/aivision/video/create", aiVisionCreateVideoJob(deps))
+	pro.GET("/oci/aivision/video/status", aiVisionGetVideoJob(deps))
+	pro.POST("/oci/aivision/video/cancel", aiVisionCancelVideoJob(deps))
+
 	// SPA static assets + NoRoute fallback to index.html
 	web.Register(r)
 	return r

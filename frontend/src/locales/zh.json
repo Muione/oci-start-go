@@ -1,5 +1,76 @@
 {
   "app": { "title": "oci-start" },
   "common": { "login": "登录", "logout": "退出", "dashboard": "仪表盘" },
-  "nav": { "vnic": "VNIC 管理", "email": "邮件管理", "storage": "对象存储" }
+  "nav": {
+    "vnic": "VNIC 管理",
+    "email": "邮件管理",
+    "storage": "对象存储",
+    "bastion": "堡垒机",
+    "registry": "镜像仓库",
+    "vision": "AI 视觉"
+  },
+  "bastion": {
+    "title": "堡垒机管理",
+    "sessionType": { "managedSsh": "托管SSH", "portForwarding": "端口转发" },
+    "createSession": "创建会话",
+    "copySsh": "复制SSH"
+  },
+  "registry": {
+    "title": "容器镜像仓库",
+    "repo": "仓库",
+    "image": "镜像",
+    "cleanup": "清理旧镜像",
+    "keepDays": "保留天数"
+  },
+  "ipQuality": {
+    "title": "IP 质量检测",
+    "testType": { "ping": "Ping", "http": "HTTP", "tcp": "TCP" },
+    "autoSwitch": "自动切换 IP",
+    "score": "综合评分",
+    "latency": "延迟",
+    "packetLoss": "丢包率"
+  },
+  "quickDd": {
+    "title": "Quick DD 一键重装",
+    "selectOs": "选择操作系统",
+    "progress": "重装进度",
+    "completed": "已完成",
+    "failed": "失败"
+  },
+  "nosql": {
+    "title": "NoSQL 数据库管理",
+    "table": "表",
+    "createTable": "创建表",
+    "query": "查询"
+  },
+  "mysql": {
+    "title": "MySQL 数据库管理",
+    "dbSystem": "DB System",
+    "backup": "备份",
+    "channel": "复制通道"
+  },
+  "resmgr": {
+    "title": "Resource Manager",
+    "stack": "Stack",
+    "job": "Job",
+    "plan": "Plan",
+    "apply": "Apply",
+    "destroy": "Destroy"
+  },
+  "vision": {
+    "title": "AI 视觉分析",
+    "imageAnalysis": "图像分析",
+    "documentAnalysis": "文档分析",
+    "jobHistory": "任务历史",
+    "features": {
+      "imageClassification": "图像分类",
+      "objectDetection": "目标检测",
+      "faceDetection": "人脸检测",
+      "textDetection": "文字检测",
+      "textExtraction": "文字提取",
+      "tableExtraction": "表格提取",
+      "keyValueExtraction": "键值对提取",
+      "languageDetection": "语言检测"
+    }
+  }
 }

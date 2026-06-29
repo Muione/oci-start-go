@@ -295,7 +295,7 @@ func (s *IPQualityService) AutoSwitchIP(ctx context.Context, input AutoSwitchInp
 		s.logger.Info().Int64("instance", input.InstanceID).Int("attempt", attempt).
 			Float64("oldScore", oldResult.OverallScore).Msg("ip_quality: switching IP")
 
-		newIP, err := oci.ReassignPublicIP(ctx, clients, nsStr(t.Tenancy), inst.InstanceID)
+		newIP, err := oci.ReassignPublicIP(ctx, clients, nsStr(t.Tenancy), nsStr(inst.InstanceID))
 		if err != nil {
 			s.logger.Error().Err(err).Int("attempt", attempt).Msg("ip_quality: IP switch failed")
 			result.Message = fmt.Sprintf("IP switch attempt %d failed: %v", attempt, err)

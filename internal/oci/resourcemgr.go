@@ -6,6 +6,7 @@ package oci
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/resourcemanager"
@@ -97,7 +98,7 @@ func (r *ResourceMgrOps) CreatePlanJob(ctx context.Context, client *resourcemana
 	req := resourcemanager.CreateJobRequest{
 		CreateJobDetails: resourcemanager.CreateJobDetails{
 			StackId:   &stackID,
-			Operation: resourcemanager.CreateJobDetailsOperationPlan,
+			Operation: resourcemanager.JobOperationPlan,
 		},
 	}
 	resp, err := client.CreateJob(ctx, req)
@@ -111,11 +112,12 @@ func (r *ResourceMgrOps) CreatePlanJob(ctx context.Context, client *resourcemana
 func (r *ResourceMgrOps) CreateApplyJob(ctx context.Context, client *resourcemanager.ResourceManagerClient, stackID string, planJobID *string) (*resourcemanager.Job, error) {
 	details := resourcemanager.CreateJobDetails{
 		StackId:   &stackID,
-		Operation: resourcemanager.CreateJobDetailsOperationApply,
+		Operation: resourcemanager.JobOperationApply,
 	}
 	if planJobID != nil {
-		details.JobOperationDetails = resourcemanager.ApplyJobOperationDetails{
-			PlanJobId: planJobID,
+		details.JobOperationDetails = resourcemanager.CreateApplyJobOperationDetails{
+			ExecutionPlanJobId:    planJobID,
+			ExecutionPlanStrategy: resourcemanager.ApplyJobOperationDetailsExecutionPlanStrategyFromPlanJobId,
 		}
 	}
 	req := resourcemanager.CreateJobRequest{
@@ -133,7 +135,7 @@ func (r *ResourceMgrOps) CreateDestroyJob(ctx context.Context, client *resourcem
 	req := resourcemanager.CreateJobRequest{
 		CreateJobDetails: resourcemanager.CreateJobDetails{
 			StackId:   &stackID,
-			Operation: resourcemanager.CreateJobDetailsOperationDestroy,
+			Operation: resourcemanager.JobOperationDestroy,
 		},
 	}
 	resp, err := client.CreateJob(ctx, req)
@@ -176,14 +178,14 @@ func (r *ResourceMgrOps) ListJobs(ctx context.Context, client *resourcemanager.R
 
 // GetJobLogs retrieves the logs for a Resource Manager job.
 func (r *ResourceMgrOps) GetJobLogs(ctx context.Context, client *resourcemanager.ResourceManagerClient, jobID string, limit int, page string) ([]resourcemanager.LogEntry, *string, error) {
-	req := resourcemanager.ListJobLogsRequest{
+	req := resourcemanager.GetJobLogsRequest{
 		JobId: &jobID,
 		Limit: common.Int(limit),
 	}
 	if page != "" {
 		req.Page = &page
 	}
-	resp, err := client.ListJobLogs(ctx, req)
+	resp, err := client.GetJobLogs(ctx, req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get job logs %s: %w", jobID, err)
 	}
@@ -199,8 +201,16 @@ func (r *ResourceMgrOps) GetJobTfState(ctx context.Context, client *resourcemana
 	if err != nil {
 		return "", fmt.Errorf("get job tf state %s: %w", jobID, err)
 	}
-	// The response contains the state as a string.
-	return string(resp.Content), nil
+	// Content is io.ReadCloser; read it into a string.
+	if resp.Content == nil {
+		return "", nil
+	}
+	defer resp.Content.Close()
+	buf, err := io.ReadAll(resp.Content)
+	if err != nil {
+		return "", fmt.Errorf("read tf state %s: %w", jobID, err)
+	}
+	return string(buf), nil
 }
 
 // CancelJob cancels a running Resource Manager job.

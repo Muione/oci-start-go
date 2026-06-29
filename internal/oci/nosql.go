@@ -14,8 +14,9 @@ import (
 // NoSQLOps groups all OCI NoSQL Database SDK operations.
 type NoSQLOps struct{}
 
-// CreateTable creates a new NoSQL table.
-func (o *NoSQLOps) CreateTable(ctx context.Context, client *nosql.NosqlClient, compartmentID, tableName string, ddlStatement string, tableLimits *nosql.TableLimits) (*nosql.Table, error) {
+// CreateTable creates a new NoSQL table. Returns a work request ID since
+// the operation is asynchronous.
+func (o *NoSQLOps) CreateTable(ctx context.Context, client *nosql.NosqlClient, compartmentID, tableName string, ddlStatement string, tableLimits *nosql.TableLimits) (*string, error) {
 	req := nosql.CreateTableRequest{
 		CreateTableDetails: nosql.CreateTableDetails{
 			CompartmentId: &compartmentID,
@@ -28,7 +29,7 @@ func (o *NoSQLOps) CreateTable(ctx context.Context, client *nosql.NosqlClient, c
 	if err != nil {
 		return nil, fmt.Errorf("create table %s: %w", tableName, err)
 	}
-	return &resp.Table, nil
+	return resp.OpcWorkRequestId, nil
 }
 
 // GetTable retrieves details of a NoSQL table by name or OCID.
@@ -74,21 +75,25 @@ func (o *NoSQLOps) DeleteTable(ctx context.Context, client *nosql.NosqlClient, t
 }
 
 // UpdateTable updates a NoSQL table (e.g., table limits).
-func (o *NoSQLOps) UpdateTable(ctx context.Context, client *nosql.NosqlClient, tableNameOrID, compartmentID string, tableLimits *nosql.UpdateTableDetails) (*nosql.Table, error) {
+// Returns a work request ID since the operation is asynchronous.
+func (o *NoSQLOps) UpdateTable(ctx context.Context, client *nosql.NosqlClient, tableNameOrID, compartmentID string, details *nosql.UpdateTableDetails) (*string, error) {
+	if details.CompartmentId == nil {
+		details.CompartmentId = &compartmentID
+	}
 	req := nosql.UpdateTableRequest{
 		TableNameOrId:      &tableNameOrID,
-		CompartmentId:      &compartmentID,
-		UpdateTableDetails: *tableLimits,
+		UpdateTableDetails: *details,
 	}
 	resp, err := client.UpdateTable(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("update table %s: %w", tableNameOrID, err)
 	}
-	return &resp.Table, nil
+	return resp.OpcWorkRequestId, nil
 }
 
 // CreateIndex creates an index on a NoSQL table.
-func (o *NoSQLOps) CreateIndex(ctx context.Context, client *nosql.NosqlClient, tableNameOrID, compartmentID, indexName string, keys []nosql.FieldKey) (*nosql.Index, error) {
+// Returns a work request ID since the operation is asynchronous.
+func (o *NoSQLOps) CreateIndex(ctx context.Context, client *nosql.NosqlClient, tableNameOrID, compartmentID, indexName string, keys []nosql.IndexKey) (*string, error) {
 	req := nosql.CreateIndexRequest{
 		TableNameOrId: &tableNameOrID,
 		CreateIndexDetails: nosql.CreateIndexDetails{
@@ -101,7 +106,7 @@ func (o *NoSQLOps) CreateIndex(ctx context.Context, client *nosql.NosqlClient, t
 	if err != nil {
 		return nil, fmt.Errorf("create index %s on %s: %w", indexName, tableNameOrID, err)
 	}
-	return &resp.Index, nil
+	return resp.OpcWorkRequestId, nil
 }
 
 // ListIndexes lists all indexes on a NoSQL table.
@@ -146,11 +151,12 @@ func (o *NoSQLOps) GetIndex(ctx context.Context, client *nosql.NosqlClient, tabl
 }
 
 // ChangeTableCompartment moves a NoSQL table to a different compartment.
-func (o *NoSQLOps) ChangeTableCompartment(ctx context.Context, client *nosql.NosqlClient, tableNameOrID, compartmentID string) error {
+func (o *NoSQLOps) ChangeTableCompartment(ctx context.Context, client *nosql.NosqlClient, tableNameOrID, toCompartmentID, fromCompartmentID string) error {
 	req := nosql.ChangeTableCompartmentRequest{
 		TableNameOrId: &tableNameOrID,
 		ChangeTableCompartmentDetails: nosql.ChangeTableCompartmentDetails{
-			CompartmentId: &compartmentID,
+			ToCompartmentId:   &toCompartmentID,
+			FromCompartmentId: &fromCompartmentID,
 		},
 	}
 	_, err := client.ChangeTableCompartment(ctx, req)

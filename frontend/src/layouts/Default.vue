@@ -89,6 +89,7 @@ import {
   Monitor, Connection, Setting, VideoPlay, Operation,
   Download, WarningFilled, DataBoard, Platform, Coin,
   SwitchButton, DArrowLeft, DArrowRight, Folder, Message,
+  Lock, Menu, View, Histogram, Cpu, Document, DataLine, SetUp,
 } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import request from '../utils/request'
@@ -112,6 +113,14 @@ const navItems: NavItem[] = [
   { path: '/boot',       label: '抢机任务',   icon: VideoPlay },
   { path: '/instances',  label: '实例管理',   icon: Monitor },
   { path: '/vnic',       label: 'VNIC 管理',  icon: Connection },
+  { path: '/bastion',    label: '堡垒机',     icon: Lock },
+  { path: '/registry',   label: '镜像仓库',   icon: Menu },
+  { path: '/vision',     label: 'AI 视觉',    icon: View },
+  { path: '/ip-quality', label: 'IP 质量检测', icon: Histogram },
+  { path: '/quick-dd',   label: 'Quick DD',   icon: Cpu },
+  { path: '/nosql',      label: 'NoSQL DB',   icon: Document },
+  { path: '/mysql',      label: 'MySQL DB',   icon: DataLine },
+  { path: '/resmgr',     label: 'Resource Mgr', icon: SetUp },
   { path: '/email',      label: '邮件管理',   icon: Message },
   { path: '/nginx',      label: 'Nginx 管理', icon: Setting },
   { path: '/dns',        label: 'DNS 管理',   icon: Coin },
@@ -132,6 +141,8 @@ const pageTitle = computed(() => {
   const titles: Record<string, string> = {
     dashboard: '仪表盘', tenants: '租户管理', proxies: '代理管理',
     boot: '抢机任务', instances: '实例管理', vnic: 'VNIC 管理',
+    bastion: '堡垒机', registry: '镜像仓库', vision: 'AI 视觉',
+    'ip-quality': 'IP 质量检测', 'quick-dd': 'Quick DD', nosql: 'NoSQL DB', mysql: 'MySQL DB', resmgr: 'Resource Manager',
     email: '邮件管理', nginx: 'Nginx 管理', dns: 'DNS 管理', storage: '对象存储', terminal: 'SSH 终端', console: 'VNC 控制台',
     rescue: '实例救援', migration: '数据迁移', settings: '系统设置',
   }

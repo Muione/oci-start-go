@@ -95,15 +95,14 @@ func GetBastion(ctx context.Context, c *bastion.BastionClient, bastionID string)
 		return nil, fmt.Errorf("bastion: get: %w", err)
 	}
 	vo := bastionSummaryToVO(bastion.BastionSummary{
-		Id:                   resp.Id,
-		Name:                 resp.Name,
-		BastionType:          resp.BastionType,
-		LifecycleState:       resp.LifecycleState,
-		CompartmentId:        resp.CompartmentId,
-		TargetVcnId:          resp.TargetVcnId,
-		MaxSessionTtlInSeconds: resp.MaxSessionTtlInSeconds,
-		TimeCreated:          resp.TimeCreated,
-		TimeUpdated:          resp.TimeUpdated,
+		Id:             resp.Id,
+		Name:           resp.Name,
+		BastionType:    resp.BastionType,
+		LifecycleState: resp.LifecycleState,
+		CompartmentId:  resp.CompartmentId,
+		TargetVcnId:    resp.TargetVcnId,
+		TimeCreated:    resp.TimeCreated,
+		TimeUpdated:    resp.TimeUpdated,
 	})
 	return &vo, nil
 }
@@ -215,15 +214,12 @@ func DeleteSession(ctx context.Context, c *bastion.BastionClient, sessionID stri
 
 func bastionSummaryToVO(b bastion.BastionSummary) BastionSummaryVO {
 	vo := BastionSummaryVO{
-		ID:            derefStr(b.Id),
-		Name:          derefStr(b.Name),
-		BastionType:   derefStr(b.BastionType),
+		ID:             derefStr(b.Id),
+		Name:           derefStr(b.Name),
+		BastionType:    derefStr(b.BastionType),
 		LifecycleState: string(b.LifecycleState),
-		CompartmentID: derefStr(b.CompartmentId),
-		TargetVcnID:   derefStr(b.TargetVcnId),
-	}
-	if b.MaxSessionTtlInSeconds != nil {
-		vo.MaxSessionTTL = *b.MaxSessionTtlInSeconds
+		CompartmentID:  derefStr(b.CompartmentId),
+		TargetVcnID:    derefStr(b.TargetVcnId),
 	}
 	if b.TimeCreated != nil {
 		vo.TimeCreated = b.TimeCreated.Time.Format(timeLayout)

@@ -14,8 +14,10 @@ import (
 // MySQLOps groups all OCI MySQL Database Service SDK operations.
 type MySQLOps struct{}
 
+// --- DB System Operations ---
+
 // CreateDbSystem creates a new MySQL DB System.
-func (m *MySQLOps) CreateDbSystem(ctx context.Context, client *mysql.MysqlClient, compartmentID, displayName, shapeName, adminUsername, adminPassword string, subnetID string, availabilityDomain string, mysqlVersion string) (*mysql.DbSystem, error) {
+func (m *MySQLOps) CreateDbSystem(ctx context.Context, client *mysql.DbSystemClient, compartmentID, displayName, shapeName, adminUsername, adminPassword string, subnetID string, availabilityDomain string, mysqlVersion string) (*mysql.DbSystem, error) {
 	req := mysql.CreateDbSystemRequest{
 		CreateDbSystemDetails: mysql.CreateDbSystemDetails{
 			CompartmentId:      &compartmentID,
@@ -36,7 +38,7 @@ func (m *MySQLOps) CreateDbSystem(ctx context.Context, client *mysql.MysqlClient
 }
 
 // GetDbSystem retrieves details of a MySQL DB System.
-func (m *MySQLOps) GetDbSystem(ctx context.Context, client *mysql.MysqlClient, dbSystemID string) (*mysql.DbSystem, error) {
+func (m *MySQLOps) GetDbSystem(ctx context.Context, client *mysql.DbSystemClient, dbSystemID string) (*mysql.DbSystem, error) {
 	req := mysql.GetDbSystemRequest{
 		DbSystemId: &dbSystemID,
 	}
@@ -48,7 +50,7 @@ func (m *MySQLOps) GetDbSystem(ctx context.Context, client *mysql.MysqlClient, d
 }
 
 // ListDbSystems lists all MySQL DB Systems in a compartment.
-func (m *MySQLOps) ListDbSystems(ctx context.Context, client *mysql.MysqlClient, compartmentID string, displayName string, limit int, page string) ([]mysql.DbSystemSummary, *string, error) {
+func (m *MySQLOps) ListDbSystems(ctx context.Context, client *mysql.DbSystemClient, compartmentID string, displayName string, limit int, page string) ([]mysql.DbSystemSummary, *string, error) {
 	req := mysql.ListDbSystemsRequest{
 		CompartmentId: &compartmentID,
 		Limit:         common.Int(limit),
@@ -66,8 +68,9 @@ func (m *MySQLOps) ListDbSystems(ctx context.Context, client *mysql.MysqlClient,
 	return resp.Items, resp.OpcNextPage, nil
 }
 
-// UpdateDbSystem updates a MySQL DB System.
-func (m *MySQLOps) UpdateDbSystem(ctx context.Context, client *mysql.MysqlClient, dbSystemID string, displayName string) (*mysql.DbSystem, error) {
+// UpdateDbSystem updates a MySQL DB System display name.
+// Returns a work request ID since the operation is asynchronous.
+func (m *MySQLOps) UpdateDbSystem(ctx context.Context, client *mysql.DbSystemClient, dbSystemID string, displayName string) (*string, error) {
 	req := mysql.UpdateDbSystemRequest{
 		DbSystemId: &dbSystemID,
 		UpdateDbSystemDetails: mysql.UpdateDbSystemDetails{
@@ -78,11 +81,11 @@ func (m *MySQLOps) UpdateDbSystem(ctx context.Context, client *mysql.MysqlClient
 	if err != nil {
 		return nil, fmt.Errorf("update db system %s: %w", dbSystemID, err)
 	}
-	return &resp.DbSystem, nil
+	return resp.OpcWorkRequestId, nil
 }
 
 // DeleteDbSystem deletes a MySQL DB System.
-func (m *MySQLOps) DeleteDbSystem(ctx context.Context, client *mysql.MysqlClient, dbSystemID string) error {
+func (m *MySQLOps) DeleteDbSystem(ctx context.Context, client *mysql.DbSystemClient, dbSystemID string) error {
 	req := mysql.DeleteDbSystemRequest{
 		DbSystemId: &dbSystemID,
 	}
@@ -94,7 +97,7 @@ func (m *MySQLOps) DeleteDbSystem(ctx context.Context, client *mysql.MysqlClient
 }
 
 // StartDbSystem starts a stopped MySQL DB System.
-func (m *MySQLOps) StartDbSystem(ctx context.Context, client *mysql.MysqlClient, dbSystemID string) error {
+func (m *MySQLOps) StartDbSystem(ctx context.Context, client *mysql.DbSystemClient, dbSystemID string) error {
 	req := mysql.StartDbSystemRequest{
 		DbSystemId: &dbSystemID,
 	}
@@ -106,7 +109,7 @@ func (m *MySQLOps) StartDbSystem(ctx context.Context, client *mysql.MysqlClient,
 }
 
 // StopDbSystem stops a running MySQL DB System.
-func (m *MySQLOps) StopDbSystem(ctx context.Context, client *mysql.MysqlClient, dbSystemID string) error {
+func (m *MySQLOps) StopDbSystem(ctx context.Context, client *mysql.DbSystemClient, dbSystemID string) error {
 	req := mysql.StopDbSystemRequest{
 		DbSystemId: &dbSystemID,
 	}
@@ -118,7 +121,7 @@ func (m *MySQLOps) StopDbSystem(ctx context.Context, client *mysql.MysqlClient, 
 }
 
 // RestartDbSystem restarts a MySQL DB System.
-func (m *MySQLOps) RestartDbSystem(ctx context.Context, client *mysql.MysqlClient, dbSystemID string) error {
+func (m *MySQLOps) RestartDbSystem(ctx context.Context, client *mysql.DbSystemClient, dbSystemID string) error {
 	req := mysql.RestartDbSystemRequest{
 		DbSystemId: &dbSystemID,
 	}
@@ -129,15 +132,14 @@ func (m *MySQLOps) RestartDbSystem(ctx context.Context, client *mysql.MysqlClien
 	return nil
 }
 
-// --- Backup Operations ---
+// --- Backup Operations (use DbBackupsClient) ---
 
 // CreateBackup creates a manual backup of a MySQL DB System.
-func (m *MySQLOps) CreateBackup(ctx context.Context, client *mysql.MysqlClient, dbSystemID, displayName, compartmentID string) (*mysql.Backup, error) {
+func (m *MySQLOps) CreateBackup(ctx context.Context, client *mysql.DbBackupsClient, dbSystemID, displayName, compartmentID string) (*mysql.Backup, error) {
 	req := mysql.CreateBackupRequest{
 		CreateBackupDetails: mysql.CreateBackupDetails{
-			CompartmentId: &compartmentID,
-			DisplayName:   &displayName,
-			DbSystemId:    &dbSystemID,
+			DisplayName: &displayName,
+			DbSystemId:  &dbSystemID,
 		},
 	}
 	resp, err := client.CreateBackup(ctx, req)
@@ -148,7 +150,7 @@ func (m *MySQLOps) CreateBackup(ctx context.Context, client *mysql.MysqlClient, 
 }
 
 // GetBackup retrieves details of a MySQL backup.
-func (m *MySQLOps) GetBackup(ctx context.Context, client *mysql.MysqlClient, backupID string) (*mysql.Backup, error) {
+func (m *MySQLOps) GetBackup(ctx context.Context, client *mysql.DbBackupsClient, backupID string) (*mysql.Backup, error) {
 	req := mysql.GetBackupRequest{
 		BackupId: &backupID,
 	}
@@ -160,7 +162,7 @@ func (m *MySQLOps) GetBackup(ctx context.Context, client *mysql.MysqlClient, bac
 }
 
 // ListBackups lists all MySQL backups in a compartment.
-func (m *MySQLOps) ListBackups(ctx context.Context, client *mysql.MysqlClient, compartmentID string, dbSystemID string, limit int, page string) ([]mysql.BackupSummary, *string, error) {
+func (m *MySQLOps) ListBackups(ctx context.Context, client *mysql.DbBackupsClient, compartmentID string, dbSystemID string, limit int, page string) ([]mysql.BackupSummary, *string, error) {
 	req := mysql.ListBackupsRequest{
 		CompartmentId: &compartmentID,
 		Limit:         common.Int(limit),
@@ -179,7 +181,7 @@ func (m *MySQLOps) ListBackups(ctx context.Context, client *mysql.MysqlClient, c
 }
 
 // DeleteBackup deletes a MySQL backup.
-func (m *MySQLOps) DeleteBackup(ctx context.Context, client *mysql.MysqlClient, backupID string) error {
+func (m *MySQLOps) DeleteBackup(ctx context.Context, client *mysql.DbBackupsClient, backupID string) error {
 	req := mysql.DeleteBackupRequest{
 		BackupId: &backupID,
 	}
@@ -190,17 +192,16 @@ func (m *MySQLOps) DeleteBackup(ctx context.Context, client *mysql.MysqlClient, 
 	return nil
 }
 
-// --- Channel (Replication) Operations ---
+// --- Channel (Replication) Operations (use ChannelsClient) ---
 
 // CreateChannel creates a MySQL channel for replication.
-func (m *MySQLOps) CreateChannel(ctx context.Context, client *mysql.MysqlClient, compartmentID, displayName, targetDbSystemID string, source mysql.ChannelSource, target mysql.ChannelTarget) (*mysql.Channel, error) {
+func (m *MySQLOps) CreateChannel(ctx context.Context, client *mysql.ChannelsClient, compartmentID, displayName string, source mysql.CreateChannelSourceDetails, target mysql.CreateChannelTargetDetails) (*mysql.Channel, error) {
 	req := mysql.CreateChannelRequest{
 		CreateChannelDetails: mysql.CreateChannelDetails{
-			CompartmentId:   &compartmentID,
-			DisplayName:     &displayName,
-			TargetDbSystemId: &targetDbSystemID,
-			Source:          source,
-			Target:          target,
+			CompartmentId: &compartmentID,
+			DisplayName:   &displayName,
+			Source:        source,
+			Target:        target,
 		},
 	}
 	resp, err := client.CreateChannel(ctx, req)
@@ -211,7 +212,7 @@ func (m *MySQLOps) CreateChannel(ctx context.Context, client *mysql.MysqlClient,
 }
 
 // GetChannel retrieves details of a MySQL channel.
-func (m *MySQLOps) GetChannel(ctx context.Context, client *mysql.MysqlClient, channelID string) (*mysql.Channel, error) {
+func (m *MySQLOps) GetChannel(ctx context.Context, client *mysql.ChannelsClient, channelID string) (*mysql.Channel, error) {
 	req := mysql.GetChannelRequest{
 		ChannelId: &channelID,
 	}
@@ -223,7 +224,7 @@ func (m *MySQLOps) GetChannel(ctx context.Context, client *mysql.MysqlClient, ch
 }
 
 // ListChannels lists all MySQL channels in a compartment.
-func (m *MySQLOps) ListChannels(ctx context.Context, client *mysql.MysqlClient, compartmentID, dbSystemID string, limit int, page string) ([]mysql.ChannelSummary, *string, error) {
+func (m *MySQLOps) ListChannels(ctx context.Context, client *mysql.ChannelsClient, compartmentID, dbSystemID string, limit int, page string) ([]mysql.ChannelSummary, *string, error) {
 	req := mysql.ListChannelsRequest{
 		CompartmentId: &compartmentID,
 		Limit:         common.Int(limit),
@@ -242,7 +243,7 @@ func (m *MySQLOps) ListChannels(ctx context.Context, client *mysql.MysqlClient, 
 }
 
 // DeleteChannel deletes a MySQL channel.
-func (m *MySQLOps) DeleteChannel(ctx context.Context, client *mysql.MysqlClient, channelID string) error {
+func (m *MySQLOps) DeleteChannel(ctx context.Context, client *mysql.ChannelsClient, channelID string) error {
 	req := mysql.DeleteChannelRequest{
 		ChannelId: &channelID,
 	}
