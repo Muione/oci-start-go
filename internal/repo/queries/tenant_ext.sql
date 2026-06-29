@@ -19,3 +19,6 @@ SELECT COUNT(*) FROM boot_instance WHERE tenant_id = ? AND status = 1;
 
 -- name: CountTenantChildren :one
 SELECT COUNT(*) FROM tenant WHERE paren_id = ?;
+
+-- name: UpdateTenantEnableFlags :exec
+UPDATE tenant SET enable_icmp = ?, enable_all_protocol = ? WHERE id = ?;

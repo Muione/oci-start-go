@@ -76,4 +76,27 @@ type Deps struct {
 
 	// Phase 10: tenant IAM user management.
 	TenantUser *service.TenantUserService
+
+	// Phase 11.3: security list rule management.
+	SecurityRule *service.SecurityRuleService
+
+	// Phase 11.4: quota, region subscription, audit log.
+	Quota     *service.QuotaService
+	RegionSub *service.RegionSubService
+	Audit     *service.AuditService
+
+	// Phase 11.1: Object Storage.
+	ObjectStorageSvc *service.ObjectStorageService
+
+	// Phase 11.2: VNIC batch management.
+	VnicMgmtSvc *service.VnicManagementService
+
+	// Phase 12.3: SSH root login configurator.
+	SSHConfig *service.SSHConfigurator
+
+	// Phase 12.1: Nginx / Reverse Proxy management.
+	NginxSvc *service.NginxService
+
+	// Phase 12.2: Email Delivery service.
+	EmailSvc *service.EmailService
 }

@@ -134,6 +134,18 @@
                   <el-dropdown-item command="instances">
                     <el-icon><Monitor /></el-icon> 实例列表
                   </el-dropdown-item>
+                  <el-dropdown-item command="securityRules" divided>
+                    <el-icon><Warning /></el-icon> 安全规则
+                  </el-dropdown-item>
+                  <el-dropdown-item command="quota">
+                    <el-icon><DataLine /></el-icon> 配额查看
+                  </el-dropdown-item>
+                  <el-dropdown-item command="regionSub">
+                    <el-icon><Location /></el-icon> 区域订阅
+                  </el-dropdown-item>
+                  <el-dropdown-item command="auditLog">
+                    <el-icon><Document /></el-icon> 审计日志
+                  </el-dropdown-item>
                   <el-dropdown-item command="trafficAlert" divided>
                     <el-icon><Warning /></el-icon> 流量预警
                   </el-dropdown-item>
@@ -782,6 +794,274 @@
         </el-table-column>
       </el-table>
     </el-dialog>
+
+    <!-- ================================================================ -->
+    <!-- Security Rules Dialog -->
+    <!-- ================================================================ -->
+    <el-dialog v-model="secRulesVisible" :title="`安全规则 — ${secRulesTenantName}`" width="85%" destroy-on-close>
+      <el-tabs v-model="secRulesTab" @tab-change="loadSecRules">
+        <el-tab-pane label="入站规则" name="ingress"/>
+        <el-tab-pane label="出站规则" name="egress"/>
+      </el-tabs>
+      <div style="margin-bottom:12px;display:flex;gap:8px">
+        <el-button type="success" size="small" @click="openSecRuleAdd">
+          <el-icon><Plus /></el-icon> 添加规则
+        </el-button>
+        <el-button type="primary" size="small" @click="loadSecRules" :loading="secRulesLoading">
+          <el-icon><Refresh /></el-icon> 刷新
+        </el-button>
+        <el-button type="warning" size="small" @click="enableAllProtocols" :loading="secRulesLoading">
+          <el-icon><Connection /></el-icon> 启用所有协议
+        </el-button>
+      </div>
+      <template v-if="secRulesLoading">
+        <el-skeleton :rows="5" animated/>
+      </template>
+      <el-table v-else :data="secRulesList" border stripe size="small">
+        <template #empty><el-empty description="暂无安全规则" :image-size="60"/></template>
+        <el-table-column type="index" label="#" width="50" align="center"/>
+        <el-table-column label="类型" width="80">
+          <template #default="{ row }">
+            <el-tag :type="row.type==='入站'?'success':'warning'" size="small">{{ row.type || '—' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="protocol" label="协议" width="100"/>
+        <el-table-column prop="source" label="源/目标 CIDR" min-width="180" show-overflow-tooltip/>
+        <el-table-column prop="ports" label="端口" width="120">
+          <template #default="{ row }">{{ row.ports || 'ALL' }}</template>
+        </el-table-column>
+        <el-table-column prop="icmpType" label="ICMP Type" width="110">
+          <template #default="{ row }">{{ row.icmpType || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="80" align="center">
+          <template #default="{ row, $index }">
+            <el-button size="small" type="danger" @click="deleteSecRule(row, $index)">
+              <el-icon><Delete /></el-icon>
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- Add Rule sub-dialog -->
+      <el-dialog v-model="secRuleAddVisible" title="添加安全规则" width="460px" append-to-body destroy-on-close>
+        <el-form :model="secRuleForm" label-width="100px">
+          <el-form-item label="规则类型">
+            <el-tag size="small">{{ secRulesTab === 'ingress' ? '入站' : '出站' }}</el-tag>
+          </el-form-item>
+          <el-form-item label="协议" required>
+            <el-select v-model="secRuleForm.protocol" style="width:100%">
+              <el-option label="ALL (所有协议)" value="all"/>
+              <el-option label="TCP" value="6"/>
+              <el-option label="UDP" value="17"/>
+              <el-option label="ICMP" value="1"/>
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="secRulesTab === 'ingress' ? '源 CIDR' : '目标 CIDR'" required>
+            <el-input v-model="secRuleForm.source" placeholder="0.0.0.0/0"/>
+          </el-form-item>
+          <el-form-item label="端口范围">
+            <el-input v-model="secRuleForm.ports" placeholder="80 或 8080-9090，留空表示所有端口"/>
+          </el-form-item>
+          <el-form-item v-if="secRuleForm.protocol === '1'" label="ICMP Type">
+            <el-input v-model="secRuleForm.icmpType" placeholder="8,0 (默认: Echo Request)"/>
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="secRuleAddVisible=false">取消</el-button>
+          <el-button type="primary" :loading="secRuleSaving" @click="addSecRule">添加</el-button>
+        </template>
+      </el-dialog>
+    </el-dialog>
+
+    <!-- ================================================================ -->
+    <!-- Quota Dialog -->
+    <!-- ================================================================ -->
+    <el-dialog v-model="quotaVisible" :title="`配额查看 — ${quotaTenantName}`" width="80%" destroy-on-close>
+      <div style="margin-bottom:12px;display:flex;gap:12px;align-items:center">
+        <span style="font-size:13px;color:var(--text-secondary)">服务：</span>
+        <el-select v-model="quotaService" size="small" style="width:180px" @change="loadQuota(0)">
+          <el-option label="Compute" value="compute"/>
+          <el-option label="Block Storage" value="block-storage"/>
+          <el-option label="Object Storage" value="object-storage"/>
+        </el-select>
+        <el-button size="small" type="primary" @click="loadQuota(0)" :loading="quotaLoading">
+          <el-icon><Refresh /></el-icon> 刷新
+        </el-button>
+        <span v-if="quotaRegion" style="font-size:12px;color:var(--text-secondary)">
+          区域: {{ quotaRegion }}
+        </span>
+      </div>
+      <template v-if="quotaLoading">
+        <el-skeleton :rows="5" animated/>
+      </template>
+      <el-table v-else :data="quotaItems" border stripe size="small">
+        <template #empty><el-empty description="暂无配额数据" :image-size="60"/></template>
+        <el-table-column prop="name" label="资源名称" min-width="240" show-overflow-tooltip/>
+        <el-table-column label="可用" width="100" align="right">
+          <template #default="{ row }">
+            <span style="color:var(--status-up);font-weight:var(--font-semibold)">{{ row.available }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="已用" width="100" align="right">
+          <template #default="{ row }">{{ row.used }}</template>
+        </el-table-column>
+        <el-table-column label="总计" width="100" align="right">
+          <template #default="{ row }">{{ row.total }}</template>
+        </el-table-column>
+        <el-table-column label="使用率" width="120" align="center">
+          <template #default="{ row }">
+            <el-progress
+              :percentage="row.total > 0 ? Math.round(row.used / row.total * 100) : 0"
+              :stroke-width="12"
+              :text-inside="true"
+              :status="row.total > 0 && row.used / row.total > 0.8 ? 'exception' : ''"
+            />
+          </template>
+        </el-table-column>
+      </el-table>
+      <div style="margin-top:12px;display:flex;justify-content:center;gap:8px">
+        <el-button size="small" :disabled="quotaPage <= 0" @click="loadQuota(quotaPage - 1)">上一页</el-button>
+        <span style="line-height:28px;font-size:13px;color:var(--text-secondary)">第 {{ quotaPage + 1 }} 页</span>
+        <el-button size="small" :disabled="!quotaHasNext" @click="loadQuota(quotaPage + 1)">下一页</el-button>
+      </div>
+    </el-dialog>
+
+    <!-- ================================================================ -->
+    <!-- Region Subscription Dialog -->
+    <!-- ================================================================ -->
+    <el-dialog v-model="regionSubVisible" :title="`区域订阅 — ${regionSubTenantName}`" width="85%" destroy-on-close>
+      <!-- Summary Card -->
+      <div style="display:flex;gap:24px;margin-bottom:16px;padding:16px;background:var(--bg-raised);border-radius:var(--radius-md)">
+        <el-statistic title="总区域数" :value="regionSummary?.totalRegions ?? 0"/>
+        <el-statistic title="已订阅">
+          <template #default>
+            <span style="color:var(--status-up)">{{ regionSummary?.subscribedRegions ?? 0 }}</span>
+          </template>
+        </el-statistic>
+        <el-statistic title="未订阅">
+          <template #default>
+            <span style="color:var(--text-secondary)">{{ regionSummary?.unsubscribedRegions ?? 0 }}</span>
+          </template>
+        </el-statistic>
+        <el-button size="small" type="primary" @click="loadRegionSubData" :loading="regionSubLoading" style="align-self:center">
+          <el-icon><Refresh /></el-icon> 刷新
+        </el-button>
+      </div>
+
+      <el-tabs v-model="regionSubTab">
+        <el-tab-pane label="已订阅" name="subscribed">
+          <template v-if="regionSubLoading">
+            <el-skeleton :rows="4" animated/>
+          </template>
+          <el-table v-else :data="regionSubscribedList" border stripe size="small">
+            <template #empty><el-empty description="暂无已订阅区域" :image-size="60"/></template>
+            <el-table-column prop="regionKey" label="区域 Key" min-width="160"/>
+            <el-table-column prop="regionName" label="区域名称" min-width="160"/>
+            <el-table-column label="状态" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.status==='READY'?'success':'warning'" size="small">{{ row.status || '—' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="主区域" width="80" align="center">
+              <template #default="{ row }">
+                <span :class="row.isHomeRegion ? 'home-region-badge is-home' : 'home-region-badge not-home'">
+                  {{ row.isHomeRegion ? '是' : '否' }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="100" align="center">
+              <template #default="{ row }">
+                <el-button size="small" @click="checkRegionStatus(row.regionKey)" :loading="regionChecking">
+                  检查状态
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-if="regionCheckResult" style="margin-top:8px">
+            <el-alert
+              :title="`${regionCheckResult.regionKey}: ${regionCheckResult.status} (${regionCheckResult.subscribed ? '已订阅' : '未订阅'})`"
+              :type="regionCheckResult.subscribed ? 'success' : 'info'"
+              :closable="true"
+              show-icon
+              @close="regionCheckResult=null"
+            />
+          </div>
+        </el-tab-pane>
+        <el-tab-pane label="未订阅" name="unsubscribed">
+          <div style="margin-bottom:12px;display:flex;gap:8px">
+            <el-button type="success" size="small" @click="subscribeSelectedRegions" :disabled="regionSelectedKeys.length === 0" :loading="regionSubscribing">
+              <el-icon><Plus /></el-icon> 订阅选中 ({{ regionSelectedKeys.length }})
+            </el-button>
+          </div>
+          <template v-if="regionSubLoading">
+            <el-skeleton :rows="4" animated/>
+          </template>
+          <el-table v-else :data="regionUnsubscribedList" border stripe size="small" @selection-change="onRegionSelectionChange">
+            <template #empty><el-empty description="所有区域均已订阅" :image-size="60"/></template>
+            <el-table-column type="selection" width="50"/>
+            <el-table-column prop="key" label="区域 Key" min-width="160"/>
+            <el-table-column prop="name" label="区域名称" min-width="160"/>
+            <el-table-column prop="cnName" label="中文名" min-width="140"/>
+          </el-table>
+        </el-tab-pane>
+      </el-tabs>
+    </el-dialog>
+
+    <!-- ================================================================ -->
+    <!-- Audit Log Dialog -->
+    <!-- ================================================================ -->
+    <el-dialog v-model="auditVisible" :title="`审计日志 — ${auditTenantName}`" width="90%" destroy-on-close>
+      <div style="margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--text-secondary)">快速选择：</span>
+        <el-radio-group v-model="auditDays" size="small" @change="onAuditDaysChange">
+          <el-radio-button :value="1">1天</el-radio-button>
+          <el-radio-button :value="3">3天</el-radio-button>
+          <el-radio-button :value="7">7天</el-radio-button>
+          <el-radio-button :value="30">30天</el-radio-button>
+          <el-radio-button :value="90">90天</el-radio-button>
+        </el-radio-group>
+        <span style="font-size:13px;color:var(--text-secondary);margin-left:8px">或日期范围：</span>
+        <el-date-picker
+          v-model="auditDateRange"
+          type="daterange"
+          range-separator="至"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          format="YYYY-MM-DD"
+          value-format="YYYY-MM-DD"
+          size="small"
+          style="width:280px"
+          @change="auditDays = 0"
+        />
+        <el-button size="small" type="primary" @click="queryAuditLog" :loading="auditLoading">
+          <el-icon><Search /></el-icon> 查询
+        </el-button>
+      </div>
+      <template v-if="auditLoading">
+        <el-skeleton :rows="6" animated/>
+      </template>
+      <el-table v-else :data="auditEvents" border stripe size="small" max-height="480">
+        <template #empty><el-empty description="暂无审计日志" :image-size="60"/></template>
+        <el-table-column prop="eventTime" label="时间" width="170"/>
+        <el-table-column prop="eventType" label="事件类型" min-width="280" show-overflow-tooltip/>
+        <el-table-column prop="userName" label="用户" min-width="200" show-overflow-tooltip/>
+        <el-table-column prop="ipAddress" label="IP 地址" min-width="180" show-overflow-tooltip/>
+        <el-table-column prop="clientEnv" label="客户端" min-width="180" show-overflow-tooltip/>
+        <el-table-column label="状态" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.responseStatus==='200'?'success':'danger'" size="small">{{ row.responseStatus || '—' }}</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div style="margin-top:12px;display:flex;justify-content:center;gap:8px">
+        <el-button size="small" :disabled="!auditHasNext" @click="queryAuditLogNext">
+          加载更多
+        </el-button>
+        <span v-if="auditEvents.length > 0" style="line-height:28px;font-size:12px;color:var(--text-secondary)">
+          已加载 {{ auditEvents.length }} 条
+        </span>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -791,7 +1071,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Plus, Refresh, Monitor, Connection, InfoFilled, Edit, VideoPlay,
   Warning, DataAnalysis, Message, Share, Download, Delete, Search,
-  Operation, MoreFilled, Key, User
+  Operation, MoreFilled, Key, User, DataLine, Location, Document
 } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import request from '../utils/request'
@@ -935,6 +1215,54 @@ const trafficQueryTenantId = ref(0)
 const trafficDateRange = ref<string[] | null>(null)
 const trafficQueryData = ref<any[]>([])
 
+// security rules dialog
+const secRulesVisible = ref(false)
+const secRulesLoading = ref(false)
+const secRulesTenantId = ref(0)
+const secRulesTenantName = ref('')
+const secRulesTab = ref('ingress')
+const secRulesList = ref<any[]>([])
+const secRuleAddVisible = ref(false)
+const secRuleSaving = ref(false)
+const secRuleForm = ref({ protocol: 'all', source: '0.0.0.0/0', ports: '', icmpType: '' })
+
+// quota dialog
+const quotaVisible = ref(false)
+const quotaLoading = ref(false)
+const quotaTenantId = ref(0)
+const quotaTenantName = ref('')
+const quotaService = ref('compute')
+const quotaItems = ref<any[]>([])
+const quotaPage = ref(0)
+const quotaPageSize = ref(20)
+const quotaHasNext = ref(false)
+const quotaRegion = ref('')
+
+// region subscription dialog
+const regionSubVisible = ref(false)
+const regionSubLoading = ref(false)
+const regionSubTenantId = ref(0)
+const regionSubTenantName = ref('')
+const regionSummary = ref<{totalRegions:number;subscribedRegions:number;unsubscribedRegions:number}|null>(null)
+const regionSubscribedList = ref<any[]>([])
+const regionUnsubscribedList = ref<any[]>([])
+const regionSubTab = ref('subscribed')
+const regionSubscribing = ref(false)
+const regionSelectedKeys = ref<string[]>([])
+const regionChecking = ref(false)
+const regionCheckResult = ref<any>(null)
+
+// audit log dialog
+const auditVisible = ref(false)
+const auditLoading = ref(false)
+const auditTenantId = ref(0)
+const auditTenantName = ref('')
+const auditDays = ref(7)
+const auditDateRange = ref<string[] | null>(null)
+const auditEvents = ref<any[]>([])
+const auditNextPageToken = ref('')
+const auditHasNext = ref(false)
+
 // --- computed ---
 const filteredRows = computed(() => {
   if (!searchText.value) return rows.value
@@ -1021,6 +1349,10 @@ function handleAction(cmd: string, row: Tenant) {
     case 'check': checkTenant(row.id); break
     case 'boot': router.push('/boot'); break
     case 'instances': showInstances(row); break
+    case 'securityRules': openSecRules(row); break
+    case 'quota': openQuota(row); break
+    case 'regionSub': openRegionSub(row); break
+    case 'auditLog': openAuditLog(row); break
     case 'trafficAlert': openTrafficAlert(row); break
     case 'trafficQuery': openTrafficQuery(row); break
     case 'email': openEmail(row); break
@@ -1657,6 +1989,231 @@ async function showInstances(row: Tenant) {
     instances.value = await request.get(`/tenants/${row.id}/instances`) as any[]
   } catch (e: any) { ElMessage.error(e.message) }
   finally { instLoading.value = false }
+}
+
+// --- security rules ---
+async function openSecRules(row: Tenant) {
+  secRulesTenantId.value = row.id
+  secRulesTenantName.value = row.userName || row.tenancyName || `#${row.id}`
+  secRulesTab.value = 'ingress'
+  secRulesVisible.value = true
+  await loadSecRules()
+}
+
+async function loadSecRules() {
+  secRulesLoading.value = true
+  try {
+    secRulesList.value = await request.get('/tenants/security-rules', {
+      params: { tenantId: secRulesTenantId.value, type: secRulesTab.value }
+    }) as any[]
+  } catch (e: any) {
+    ElMessage.error('加载安全规则失败: ' + (e?.message || e))
+    secRulesList.value = []
+  } finally { secRulesLoading.value = false }
+}
+
+function openSecRuleAdd() {
+  secRuleForm.value = { protocol: 'all', source: '0.0.0.0/0', ports: '', icmpType: '' }
+  secRuleAddVisible.value = true
+}
+
+async function addSecRule() {
+  if (!secRuleForm.value.source) {
+    ElMessage.warning('请填写源/目标 CIDR'); return
+  }
+  secRuleSaving.value = true
+  try {
+    await request.post('/tenants/security-rules', {
+      tenantId: secRulesTenantId.value,
+      type: secRulesTab.value,
+      protocol: secRuleForm.value.protocol,
+      source: secRuleForm.value.source,
+      ports: secRuleForm.value.ports || null,
+      icmpType: secRuleForm.value.protocol === '1' ? (secRuleForm.value.icmpType || '8,0') : null,
+    })
+    ElMessage.success('规则已添加')
+    secRuleAddVisible.value = false
+    await loadSecRules()
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { secRuleSaving.value = false }
+}
+
+async function deleteSecRule(row: any, index: number) {
+  try {
+    await ElMessageBox.confirm('确定删除该安全规则？', '确认删除', { type: 'warning' })
+    const compositeId = `${secRulesTenantId.value}_${index}_${secRulesTab.value}`
+    await request.delete(`/tenants/security-rules/${compositeId}`)
+    ElMessage.success('规则已删除')
+    await loadSecRules()
+  } catch (e: any) {
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
+  }
+}
+
+async function enableAllProtocols() {
+  try {
+    await ElMessageBox.confirm('将为所有租户启用所有协议规则，是否继续？', '启用所有协议', { type: 'warning' })
+    secRulesLoading.value = true
+    await request.post('/tenants/enableAll')
+    ElMessage.success('所有协议已启用')
+    await loadSecRules()
+  } catch (e: any) {
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
+  } finally { secRulesLoading.value = false }
+}
+
+// --- quota ---
+async function openQuota(row: Tenant) {
+  quotaTenantId.value = row.id
+  quotaTenantName.value = row.userName || row.tenancyName || `#${row.id}`
+  quotaService.value = 'compute'
+  quotaPage.value = 0
+  quotaVisible.value = true
+  await loadQuota(0)
+}
+
+async function loadQuota(page: number) {
+  quotaLoading.value = true
+  try {
+    const resp: any = await request.get(`/tenants/${quotaTenantId.value}/quota`, {
+      params: { serviceName: quotaService.value, page, pageSize: quotaPageSize.value }
+    })
+    quotaItems.value = resp?.items || []
+    quotaPage.value = resp?.page ?? page
+    quotaHasNext.value = resp?.hasNextPage ?? false
+    quotaRegion.value = resp?.region || resp?.regionEn || ''
+  } catch (e: any) {
+    ElMessage.error('加载配额失败: ' + (e?.message || e))
+    quotaItems.value = []
+  } finally { quotaLoading.value = false }
+}
+
+// --- region subscription ---
+async function openRegionSub(row: Tenant) {
+  regionSubTenantId.value = row.id
+  regionSubTenantName.value = row.userName || row.tenancyName || `#${row.id}`
+  regionSubTab.value = 'subscribed'
+  regionSelectedKeys.value = []
+  regionCheckResult.value = null
+  regionSubVisible.value = true
+  await loadRegionSubData()
+}
+
+async function loadRegionSubData() {
+  regionSubLoading.value = true
+  try {
+    const [summary, subscribed, unsubscribed] = await Promise.all([
+      request.get(`/tenants/${regionSubTenantId.value}/regions/summary`),
+      request.get(`/tenants/${regionSubTenantId.value}/regions/subscribed`),
+      request.get(`/tenants/${regionSubTenantId.value}/regions/unsubscribed`),
+    ])
+    regionSummary.value = summary as any
+    regionSubscribedList.value = subscribed as any[]
+    regionUnsubscribedList.value = unsubscribed as any[]
+  } catch (e: any) {
+    ElMessage.error('加载区域订阅数据失败: ' + (e?.message || e))
+  } finally { regionSubLoading.value = false }
+}
+
+function onRegionSelectionChange(rows: any[]) {
+  regionSelectedKeys.value = rows.map((r: any) => r.key)
+}
+
+async function subscribeSelectedRegions() {
+  if (regionSelectedKeys.value.length === 0) return
+  try {
+    await ElMessageBox.confirm(
+      `确定订阅选中的 ${regionSelectedKeys.value.length} 个区域？此操作可能需要几分钟完成。`,
+      '确认订阅', { type: 'info' }
+    )
+    regionSubscribing.value = true
+    const resp: any = await request.post(`/tenants/${regionSubTenantId.value}/regions/subscribe`, {
+      regionKeys: regionSelectedKeys.value
+    })
+    if (resp?.success) {
+      ElMessage.success(resp?.message || '订阅请求已提交')
+    } else {
+      ElMessage.warning(resp?.message || '部分区域订阅失败')
+    }
+    regionSelectedKeys.value = []
+    await loadRegionSubData()
+  } catch (e: any) {
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
+  } finally { regionSubscribing.value = false }
+}
+
+async function checkRegionStatus(regionKey: string) {
+  regionChecking.value = true
+  regionCheckResult.value = null
+  try {
+    regionCheckResult.value = await request.get(`/tenants/${regionSubTenantId.value}/regions/subscription-status`, {
+      params: { regionKey }
+    })
+  } catch (e: any) {
+    ElMessage.error('检查状态失败: ' + (e?.message || e))
+  } finally { regionChecking.value = false }
+}
+
+// --- audit log ---
+function openAuditLog(row: Tenant) {
+  auditTenantId.value = row.id
+  auditTenantName.value = row.userName || row.tenancyName || `#${row.id}`
+  auditDays.value = 7
+  auditDateRange.value = null
+  auditEvents.value = []
+  auditNextPageToken.value = ''
+  auditHasNext.value = false
+  auditVisible.value = true
+  queryAuditLog()
+}
+
+function onAuditDaysChange(val: number) {
+  if (val > 0) auditDateRange.value = null
+}
+
+async function queryAuditLog() {
+  auditLoading.value = true
+  auditEvents.value = []
+  auditNextPageToken.value = ''
+  auditHasNext.value = false
+  try {
+    const body: any = {}
+    if (auditDateRange.value && auditDateRange.value.length === 2) {
+      body.startDate = auditDateRange.value[0]
+      body.endDate = auditDateRange.value[1]
+    } else {
+      body.days = auditDays.value || 7
+    }
+    const resp: any = await request.post(`/tenants/${auditTenantId.value}/audit-log`, body)
+    const page = resp?.data || resp
+    auditEvents.value = page?.data || []
+    auditNextPageToken.value = page?.nextPageToken || ''
+    auditHasNext.value = !!auditNextPageToken.value
+  } catch (e: any) {
+    ElMessage.error('查询审计日志失败: ' + (e?.message || e))
+  } finally { auditLoading.value = false }
+}
+
+async function queryAuditLogNext() {
+  if (!auditNextPageToken.value) return
+  auditLoading.value = true
+  try {
+    const body: any = { pageToken: auditNextPageToken.value }
+    if (auditDateRange.value && auditDateRange.value.length === 2) {
+      body.startDate = auditDateRange.value[0]
+      body.endDate = auditDateRange.value[1]
+    } else {
+      body.days = auditDays.value || 7
+    }
+    const resp: any = await request.post(`/tenants/${auditTenantId.value}/audit-log`, body)
+    const page = resp?.data || resp
+    const newEvents = page?.data || []
+    auditEvents.value = [...auditEvents.value, ...newEvents]
+    auditNextPageToken.value = page?.nextPageToken || ''
+    auditHasNext.value = !!auditNextPageToken.value
+  } catch (e: any) {
+    ElMessage.error('加载更多失败: ' + (e?.message || e))
+  } finally { auditLoading.value = false }
 }
 
 onMounted(load)

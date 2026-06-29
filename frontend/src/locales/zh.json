@@ -1,4 +1,5 @@
 {
   "app": { "title": "oci-start" },
-  "common": { "login": "登录", "logout": "退出", "dashboard": "仪表盘" }
+  "common": { "login": "登录", "logout": "退出", "dashboard": "仪表盘" },
+  "nav": { "vnic": "VNIC 管理", "email": "邮件管理", "storage": "对象存储" }
 }

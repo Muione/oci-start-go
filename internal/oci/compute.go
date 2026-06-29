@@ -1,12 +1,13 @@
-// Package oci — compute.go: basic instance listing (Phase 3). Ports
-// OciUtils instance-list calls (ListInstances, GetInstance) used by sync.
-// Launch/terminate/resize/start/stop are Phase 4 (抢机 engine).
+// Package oci — compute.go: basic instance listing (Phase 3) + ResetInstance
+// (Phase 11.2). Ports OciUtils instance-list calls (ListInstances, GetInstance)
+// used by sync. Launch/terminate/resize/start/stop are Phase 4.
 package oci
 
 import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/core"
@@ -77,5 +78,60 @@ func instanceArchitecture(shape *core.InstanceShapeConfig) string {
 		return "AMD"
 	default:
 		return desc
+	}
+}
+
+// ResetInstance stops then starts an instance. Required for IPv6 addresses to
+// take effect. Parity with Java OciUtils.resetInstance.
+func ResetInstance(ctx context.Context, c Clients, instanceID string) error {
+	// 1. Stop
+	_, err := c.Compute.InstanceAction(ctx, core.InstanceActionRequest{
+		InstanceId: common.String(instanceID),
+		Action:     core.InstanceActionActionStop,
+	})
+	if err != nil {
+		return fmt.Errorf("reset: stop instance %s: %w", instanceID, err)
+	}
+
+	// 2. Poll until STOPPED
+	if err := waitForInstanceState(ctx, c, instanceID, core.InstanceLifecycleStateStopped, 300*time.Second, 3*time.Second); err != nil {
+		return fmt.Errorf("reset: wait stopped %s: %w", instanceID, err)
+	}
+
+	// 3. Start
+	_, err = c.Compute.InstanceAction(ctx, core.InstanceActionRequest{
+		InstanceId: common.String(instanceID),
+		Action:     core.InstanceActionActionStart,
+	})
+	if err != nil {
+		return fmt.Errorf("reset: start instance %s: %w", instanceID, err)
+	}
+
+	// 4. Poll until RUNNING
+	if err := waitForInstanceState(ctx, c, instanceID, core.InstanceLifecycleStateRunning, 300*time.Second, 3*time.Second); err != nil {
+		return fmt.Errorf("reset: wait running %s: %w", instanceID, err)
+	}
+
+	return nil
+}
+
+// waitForInstanceState polls GetInstance until the instance reaches the target
+// lifecycle state or the timeout expires.
+func waitForInstanceState(ctx context.Context, c Clients, instanceID string, target core.InstanceLifecycleStateEnum, timeout, interval time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		resp, err := c.Compute.GetInstance(ctx, core.GetInstanceRequest{
+			InstanceId: common.String(instanceID),
+		})
+		if err != nil {
+			return fmt.Errorf("get instance: %w", err)
+		}
+		if resp.Instance.LifecycleState == target {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for state %s (current: %s)", target, resp.Instance.LifecycleState)
+		}
+		time.Sleep(interval)
 	}
 }

@@ -10,6 +10,28 @@ import (
 	"database/sql"
 )
 
+const countBootInstancesByTenantId = `-- name: CountBootInstancesByTenantId :one
+SELECT COUNT(*) FROM boot_instance WHERE tenant_id = ? AND status = 1
+`
+
+func (q *Queries) CountBootInstancesByTenantId(ctx context.Context, tenantID sql.NullInt64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countBootInstancesByTenantId, tenantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTenantChildren = `-- name: CountTenantChildren :one
+SELECT COUNT(*) FROM tenant WHERE paren_id = ?
+`
+
+func (q *Queries) CountTenantChildren(ctx context.Context, parenID sql.NullInt64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countTenantChildren, parenID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const findTenantFullByID = `-- name: FindTenantFullByID :one
 SELECT id, tenant_id, user_name, fingerprint, tenancy, region, created_at,
        api_synced, enable_icmp, enable_all_protocol, is_home_region, paren_id,
@@ -78,6 +100,21 @@ func (q *Queries) FindTenantFullByID(ctx context.Context, id int64) (FindTenantF
 	return i, err
 }
 
+const updateTenantEnableFlags = `-- name: UpdateTenantEnableFlags :exec
+UPDATE tenant SET enable_icmp = ?, enable_all_protocol = ? WHERE id = ?
+`
+
+type UpdateTenantEnableFlagsParams struct {
+	EnableIcmp        sql.NullInt64 `json:"enable_icmp"`
+	EnableAllProtocol sql.NullInt64 `json:"enable_all_protocol"`
+	ID                int64         `json:"id"`
+}
+
+func (q *Queries) UpdateTenantEnableFlags(ctx context.Context, arg UpdateTenantEnableFlagsParams) error {
+	_, err := q.db.ExecContext(ctx, updateTenantEnableFlags, arg.EnableIcmp, arg.EnableAllProtocol, arg.ID)
+	return err
+}
+
 const updateTenantFields = `-- name: UpdateTenantFields :exec
 
 UPDATE tenant
@@ -92,28 +129,6 @@ type UpdateTenantFieldsParams struct {
 	EmailAddress sql.NullString `json:"email_address"`
 	IsActive     sql.NullInt64  `json:"is_active"`
 	ID           int64          `json:"id"`
-}
-
-const countBootInstancesByTenantId = `-- name: CountBootInstancesByTenantId :one
-SELECT COUNT(*) FROM boot_instance WHERE tenant_id = ? AND status = 1
-`
-
-func (q *Queries) CountBootInstancesByTenantId(ctx context.Context, tenantID int64) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countBootInstancesByTenantId, tenantID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countTenantChildren = `-- name: CountTenantChildren :one
-SELECT COUNT(*) FROM tenant WHERE paren_id = ?
-`
-
-func (q *Queries) CountTenantChildren(ctx context.Context, parenID int64) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countTenantChildren, parenID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
 }
 
 // Extended tenant queries (Phase 9). Tenant detail, custom name, active days.

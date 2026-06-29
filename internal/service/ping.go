@@ -20,13 +20,19 @@ import (
 
 // PingSvc checks instance connectivity.
 type PingSvc struct {
-	store   *db.Store
-	logger  zerolog.Logger
-	running atomic.Bool
+	store         *db.Store
+	logger        zerolog.Logger
+	running       atomic.Bool
+	securityRules *SecurityRuleService
 }
 
 func NewPingSvc(store *db.Store, logger zerolog.Logger) *PingSvc {
 	return &PingSvc{store: store, logger: logger}
+}
+
+// SetSecurityRules injects the SecurityRuleService dependency for auto-recovery.
+func (s *PingSvc) SetSecurityRules(sr *SecurityRuleService) {
+	s.securityRules = sr
 }
 
 // CheckPingConn tests TCP connectivity to each instance's port 22 (SSH).
@@ -65,6 +71,12 @@ func (s *PingSvc) CheckPingConn(ctx context.Context) {
 		addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 		conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 		if err != nil {
+			// Instance unreachable — if it was previously reachable, attempt auto-recovery.
+			if inst.ConnTime > 0 && s.securityRules != nil {
+				s.logger.Warn().Str("ip", ip).Int64("instanceId", inst.ID).
+					Msg("ping: instance went offline, attempting auto-recovery")
+				go s.attemptAutoRecovery(ctx, inst)
+			}
 			continue
 		}
 		conn.Close()
@@ -77,4 +89,38 @@ func (s *PingSvc) CheckPingConn(ctx context.Context) {
 	}
 
 	s.logger.Debug().Int("instances", len(allRows)).Dur("elapsed", time.Since(now)).Msg("ping: check complete")
+}
+
+// attemptAutoRecovery tries to restore connectivity to a previously-reachable
+// instance by opening all security list protocols and re-checking.
+// Runs in a goroutine — does not block the ping loop.
+// Parity with Java SecurityRuleServiceImpl.checkAndEnableRule recovery path.
+func (s *PingSvc) attemptAutoRecovery(ctx context.Context, inst repo.ListAllInstanceDetailsRow) {
+	if !inst.TenantID.Valid {
+		return
+	}
+
+	// Open all protocols.
+	if err := s.securityRules.CheckAndEnableRule(ctx, inst.TenantID.Int64); err != nil {
+		s.logger.Error().Err(err).Msg("ping: auto-recovery: failed to open security rules")
+		return
+	}
+
+	// Wait for OCI eventual consistency.
+	time.Sleep(15 * time.Second)
+
+	// Re-check connectivity.
+	ip := inst.PublicIps.String
+	port := int64(22)
+	if inst.Port.Valid && inst.Port.Int64 > 0 {
+		port = inst.Port.Int64
+	}
+	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	if err != nil {
+		s.logger.Warn().Str("ip", ip).Msg("ping: auto-recovery: still unreachable")
+		return
+	}
+	conn.Close()
+	s.logger.Info().Str("ip", ip).Msg("ping: auto-recovery: instance is reachable again")
 }

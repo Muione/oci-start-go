@@ -66,11 +66,11 @@ func (s *TenantService) List(ctx context.Context) ([]TenantResp, error) {
 		}
 		resp := toTenantResp(r, registerTime)
 		// Enrich: has boot tasks?
-		if n, e := repo.New(s.store.Read).CountBootInstancesByTenantId(ctx, r.ID); e == nil && n > 0 {
+		if n, e := repo.New(s.store.Read).CountBootInstancesByTenantId(ctx, nullInt64(r.ID)); e == nil && n > 0 {
 			resp.HasBootTask = true
 		}
 		// Enrich: has children?
-		if n, e := repo.New(s.store.Read).CountTenantChildren(ctx, r.ID); e == nil && n > 0 {
+		if n, e := repo.New(s.store.Read).CountTenantChildren(ctx, nullInt64(r.ID)); e == nil && n > 0 {
 			resp.HasChildren = true
 		}
 		out = append(out, resp)

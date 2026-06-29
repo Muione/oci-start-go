@@ -27,6 +27,7 @@ import (
 	"github.com/Muione/oci-start-go/internal/notify"
 	"github.com/Muione/oci-start-go/internal/httpapi"
 	"github.com/Muione/oci-start-go/internal/oci"
+	"github.com/Muione/oci-start-go/internal/openresty"
 	"github.com/Muione/oci-start-go/internal/repo"
 	"github.com/Muione/oci-start-go/internal/scheduler"
 	"github.com/Muione/oci-start-go/internal/service"
@@ -143,6 +144,18 @@ func main() {
 	pingSvc := service.NewPingSvc(store, logger)
 	offlineSvc := service.NewOfflineSvc(store, logger, tgNotifier)
 
+	// Phase 11.3 wiring: security list rule management (needed before Phase 6
+	// rescue handler and Phase 12.3 injection into backup/ping).
+	securityRuleSvc := service.NewSecurityRuleService(store, masterKey, proxyPool)
+
+	// Phase 12.3 wiring: SSH root login configurator.
+	sshConfig := service.NewSSHConfigurator(logger)
+
+	// Inject security rules and SSH config into backup and ping services.
+	backupSvc.SetSecurityRules(securityRuleSvc)
+	backupSvc.SetSSHConfig(sshConfig)
+	pingSvc.SetSecurityRules(securityRuleSvc)
+
 	// Phase 6 wiring: WebSocket hub.
 	wsHub := ws.NewHub()
 
@@ -218,6 +231,12 @@ func main() {
 		AttachRescueVolume: func(instanceID string, tenantID int64, rescueImageID string) (string, error) {
 			return ociAttachRescueFromTenant(store, proxyPool, masterKey, tenantID, instanceID, rescueImageID)
 		},
+		CheckAndEnableRule: func(ctx context.Context, tenantID int64) error {
+			return securityRuleSvc.CheckAndEnableRule(ctx, tenantID)
+		},
+		EnableRootLogin: func(host, username, password, rootPassword string, port int) error {
+			return sshConfig.EnableRootLogin(host, username, password, rootPassword, port)
+		},
 	})
 
 	// Phase 7 wiring: DNS + ACME cert manager.
@@ -257,13 +276,33 @@ func main() {
 	// Phase 10 wiring: tenant IAM user management.
 	tenantUserSvc := service.NewTenantUserService(store, masterKey)
 
+	// Phase 11.4 wiring: quota, region subscription, audit log.
+	quotaSvc := service.NewQuotaService(store, masterKey, proxyPool)
+	regionSubSvc := service.NewRegionSubService(store, masterKey, proxyPool)
+	auditSvc := service.NewAuditService(store, masterKey, proxyPool)
+
+	// Phase 11.1 wiring: object storage.
+	objectStorageSvc := service.NewObjectStorageService(store, masterKey, proxyPool)
+
+	// Phase 11.2 wiring: VNIC batch management.
+	vnicMgmtSvc := service.NewVnicManagementService(store, masterKey, proxyPool)
+
+	// Phase 12.1 wiring: Nginx / Reverse Proxy management.
+	orClient := openresty.New(cfg.Openresty.API.BaseURL, "")
+	nginxSvc := service.NewNginxService(store, orClient, cfg, sc, dnsSvc, logger)
+
+	// Phase 12.2 wiring: Email Delivery service.
+	emailSvc := service.NewEmailService(store, dnsSvc, sc, proxyPool, masterKey)
+
 	sched := scheduler.New(engine, store, logger, &scheduler.SvcSet{
-		Traffic:     trafficSvc,
-		CheckLive:   checkLiveSvc,
-		Ping:        pingSvc,
-		Offline:     offlineSvc,
-		CertManager: certManager,
-		WsHub:       wsHub,
+		Traffic:        trafficSvc,
+		CheckLive:      checkLiveSvc,
+		Ping:           pingSvc,
+		Offline:        offlineSvc,
+		CertManager:    certManager,
+		WsHub:          wsHub,
+		ObjectStorage:  objectStorageSvc,
+		NginxSvc:       nginxSvc,
 	})
 
 	deps := &httpapi.Deps{
@@ -296,6 +335,15 @@ func main() {
 		TenantEmail:  tenantEmailSvc,
 		TenantSocial: tenantSocialSvc,
 		TenantUser:   tenantUserSvc,
+		SecurityRule: securityRuleSvc,
+		Quota:        quotaSvc,
+		RegionSub:    regionSubSvc,
+		Audit:        auditSvc,
+		ObjectStorageSvc: objectStorageSvc,
+		VnicMgmtSvc:     vnicMgmtSvc,
+		SSHConfig:       sshConfig,
+		NginxSvc:        nginxSvc,
+		EmailSvc:        emailSvc,
 	}
 	router := httpapi.NewServer(deps)
 

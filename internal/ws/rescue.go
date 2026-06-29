@@ -7,6 +7,7 @@
 package ws
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -29,6 +30,10 @@ type RescueDeps struct {
 	DetachBootVolume func(instanceID string, tenantID int64) (string, error) // returns bootVolumeID
 	AttachBootVolume func(instanceID string, tenantID int64, bootVolumeID string) error
 	AttachRescueVolume func(instanceID string, tenantID int64, rescueImageID string) (string, error) // returns rescue bootVolumeID
+
+	// Phase 12.3: security rule + SSH root login (optional, nil = skip).
+	CheckAndEnableRule func(ctx context.Context, tenantID int64) error
+	EnableRootLogin    func(host, username, password, rootPassword string, port int) error
 }
 
 // RescueInstanceInfo holds instance state for rescue operations.
@@ -239,6 +244,14 @@ func (h *RescueHandler) runRescueFlow(conn *websocket.Conn, flow *rescueFlow, te
 		}
 	}
 
+	// Pre-rescue: ensure security rules are open (Phase 12.3).
+	if deps.CheckAndEnableRule != nil {
+		if err := deps.CheckAndEnableRule(context.Background(), tenantID); err != nil {
+			send(RescueStatus{Step: "error", Message: "开放安全规则失败", Error: err.Error(), Progress: 0})
+			return
+		}
+	}
+
 	// Step 1: Get instance info.
 	send(RescueStatus{Step: "get_instance", Message: "获取实例信息...", Progress: 5})
 	info, err := deps.GetInstance(flow.InstanceID, tenantID)
@@ -391,6 +404,21 @@ func (h *RescueHandler) CompleteRescue(conn *websocket.Conn, instanceID string) 
 	// Step 10: Start instance.
 	send(RescueStatus{Step: "start_final", Message: "启动实例...", Progress: 99})
 	_ = deps.StartInstance(flow.InstanceID, 0)
+
+	// Step 10.5: Wait for instance to be reachable, then enable root login (Phase 12.3).
+	if deps.EnableRootLogin != nil {
+		send(RescueStatus{Step: "enable_root", Message: "等待实例启动并配置SSH...", Progress: 99})
+		time.Sleep(30 * time.Second) // Give sshd time to start.
+
+		info, err := deps.GetInstance(flow.InstanceID, 0)
+		if err == nil && info.PublicIP != "" {
+			if err := deps.EnableRootLogin(info.PublicIP, "root", info.SSHPassword, info.SSHPassword, 22); err != nil {
+				send(RescueStatus{Step: "warning", Message: "SSH配置失败（实例可能需要手动配置）",
+					Error: err.Error(), Progress: 100})
+			}
+		}
+	}
+
 	send(RescueStatus{Step: "complete", Message: "救援流程完成！实例已恢复启动。", Progress: 100})
 
 	h.mu.Lock()

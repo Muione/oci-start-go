@@ -117,6 +117,13 @@ func NewClientsWithHTTPClient(prov common.ConfigurationProvider, hc *http.Client
 	c.Identity.HTTPClient = hc
 	c.ObjectStorage.HTTPClient = hc
 	c.Blockstorage.HTTPClient = hc
+	c.Limits.HTTPClient = hc
+	c.Audit.HTTPClient = hc
+	c.NLB.HTTPClient = hc
+	c.Email.HTTPClient = hc
+	c.Bastion.HTTPClient = hc
+	c.Artifacts.HTTPClient = hc
+	c.AiVision.HTTPClient = hc
 	return c, nil
 }
 

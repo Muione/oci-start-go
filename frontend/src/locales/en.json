@@ -1,4 +1,5 @@
 {
   "app": { "title": "oci-start" },
-  "common": { "login": "Login", "logout": "Logout", "dashboard": "Dashboard" }
+  "common": { "login": "Login", "logout": "Logout", "dashboard": "Dashboard" },
+  "nav": { "vnic": "VNIC Management", "email": "Email Management", "storage": "Object Storage" }
 }

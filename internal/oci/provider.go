@@ -16,9 +16,16 @@ import (
 
 	"github.com/Muione/oci-start-go/internal/oci/region"
 	"github.com/Muione/oci-start-go/internal/util/crypto"
+	"github.com/oracle/oci-go-sdk/v65/artifacts"
+	"github.com/oracle/oci-go-sdk/v65/audit"
+	"github.com/oracle/oci-go-sdk/v65/aivision"
+	"github.com/oracle/oci-go-sdk/v65/bastion"
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/core"
+	"github.com/oracle/oci-go-sdk/v65/email"
 	"github.com/oracle/oci-go-sdk/v65/identity"
+	"github.com/oracle/oci-go-sdk/v65/limits"
+	"github.com/oracle/oci-go-sdk/v65/networkloadbalancer"
 	"github.com/oracle/oci-go-sdk/v65/objectstorage"
 )
 
@@ -77,6 +84,13 @@ type Clients struct {
 	Identity      *identity.IdentityClient
 	ObjectStorage *objectstorage.ObjectStorageClient
 	Blockstorage  *core.BlockstorageClient
+	Limits        *limits.LimitsClient
+	Audit         *audit.AuditClient
+	NLB           *networkloadbalancer.NetworkLoadBalancerClient
+	Email         *email.EmailClient       // Phase 12.2: Email Delivery
+	Bastion       *bastion.BastionClient    // Phase 14.1: Bastion Service
+	Artifacts     *artifacts.ArtifactsClient // Phase 14.2: Container/Artifact Registry
+	AiVision      *aivision.AIServiceVisionClient // Phase 14.3: AI Vision
 }
 
 // NewClients builds direct (no-proxy) service clients from a provider.
@@ -101,7 +115,35 @@ func NewClients(p common.ConfigurationProvider) (Clients, error) {
 	if err != nil {
 		return Clients{}, fmt.Errorf("blockstorage client: %w", err)
 	}
-	return Clients{Compute: &compute, Vcn: &vcn, Identity: &idc, ObjectStorage: &os, Blockstorage: &bs}, nil
+	limClient, err := limits.NewLimitsClientWithConfigurationProvider(p)
+	if err != nil {
+		return Clients{}, fmt.Errorf("limits client: %w", err)
+	}
+	audClient, err := audit.NewAuditClientWithConfigurationProvider(p)
+	if err != nil {
+		return Clients{}, fmt.Errorf("audit client: %w", err)
+	}
+	nlbClient, err := networkloadbalancer.NewNetworkLoadBalancerClientWithConfigurationProvider(p)
+	if err != nil {
+		return Clients{}, fmt.Errorf("nlb client: %w", err)
+	}
+	emailClient, err := email.NewEmailClientWithConfigurationProvider(p)
+	if err != nil {
+		return Clients{}, fmt.Errorf("email client: %w", err)
+	}
+	bastionClient, err := bastion.NewBastionClientWithConfigurationProvider(p)
+	if err != nil {
+		return Clients{}, fmt.Errorf("bastion client: %w", err)
+	}
+	artifactsClient, err := artifacts.NewArtifactsClientWithConfigurationProvider(p)
+	if err != nil {
+		return Clients{}, fmt.Errorf("artifacts client: %w", err)
+	}
+	aivisionClient, err := aivision.NewAIServiceVisionClientWithConfigurationProvider(p)
+	if err != nil {
+		return Clients{}, fmt.Errorf("aivision client: %w", err)
+	}
+	return Clients{Compute: &compute, Vcn: &vcn, Identity: &idc, ObjectStorage: &os, Blockstorage: &bs, Limits: &limClient, Audit: &audClient, NLB: &nlbClient, Email: &emailClient, Bastion: &bastionClient, Artifacts: &artifactsClient, AiVision: &aivisionClient}, nil
 }
 
 // NewClientsWithHTTPClient lives in proxy.go (needs net/http). It builds the

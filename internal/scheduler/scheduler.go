@@ -39,16 +39,24 @@ type Scheduler struct {
 
 	// Phase 8: WebSocket hub for MonitorFlashHeartbeatJob.
 	wsHub *ws.Hub
+
+	// Phase 11.1: Object storage service for multipart upload cleanup.
+	objectStorageSvc *service.ObjectStorageService
+
+	// Phase 12.1: Nginx service for SSL auto-renewal.
+	nginxSvc *service.NginxService
 }
 
 // SvcSet bundles services for the scheduler to consume.
 type SvcSet struct {
-	Traffic     *service.TrafficSvc
-	CheckLive   *service.CheckLiveSvc
-	Ping        *service.PingSvc
-	Offline     *service.OfflineSvc
-	CertManager *acme.CertManager // Phase 8: SSL cert renewal
-	WsHub       *ws.Hub           // Phase 8: monitor heartbeat broadcast
+	Traffic       *service.TrafficSvc
+	CheckLive     *service.CheckLiveSvc
+	Ping          *service.PingSvc
+	Offline       *service.OfflineSvc
+	CertManager   *acme.CertManager // Phase 8: SSL cert renewal
+	WsHub         *ws.Hub           // Phase 8: monitor heartbeat broadcast
+	ObjectStorage *service.ObjectStorageService // Phase 11.1: multipart upload cleanup
+	NginxSvc      *service.NginxService         // Phase 12.1: SSL auto-renewal
 }
 
 // New creates the scheduler, registering all jobs. The engine may be nil
@@ -71,6 +79,8 @@ func New(engine *grabber.Engine, store *db.Store, logger zerolog.Logger, svcs *S
 		s.offlineSvc = svcs.Offline
 		s.certManager = svcs.CertManager
 		s.wsHub = svcs.WsHub
+		s.objectStorageSvc = svcs.ObjectStorage
+		s.nginxSvc = svcs.NginxSvc
 	}
 	s.registerJobs()
 	return s
@@ -170,14 +180,24 @@ func (s *Scheduler) bootInstanceRefreshJob() {
 }
 
 // sslCertJob checks all configured SSL certificates and renews those nearing
-// expiration (within 30 days). Uses the ACME CertManager with Cloudflare DNS.
+// expiration (within 30 days). Uses NginxService (Phase 12.1) for per-domain
+// ACME renewal when available, otherwise falls back to the legacy CertManager.
 func (s *Scheduler) sslCertJob() {
+	ctx := context.Background()
+
+	// Phase 12.1: use NginxService for per-domain auto-renewal.
+	if s.nginxSvc != nil {
+		s.logger.Info().Msg("scheduler: SslCertJob — running Phase 12.1 auto-renewal")
+		s.nginxSvc.ProcessAutoRenewal(ctx)
+		return
+	}
+
+	// Legacy path: single-domain CertManager renewal.
 	if s.certManager == nil {
 		s.logger.Debug().Msg("scheduler: SslCertJob skipped — cert manager not configured")
 		return
 	}
 
-	ctx := context.Background()
 	sc := sysconf.New(s.store)
 
 	// Read SSL config from system config.
@@ -223,27 +243,18 @@ func (s *Scheduler) monitorHeartbeatJob() {
 }
 
 // multipartCleanupJob cleans up stale OCI object storage multipart uploads.
-// In the SQLite-based Go version, database maintenance replaces this.
-// If no OCI object storage client is configured, runs a DB vacuum instead.
+// Aborts uploads older than 24 hours. Falls back to SQLite WAL checkpoint
+// when no object storage service is configured.
 func (s *Scheduler) multipartCleanupJob() {
-	ctx := context.Background()
-	sc := sysconf.New(s.store)
-
-	// If OCI object storage is configured, attempt multipart cleanup.
-	bucket := sc.GetString(ctx, "oci.objectstorage.bucket")
-	if bucket != "" {
-		s.logger.Debug().Str("bucket", bucket).Msg("scheduler: MultipartUploadCleanupJob — OCI OS cleanup not yet integrated (use OCI console)")
-		// Full OCI ObjectStorage multipart cleanup requires the ObjectStorageClient.
-		// This is a no-op for now — the bucket should have lifecycle rules.
+	if s.objectStorageSvc == nil {
+		s.logger.Debug().Msg("scheduler: MultipartUploadCleanupJob skipped — service not configured")
 		return
 	}
-
-	// Otherwise, run SQLite WAL checkpoint as database maintenance.
-	_, err := s.store.Write.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)")
-	if err != nil {
-		s.logger.Warn().Err(err).Msg("scheduler: MultipartCleanupJob wal_checkpoint failed")
+	ctx := context.Background()
+	if err := s.objectStorageSvc.CleanupStaleUploads(ctx); err != nil {
+		s.logger.Error().Err(err).Msg("scheduler: MultipartUploadCleanupJob failed")
 	} else {
-		s.logger.Debug().Msg("scheduler: MultipartCleanupJob wal_checkpoint completed")
+		s.logger.Info().Msg("scheduler: MultipartUploadCleanupJob completed")
 	}
 }
 

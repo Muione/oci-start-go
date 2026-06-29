@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -18,13 +19,26 @@ import (
 
 // BackupSvc orchestrates boot volume backups after successful grabs.
 type BackupSvc struct {
-	store     *db.Store
-	masterKey []byte
-	logger    zerolog.Logger
+	store         *db.Store
+	masterKey     []byte
+	logger        zerolog.Logger
+	securityRules *SecurityRuleService
+	sshConfig     *SSHConfigurator
 }
 
 func NewBackupSvc(store *db.Store, masterKey []byte, logger zerolog.Logger) *BackupSvc {
 	return &BackupSvc{store: store, masterKey: masterKey, logger: logger}
+}
+
+// SetSecurityRules injects the SecurityRuleService dependency (called after
+// both BackupSvc and SecurityRuleService are created).
+func (s *BackupSvc) SetSecurityRules(sr *SecurityRuleService) {
+	s.securityRules = sr
+}
+
+// SetSSHConfig injects the SSHConfigurator dependency.
+func (s *BackupSvc) SetSSHConfig(sc *SSHConfigurator) {
+	s.sshConfig = sc
 }
 
 // BackupInput carries the data needed to create a backup.
@@ -43,8 +57,9 @@ type BackupInput struct {
 }
 
 // ScheduleBackup is called by the grab engine 3 minutes after a successful
-// launch. It pings the instance, then creates a boot volume backup.
-// Stub for SSH portions (Phase 6 fully implements SSH).
+// launch. It checks reachability, opens security rules if needed, enables SSH
+// root login, then creates a boot volume backup.
+// Parity with Java InstanceBackUpEventListener.
 func (s *BackupSvc) ScheduleBackup(ctx context.Context, input BackupInput) {
 	s.logger.Info().
 		Str("instanceId", input.InstanceID).
@@ -52,18 +67,55 @@ func (s *BackupSvc) ScheduleBackup(ctx context.Context, input BackupInput) {
 		Str("taskId", input.TaskID).
 		Msg("backup: scheduled (3-min delay elapsed)")
 
-	// TODO (Phase 6): Ping public IP → if unreachable, open security rules.
-	// TODO (Phase 6): SSH enableRootLogin.
-
-	// Create the boot volume backup.
 	if input.BootVolumeID == "" || input.TenantID <= 0 {
 		s.logger.Warn().Str("taskId", input.TaskID).Msg("backup: missing boot volume ID or tenant, skipping")
 		return
 	}
 
+	// Step 1: Ping check + auto-open security rules.
+	if input.PublicIP != "" && !s.checkReachability(input.PublicIP, 22) {
+		s.logger.Info().Str("ip", input.PublicIP).Msg("backup: unreachable, opening security rules")
+		if s.securityRules != nil {
+			if err := s.securityRules.CheckAndEnableRule(ctx, input.TenantID); err != nil {
+				s.logger.Error().Err(err).Msg("backup: failed to open security rules")
+			}
+		}
+		// Wait for OCI eventual consistency after rule change.
+		time.Sleep(10 * time.Second)
+		if !s.checkReachability(input.PublicIP, 22) {
+			s.logger.Warn().Str("ip", input.PublicIP).Msg("backup: still unreachable after opening rules, skipping")
+			return
+		}
+	}
+
+	// Step 2: SSH root login enablement.
+	// Skip backup entirely if SSH config fails (parity with Java behavior:
+	// backup should only be created for confirmed-healthy, SSH-accessible instances).
+	if input.PublicIP != "" && input.RootPassword != "" && s.sshConfig != nil {
+		if err := s.sshConfig.EnableRootLogin(input.PublicIP, "root", input.RootPassword, input.RootPassword, 22); err != nil {
+			s.logger.Error().Err(err).Str("ip", input.PublicIP).Msg("backup: SSH root login failed, skipping backup")
+			return
+		}
+		s.logger.Info().Str("ip", input.PublicIP).Msg("backup: SSH root login configured")
+	}
+
+	// Step 3: Create the boot volume backup.
 	if err := s.createBackup(ctx, input); err != nil {
 		s.logger.Error().Err(err).Str("taskId", input.TaskID).Msg("backup: failed")
 	}
+}
+
+// checkReachability tries TCP connect to host:port with a timeout.
+// Returns true if connection succeeds. Used to verify SSH reachability
+// before attempting SSH operations.
+func (s *BackupSvc) checkReachability(host string, port int) bool {
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }
 
 // createBackup creates a boot volume backup via the OCI API and stores the

@@ -88,7 +88,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Monitor, Connection, Setting, VideoPlay, Operation,
   Download, WarningFilled, DataBoard, Platform, Coin,
-  SwitchButton, DArrowLeft, DArrowRight,
+  SwitchButton, DArrowLeft, DArrowRight, Folder, Message,
 } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import request from '../utils/request'
@@ -111,7 +111,11 @@ const navItems: NavItem[] = [
   { path: '/proxies',    label: '代理管理',   icon: Platform },
   { path: '/boot',       label: '抢机任务',   icon: VideoPlay },
   { path: '/instances',  label: '实例管理',   icon: Monitor },
+  { path: '/vnic',       label: 'VNIC 管理',  icon: Connection },
+  { path: '/email',      label: '邮件管理',   icon: Message },
+  { path: '/nginx',      label: 'Nginx 管理', icon: Setting },
   { path: '/dns',        label: 'DNS 管理',   icon: Coin },
+  { path: '/storage',    label: '对象存储',   icon: Folder },
   { path: '/terminal',   label: 'SSH 终端',   icon: Operation },
   { path: '/console',    label: 'VNC 控制台', icon: Monitor },
   { path: '/rescue',     label: '实例救援',   icon: WarningFilled },
@@ -127,9 +131,9 @@ function isActive(path: string): boolean {
 const pageTitle = computed(() => {
   const titles: Record<string, string> = {
     dashboard: '仪表盘', tenants: '租户管理', proxies: '代理管理',
-    boot: '抢机任务', instances: '实例管理', dns: 'DNS 管理',
-    terminal: 'SSH 终端', console: 'VNC 控制台', rescue: '实例救援',
-    migration: '数据迁移', settings: '系统设置',
+    boot: '抢机任务', instances: '实例管理', vnic: 'VNIC 管理',
+    email: '邮件管理', nginx: 'Nginx 管理', dns: 'DNS 管理', storage: '对象存储', terminal: 'SSH 终端', console: 'VNC 控制台',
+    rescue: '实例救援', migration: '数据迁移', settings: '系统设置',
   }
   return (route.name && titles[route.name as string]) || ''
 })
