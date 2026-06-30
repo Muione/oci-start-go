@@ -25,6 +25,7 @@ type loginInitResp struct {
 	PublicKey           string        `json:"publicKey"`
 	Turnstile           turnstileInfo `json:"turnstile"`
 	MfaEnabled          bool          `json:"mfaEnabled"`
+	GithubEnabled       bool          `json:"githubEnabled"`
 	FirstUserRegistered bool          `json:"firstUserRegistered"`
 }
 
@@ -49,6 +50,7 @@ func loginInit(deps *Deps) gin.HandlerFunc {
 			PublicKey:           pub,
 			Turnstile:           turnstileInfo{Enabled: tsEnabled, SiteKey: tsSiteKey},
 			MfaEnabled:          deps.SysConf.GetBool(ctx, "mfa.enabled"),
+			GithubEnabled:       deps.SysConf.GetBool(ctx, "github.enabled"),
 			FirstUserRegistered: n > 0,
 		}))
 	}

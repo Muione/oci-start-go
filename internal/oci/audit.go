@@ -91,6 +91,7 @@ func ListAuditEvents(
 
 // ListRecentAuditEvents queries the past N days (1-90, clamped).
 // Parity with AuditLogUtils.listRecentAuditEvents.
+// OCI Audit API requires seconds/milliseconds to be 0 (minute granularity).
 func ListRecentAuditEvents(
 	ctx context.Context,
 	c Clients,
@@ -104,7 +105,8 @@ func ListRecentAuditEvents(
 	if days > maxAuditDays {
 		days = maxAuditDays
 	}
-	endTime := time.Now().UTC()
+	now := time.Now().UTC()
+	endTime := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), 0, 0, time.UTC)
 	startTime := endTime.AddDate(0, 0, -days)
 	return ListAuditEvents(ctx, c, compartmentID, startTime, endTime, pageToken)
 }

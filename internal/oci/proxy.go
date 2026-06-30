@@ -121,9 +121,8 @@ func NewClientsWithHTTPClient(prov common.ConfigurationProvider, hc *http.Client
 	c.Audit.HTTPClient = hc
 	c.NLB.HTTPClient = hc
 	c.Email.HTTPClient = hc
-	c.Bastion.HTTPClient = hc
-	c.Artifacts.HTTPClient = hc
-	c.AiVision.HTTPClient = hc
+	c.OspGateway.HTTPClient = hc
+	c.UsageApi.HTTPClient = hc
 	return c, nil
 }
 

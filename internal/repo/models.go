@@ -17,6 +17,13 @@ type AiChatHistory struct {
 	CreatedAt string         `json:"created_at"`
 }
 
+type ApiCache struct {
+	CacheKey   string `json:"cache_key"`
+	CacheValue string `json:"cache_value"`
+	ExpiresAt  string `json:"expires_at"`
+	UpdatedAt  string `json:"updated_at"`
+}
+
 type AppMessage struct {
 	ID          int64          `json:"id"`
 	BusinessID  sql.NullString `json:"business_id"`
@@ -131,6 +138,7 @@ type ConsoleConnection struct {
 	ConnectionID   string         `json:"connection_id"`
 	PrivateKeyPath sql.NullString `json:"private_key_path"`
 	CloudType      sql.NullInt64  `json:"cloud_type"`
+	CreatedAt      sql.NullTime   `json:"created_at"`
 }
 
 type DbConfig struct {
@@ -213,6 +221,22 @@ type EmailSendRecord struct {
 	ReceiveEmailAddress sql.NullString `json:"receive_email_address"`
 	SendState           sql.NullInt64  `json:"send_state"`
 	CreateTime          sql.NullString `json:"create_time"`
+}
+
+type ImageCache struct {
+	ID                     int64          `json:"id"`
+	TenantID               int64          `json:"tenant_id"`
+	CompartmentID          string         `json:"compartment_id"`
+	ImageID                string         `json:"image_id"`
+	DisplayName            sql.NullString `json:"display_name"`
+	OperatingSystem        sql.NullString `json:"operating_system"`
+	OperatingSystemVersion sql.NullString `json:"operating_system_version"`
+	Architecture           string         `json:"architecture"`
+	SizeInGbs              sql.NullInt64  `json:"size_in_gbs"`
+	LaunchMode             sql.NullString `json:"launch_mode"`
+	TimeCreated            sql.NullString `json:"time_created"`
+	LastSyncedAt           string         `json:"last_synced_at"`
+	CloudType              int64          `json:"cloud_type"`
 }
 
 type InstallApp struct {
@@ -351,17 +375,6 @@ type Memo struct {
 	UpdateTime sql.NullString `json:"update_time"`
 }
 
-type NginxConfig struct {
-	ID            int64          `json:"id"`
-	ConfigName    sql.NullString `json:"config_name"`
-	ConfigContent sql.NullString `json:"config_content"`
-	IsCurrent     sql.NullInt64  `json:"is_current"`
-	ConfigVersion sql.NullInt64  `json:"config_version"`
-	ConfigStatus  sql.NullString `json:"config_status"`
-	CreateTime    sql.NullString `json:"create_time"`
-	UpdateTime    sql.NullString `json:"update_time"`
-}
-
 type OciComputerInfo struct {
 	ID                 int64          `json:"id"`
 	BootIDStr          sql.NullString `json:"boot_id_str"`
@@ -442,31 +455,6 @@ type OtpKey struct {
 	UpdateTime string         `json:"update_time"`
 }
 
-type ProxyConfig struct {
-	ID                  int64          `json:"id"`
-	Domain              string         `json:"domain"`
-	TargetHost          string         `json:"target_host"`
-	TargetPort          int64          `json:"target_port"`
-	Protocol            sql.NullString `json:"protocol"`
-	EnableSsl           sql.NullInt64  `json:"enable_ssl"`
-	EnableWebsocket     sql.NullInt64  `json:"enable_websocket"`
-	SslCertificateID    sql.NullInt64  `json:"ssl_certificate_id"`
-	ConfigStatus        sql.NullString `json:"config_status"`
-	SslStatus           sql.NullString `json:"ssl_status"`
-	CustomConfig        sql.NullString `json:"custom_config"`
-	Remark              sql.NullString `json:"remark"`
-	LoadBalanceType     sql.NullString `json:"load_balance_type"`
-	EnableHealthCheck   sql.NullInt64  `json:"enable_health_check"`
-	HealthCheckPath     sql.NullString `json:"health_check_path"`
-	HealthCheckInterval sql.NullInt64  `json:"health_check_interval"`
-	EnableRateLimit     sql.NullInt64  `json:"enable_rate_limit"`
-	RateLimit           sql.NullInt64  `json:"rate_limit"`
-	EnableCache         sql.NullInt64  `json:"enable_cache"`
-	CacheTime           sql.NullInt64  `json:"cache_time"`
-	CreateTime          sql.NullString `json:"create_time"`
-	UpdateTime          sql.NullString `json:"update_time"`
-}
-
 type RegisterDetail struct {
 	ID                     int64          `json:"id"`
 	TenantPrvID            sql.NullInt64  `json:"tenant_prv_id"`
@@ -505,21 +493,25 @@ type ServerMetric struct {
 	TotalDownloadTraffic sql.NullString  `json:"total_download_traffic"`
 }
 
-type SslCertificate struct {
-	ID                int64          `json:"id"`
-	Domain            string         `json:"domain"`
-	CertificateType   string         `json:"certificate_type"`
-	Email             sql.NullString `json:"email"`
-	ValidationMethod  sql.NullString `json:"validation_method"`
-	AutoRenew         sql.NullInt64  `json:"auto_renew"`
-	CertificateStatus sql.NullString `json:"certificate_status"`
-	IssueDate         sql.NullString `json:"issue_date"`
-	ExpireDate        sql.NullString `json:"expire_date"`
-	CertificatePath   sql.NullString `json:"certificate_path"`
-	PrivateKeyPath    sql.NullString `json:"private_key_path"`
-	CreateTime        sql.NullString `json:"create_time"`
-	UpdateTime        sql.NullString `json:"update_time"`
-	DnsProvider       sql.NullString `json:"dns_provider"`
+type ShapeCache struct {
+	ID                    int64           `json:"id"`
+	TenantID              int64           `json:"tenant_id"`
+	CompartmentID         string          `json:"compartment_id"`
+	AvailabilityDomain    sql.NullString  `json:"availability_domain"`
+	Shape                 string          `json:"shape"`
+	Architecture          string          `json:"architecture"`
+	Ocpus                 sql.NullFloat64 `json:"ocpus"`
+	MemoryInGbs           sql.NullFloat64 `json:"memory_in_gbs"`
+	ProcessorDescription  sql.NullString  `json:"processor_description"`
+	IsFlexible            int64           `json:"is_flexible"`
+	MaxVnicAttachments    sql.NullInt64   `json:"max_vnic_attachments"`
+	GpuDescription        sql.NullString  `json:"gpu_description"`
+	GpuCount              sql.NullInt64   `json:"gpu_count"`
+	LocalDiskDescription  sql.NullString  `json:"local_disk_description"`
+	NetworkingDescription sql.NullString  `json:"networking_description"`
+	BaselineOcpu          sql.NullFloat64 `json:"baseline_ocpu"`
+	LastSyncedAt          string          `json:"last_synced_at"`
+	CloudType             int64           `json:"cloud_type"`
 }
 
 type SystemConfig struct {

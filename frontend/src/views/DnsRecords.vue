@@ -39,7 +39,10 @@
               <el-select v-model="cfZoneId" placeholder="选择 Cloudflare 区域" style="width: 360px" @change="onCfZoneChange">
                 <el-option v-for="z in cfZones" :key="z.id" :label="z.name" :value="z.id" />
               </el-select>
-              <el-tag v-if="cfZoneName" type="info" size="small" effect="plain">{{ cfRecordCount }} 条记录</el-tag>
+              <el-select v-model="cfTypeFilter" placeholder="全部类型" clearable style="width: 120px" @change="onCfTypeChange">
+                <el-option v-for="t in dnsTypes" :key="t" :label="t" :value="t" />
+              </el-select>
+              <el-tag v-if="cfZoneName" type="info" size="small" effect="plain">{{ cfTotalCount }} 条记录</el-tag>
             </div>
             <div class="provider-right">
               <el-button size="small" @click="loadCfZones" :loading="cfLoadingZones">刷新 Zone 列表</el-button>
@@ -53,7 +56,7 @@
             <el-table :data="cfRecords" v-loading="cfLoading" border stripe size="default"
               @cell-click="onCfCellClick" style="cursor:pointer">
               <template #empty>
-                <el-empty description="请选择一个 Zone 并加载记录" :image-size="60" />
+                <el-empty :description="cfZoneId ? '暂无记录' : '请选择一个 Zone 并加载记录'" :image-size="60" />
               </template>
               <el-table-column label="类型" width="80">
                 <template #default="{ row }">
@@ -111,6 +114,9 @@
         <template v-else>
           <div class="provider-toolbar">
             <div class="provider-left">
+              <el-select v-model="eoTypeFilter" placeholder="全部类型" clearable style="width: 120px">
+                <el-option v-for="t in dnsTypes" :key="t" :label="t" :value="t" />
+              </el-select>
               <el-button size="small" type="primary" @click="openEoAdd">
                 <el-icon><Plus /></el-icon> 添加记录
               </el-button>
@@ -119,7 +125,7 @@
           </div>
 
           <el-card shadow="none" class="table-card" style="margin-top:12px">
-            <el-table :data="eoRecords" v-loading="eoLoading" border stripe size="default"
+            <el-table :data="eoFilteredRecords" v-loading="eoLoading" border stripe size="default"
               @cell-click="onEoCellClick" style="cursor:pointer">
               <template #empty>
                 <el-empty description="暂无 EdgeOne 记录" :image-size="60" />
@@ -256,6 +262,16 @@ interface EoRecord {
 
 const dnsTypes = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV', 'CAA', 'PTR']
 
+// Type filter — empty means show all
+// Cloudflare: server-side (API query param); EdgeOne: client-side
+const cfTypeFilter = ref('')
+const eoTypeFilter = ref('')
+
+const eoFilteredRecords = computed(() => {
+  if (!eoTypeFilter.value) return eoRecords.value
+  return eoRecords.value.filter(r => (r.Type || r.type) === eoTypeFilter.value)
+})
+
 // ---- Cloudflare State ----
 const cfConfigured = ref<boolean | null>(null) // null = not yet checked
 const cfZones = ref<CfZone[]>([])
@@ -280,8 +296,6 @@ const cfZoneName = computed(() => {
   const z = cfZones.value.find(z => z.id === cfZoneId.value)
   return z?.name || ''
 })
-
-const cfRecordCount = computed(() => cfTotalCount.value)
 
 // ---- EdgeOne State ----
 const eoConfigured = ref(false)
@@ -376,10 +390,16 @@ async function loadCfZones() {
 
 function onCfZoneChange() {
   cfPage.value = 1
-  // Try cache first for this zone
-  if (!restoreCfFromCache()) {
-    loadCfRecords()
-  }
+  cfTypeFilter.value = ''
+  // Try cache first for this zone (only when no type filter)
+  if (!cfTypeFilter.value && restoreCfFromCache()) return
+  loadCfRecords()
+}
+
+function onCfTypeChange() {
+  cfPage.value = 1
+  invalidateCfCache()
+  loadCfRecords()
 }
 
 async function loadCfRecords() {
@@ -387,6 +407,7 @@ async function loadCfRecords() {
   cfLoading.value = true
   try {
     const params: any = { page: cfPage.value, perPage: cfPageSize.value }
+    if (cfTypeFilter.value) params.type = cfTypeFilter.value
     const res = await request.get(`/dns/cloudflare/zones/${cfZoneId.value}/records`, { params }) as any
     const records = res.records || []
     const entry: CfCacheEntry = {
@@ -397,7 +418,7 @@ async function loadCfRecords() {
     cfRecords.value = records
     cfTotalPages.value = entry.totalPages
     cfTotalCount.value = entry.totalCount
-    writeCfCache(entry)
+    if (!cfTypeFilter.value) writeCfCache(entry)
   } catch (e: any) { ElMessage.error(e.message) }
   finally { cfLoading.value = false }
 }

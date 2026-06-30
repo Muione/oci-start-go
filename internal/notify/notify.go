@@ -34,12 +34,17 @@ type TelegramNotifier struct {
 }
 
 // NewTelegramNotifier creates a notifier. If token or chatID are empty,
-// Send operations are no-ops (log-only).
-func NewTelegramNotifier(token, chatID string, logger zerolog.Logger) *TelegramNotifier {
+// Send operations are no-ops (log-only). If httpClient is nil, a default
+// client with 10s timeout is used.
+func NewTelegramNotifier(token, chatID string, logger zerolog.Logger, httpClient ...*http.Client) *TelegramNotifier {
+	client := &http.Client{Timeout: 10 * time.Second}
+	if len(httpClient) > 0 && httpClient[0] != nil {
+		client = httpClient[0]
+	}
 	return &TelegramNotifier{
 		Token:  token,
 		ChatID: chatID,
-		Client: &http.Client{Timeout: 10 * time.Second},
+		Client: client,
 		Logger: logger,
 	}
 }

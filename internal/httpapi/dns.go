@@ -119,16 +119,16 @@ func systemConfigGet(deps *Deps) gin.HandlerFunc {
 			"ssl.domain",
 			"ssl.email",
 			"ssl.staging",
-			"gcp.serviceAccountJson",
-			"gcp.projectId",
 			"turnstile.enabled",
-			"turnstile.siteKey",
-			"turnstile.secretKey",
+			"turnstile.site.key",
+			"turnstile.secret.key",
 			"mfa.enabled",
-			"github.clientId",
-			"github.clientSecret",
-			"google.clientId",
-			"google.clientSecret",
+			"github.client.id",
+			"github.client.secret",
+			"github.redirect.uri",
+			"google.client.id",
+			"google.client.secret",
+			"google.redirect.uri",
 			"message.enabled",
 		}
 
@@ -146,6 +146,8 @@ func systemConfigGet(deps *Deps) gin.HandlerFunc {
 			"mfa.enabled",
 			"message.enabled",
 			"ssl.staging",
+			"github.enabled",
+			"google.enabled",
 		}
 		bools := make(map[string]bool)
 		for _, key := range boolKeys {

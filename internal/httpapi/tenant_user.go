@@ -318,3 +318,41 @@ func tenantUpdateDetail(deps *Deps) gin.HandlerFunc {
 		response.OK(c, response.SuccessData(detail))
 	}
 }
+
+// --- Subscription Days (BE-001) ---
+
+// tenantSubscriptionDays -- GET /tenants/:id/subscription-days
+func tenantSubscriptionDays(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "Invalid tenant ID")
+			return
+		}
+		info, err := deps.TenantUser.GetSubscriptionDays(c.Request.Context(), id)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "Failed to get subscription days: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessData(info))
+	}
+}
+
+// --- Domain Tenants (BE-003) ---
+
+// tenantDomainTenants -- GET /tenants/:id/domains
+func tenantDomainTenants(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "Invalid tenant ID")
+			return
+		}
+		domains, err := deps.TenantUser.ListDomainTenants(c.Request.Context(), id)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "Failed to list domain tenants: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessData(domains))
+	}
+}

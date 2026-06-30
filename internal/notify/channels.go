@@ -75,12 +75,17 @@ type DingTalkNotifier struct {
 	Logger  zerolog.Logger
 }
 
-// NewDingTalkNotifier creates a DingTalk notifier.
-func NewDingTalkNotifier(webhook, secret string, logger zerolog.Logger) *DingTalkNotifier {
+// NewDingTalkNotifier creates a DingTalk notifier. If httpClient is nil,
+// a default client with 10s timeout is used.
+func NewDingTalkNotifier(webhook, secret string, logger zerolog.Logger, httpClient ...*http.Client) *DingTalkNotifier {
+	client := &http.Client{Timeout: 10 * time.Second}
+	if len(httpClient) > 0 && httpClient[0] != nil {
+		client = httpClient[0]
+	}
 	return &DingTalkNotifier{
 		Webhook: webhook,
 		Secret:  secret,
-		Client:  &http.Client{Timeout: 10 * time.Second},
+		Client:  client,
 		Logger:  logger,
 	}
 }
@@ -171,15 +176,20 @@ type BarkNotifier struct {
 	Logger zerolog.Logger
 }
 
-// NewBarkNotifier creates a Bark notifier.
-func NewBarkNotifier(server, key string, logger zerolog.Logger) *BarkNotifier {
+// NewBarkNotifier creates a Bark notifier. If httpClient is nil,
+// a default client with 10s timeout is used.
+func NewBarkNotifier(server, key string, logger zerolog.Logger, httpClient ...*http.Client) *BarkNotifier {
 	if server == "" {
 		server = "https://api.day.app"
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	if len(httpClient) > 0 && httpClient[0] != nil {
+		client = httpClient[0]
 	}
 	return &BarkNotifier{
 		Server: server,
 		Key:    key,
-		Client: &http.Client{Timeout: 10 * time.Second},
+		Client: client,
 		Logger: logger,
 	}
 }
@@ -250,12 +260,17 @@ type FeishuNotifier struct {
 	Logger  zerolog.Logger
 }
 
-// NewFeishuNotifier creates a Feishu notifier.
-func NewFeishuNotifier(webhook, secret string, logger zerolog.Logger) *FeishuNotifier {
+// NewFeishuNotifier creates a Feishu notifier. If httpClient is nil,
+// a default client with 10s timeout is used.
+func NewFeishuNotifier(webhook, secret string, logger zerolog.Logger, httpClient ...*http.Client) *FeishuNotifier {
+	client := &http.Client{Timeout: 10 * time.Second}
+	if len(httpClient) > 0 && httpClient[0] != nil {
+		client = httpClient[0]
+	}
 	return &FeishuNotifier{
 		Webhook: webhook,
 		Secret:  secret,
-		Client:  &http.Client{Timeout: 10 * time.Second},
+		Client:  client,
 		Logger:  logger,
 	}
 }

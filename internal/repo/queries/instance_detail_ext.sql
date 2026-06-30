@@ -126,5 +126,8 @@ UPDATE instance_detail SET ipv6_addresses = ? WHERE id = ?;
 -- name: UpdateInstanceSSHConfig :exec
 UPDATE instance_detail SET username = ?, port = ?, password = ? WHERE id = ?;
 
+-- name: UpdateInstanceDetailVpusPerGb :exec
+UPDATE instance_detail SET vpus_per_gb = ? WHERE id = ?;
+
 -- name: DeleteInstanceTrafficByTenantId :exec
 DELETE FROM instance_traffic WHERE tenant_id = ?;

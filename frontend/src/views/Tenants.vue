@@ -220,7 +220,7 @@
     <!-- ================================================================ -->
     <!-- Detail Dialog -->
     <!-- ================================================================ -->
-    <el-dialog v-model="detailVisible" :title="`租户详情 — ${detailData.userName || '#'+detailData.id}`" width="720px" destroy-on-close>
+    <el-dialog v-model="detailVisible" :title="`租户详情 — ${detailData.userName || '#'+detailData.id}`" width="800px" destroy-on-close>
       <template v-if="detailLoading">
         <el-skeleton :rows="8" animated/>
       </template>
@@ -250,6 +250,9 @@
               <el-descriptions-item label="自定义名称">{{ detailData.tenancyDes || '—' }}</el-descriptions-item>
               <el-descriptions-item label="邮箱地址">{{ detailData.emailAddress || '—' }}</el-descriptions-item>
               <el-descriptions-item label="创建时间">{{ detailData.createdAt }}</el-descriptions-item>
+              <el-descriptions-item label="订阅时间">
+                <span class="days-chip">{{ detailData.activeDays || '0' }} 天</span>
+              </el-descriptions-item>
             </el-descriptions>
           </el-tab-pane>
           <el-tab-pane label="状态信息" name="status">
@@ -295,6 +298,144 @@
                 show-icon
               />
             </div>
+          </el-tab-pane>
+          <!-- Subscription Detail Tab -->
+          <el-tab-pane label="订阅详情" name="subscription">
+            <template v-if="subscriptionLoading">
+              <el-skeleton :rows="6" animated/>
+            </template>
+            <template v-else-if="subscriptionData">
+              <el-descriptions :column="2" border size="small">
+                <el-descriptions-item label="计划类型">
+                  <el-tag :type="subscriptionData.planType === 'FREE_TIER' ? 'warning' : 'success'" size="small">
+                    {{ subscriptionData.planType === 'FREE_TIER' ? '免费层' : subscriptionData.planType === 'PAYG' ? '按量付费' : subscriptionData.planType || '—' }}
+                  </el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="账号类型">
+                  <el-tag :type="subscriptionData.accountType === 'PERSONAL' ? 'info' : ''" size="small">
+                    {{ subscriptionData.accountType === 'PERSONAL' ? '个人' : subscriptionData.accountType === 'CORPORATE' ? '企业' : subscriptionData.accountType || '—' }}
+                  </el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="订阅开始时间">{{ subscriptionData.timeStart || '—' }}</el-descriptions-item>
+                <el-descriptions-item label="货币代码">{{ subscriptionData.currencyCode || '—' }}</el-descriptions-item>
+                <el-descriptions-item label="是否付费意向">
+                  <el-tag :type="subscriptionData.isIntentToPay ? 'success' : 'info'" size="small">
+                    {{ subscriptionData.isIntentToPay ? '是' : '否' }}
+                  </el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="订阅计划编号">{{ subscriptionData.subscriptionPlanNumber || '—' }}</el-descriptions-item>
+                <el-descriptions-item label="邮箱地址">{{ subscriptionData.emailAddress || '—' }}</el-descriptions-item>
+                <el-descriptions-item label="公司名称">{{ subscriptionData.companyName || '—' }}</el-descriptions-item>
+                <el-descriptions-item label="国家/地区">{{ subscriptionData.country || '—' }}</el-descriptions-item>
+                <el-descriptions-item label="升级状态">{{ subscriptionData.upgradeState || '—' }}</el-descriptions-item>
+              </el-descriptions>
+            </template>
+            <template v-else>
+              <el-empty description="暂无订阅数据" :image-size="60">
+                <el-button type="primary" size="small" @click="loadSubscription">重新加载</el-button>
+              </el-empty>
+            </template>
+          </el-tab-pane>
+          <!-- Cost Query Tab -->
+          <el-tab-pane label="费用查询" name="cost">
+            <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <el-button size="small" :type="costQueryType==='today'?'primary':''" @click="loadCost('today')">今日</el-button>
+              <el-button size="small" :type="costQueryType==='yesterday'?'primary':''" @click="loadCost('yesterday')">昨日</el-button>
+              <el-button size="small" :type="costQueryType==='current_month'?'primary':''" @click="loadCost('current_month')">本月</el-button>
+              <el-button size="small" :type="costQueryType==='last_month'?'primary':''" @click="loadCost('last_month')">上月</el-button>
+              <el-divider direction="vertical"/>
+              <el-date-picker
+                v-model="costDateRange"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                size="small"
+                style="width:280px"
+                @change="costQueryType='custom'"
+              />
+              <el-button size="small" type="primary" @click="loadCostCustomRange" :loading="costLoading">
+                <el-icon><Search /></el-icon> 查询
+              </el-button>
+            </div>
+            <!-- Total cost summary -->
+            <div v-if="costData.length > 0" style="margin-bottom:12px;padding:12px 16px;background:var(--bg-raised);border-radius:var(--radius-md);display:flex;gap:24px;align-items:center">
+              <el-statistic title="总费用">
+                <template #default>
+                  <span style="color:var(--accent);font-size:var(--text-xl)">{{ costTotal.toFixed(2) }}</span>
+                </template>
+              </el-statistic>
+              <el-statistic title="记录数" :value="costData.length"/>
+            </div>
+            <template v-if="costLoading">
+              <el-skeleton :rows="5" animated/>
+            </template>
+            <el-table v-else :data="costData" border stripe size="small" max-height="360" show-overflow-tooltip>
+              <template #empty>
+                <el-empty description="暂无费用数据" :image-size="60"/>
+              </template>
+              <el-table-column prop="service" label="服务" min-width="180" show-overflow-tooltip sortable/>
+              <el-table-column label="费用金额" width="130" align="right" sortable sort-by="computedAmount">
+                <template #default="{ row }">
+                  <span class="data-mono" style="font-weight:var(--font-semibold)">{{ Number(row.computedAmount || 0).toFixed(2) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="currency" label="货币" width="80" align="center"/>
+              <el-table-column label="用量" width="100" align="right" sortable sort-by="computedQuantity">
+                <template #default="{ row }">{{ Number(row.computedQuantity || 0).toFixed(2) }}</template>
+              </el-table-column>
+              <el-table-column prop="skuName" label="SKU 名称" min-width="160" show-overflow-tooltip/>
+              <el-table-column prop="region" label="区域" width="120"/>
+              <el-table-column label="开始时间" width="160">
+                <template #default="{ row }">{{ row.timeUsageStarted || '—' }}</template>
+              </el-table-column>
+              <el-table-column label="结束时间" width="160">
+                <template #default="{ row }">{{ row.timeUsageEnded || '—' }}</template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
+          <!-- Siblings Tab: other tenants in the same tenancy -->
+          <el-tab-pane label="域内其他租户" name="siblings">
+            <template v-if="sameTenancyTenants.length === 0">
+              <el-empty description="该域下无其他租户" :image-size="60"/>
+            </template>
+            <el-table v-else :data="sameTenancyTenants" border stripe size="small">
+              <el-table-column type="index" label="#" width="50" align="center"/>
+              <el-table-column label="租户名" min-width="120">
+                <template #default="{ row }">
+                  <span class="spoiler-link">{{ row.tenancyName || row.userName }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="自定义名称" min-width="120">
+                <template #default="{ row }">{{ row.tenancyDes || '—' }}</template>
+              </el-table-column>
+              <el-table-column label="区域" width="120">
+                <template #default="{ row }">{{ row.regionName || row.region || '—' }}</template>
+              </el-table-column>
+              <el-table-column label="账号类型" width="110">
+                <template #default="{ row }">
+                  <el-tag :type="accountTypeTag(row.accountType)" size="small" effect="dark">{{ accountTypeLabel(row.accountType) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="存活天数" width="90" align="center">
+                <template #default="{ row }">
+                  <span class="days-chip">{{ row.activeDays || '0' }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="状态" width="80" align="center">
+                <template #default="{ row }">
+                  <span class="status-dot" :class="row.isActive ? 'status-dot--up' : 'status-dot--down'"></span>
+                  {{ row.isActive ? '正常' : '停用' }}
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="80" fixed="right" align="center">
+                <template #default="{ row }">
+                  <el-button size="small" @click="showDetail(row)">详情</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
           </el-tab-pane>
         </el-tabs>
       </template>
@@ -1117,6 +1258,17 @@ const detailLoading = ref(false)
 const detailTab = ref('basic')
 const detailData = ref<Tenant>({} as Tenant)
 
+// subscription detail
+const subscriptionData = ref<any>(null)
+const subscriptionLoading = ref(false)
+
+// cost query
+const costData = ref<any[]>([])
+const costLoading = ref(false)
+const costQueryType = ref('current_month')
+const costDateRange = ref<string[] | null>(null)
+const costTotal = ref(0)
+
 // edit name dialog
 const editNameVisible = ref(false)
 const editNameValue = ref('')
@@ -1275,6 +1427,13 @@ const filteredRows = computed(() => {
   )
 })
 
+const sameTenancyTenants = computed(() => {
+  if (!detailData.value?.tenancy) return []
+  return rows.value.filter(r =>
+    r.tenancy === detailData.value.tenancy && r.id !== detailData.value.id
+  )
+})
+
 // --- regions ---
 const regions: RegionItem[] = [
   { code:'ap-tokyo-1',name:'东京'},{code:'ap-osaka-1',name:'大阪'},
@@ -1320,7 +1479,7 @@ function accountTypeLabel(t: string | undefined): string {
 }
 
 function cloudTypeLabel(ct: number | undefined): string {
-  return ct === 1 ? 'OCI' : ct === 2 ? 'AWS' : ct === 3 ? 'GCP' : ct === 4 ? 'Azure' : String(ct || '—')
+  return ct === 1 ? 'OCI' : ct === 2 ? 'AWS' : ct === 4 ? 'Azure' : String(ct || '—')
 }
 
 function instStateDot(state: string): string {
@@ -1454,6 +1613,13 @@ async function showDetail(row: Tenant) {
   detailTab.value = 'basic'
   detailLoading.value = true
   checkResult.value = null
+  subscriptionData.value = null
+  subscriptionLoading.value = false
+  costData.value = []
+  costLoading.value = false
+  costQueryType.value = 'current_month'
+  costDateRange.value = null
+  costTotal.value = 0
   try {
     detailData.value = await request.get(`/tenants/${row.id}`) as Tenant
   } catch (e: any) { ElMessage.error(e.message) }
@@ -1482,6 +1648,55 @@ async function checkTenant(id: number) {
     checkResult.value = await request.get(`/tenants/${id}/check`) as any
   } catch (e: any) { ElMessage.error(e.message) }
   finally { checking.value = false }
+}
+
+// --- subscription detail ---
+async function loadSubscription() {
+  if (!detailData.value?.id) return
+  subscriptionLoading.value = true
+  subscriptionData.value = null
+  try {
+    subscriptionData.value = await request.get(`/tenants/${detailData.value.id}/subscription`)
+  } catch (e: any) {
+    ElMessage.error('加载订阅详情失败: ' + (e?.message || e))
+    subscriptionData.value = null
+  } finally {
+    subscriptionLoading.value = false
+  }
+}
+
+// --- cost query ---
+async function loadCost(type?: string, start?: string, end?: string) {
+  if (!detailData.value?.id) return
+  const qType = type || costQueryType.value
+  costQueryType.value = qType
+  costLoading.value = true
+  costData.value = []
+  costTotal.value = 0
+  try {
+    const params: any = { type: qType }
+    if (qType === 'custom' && start && end) {
+      params.start = start
+      params.end = end
+    }
+    const resp = await request.get(`/tenants/${detailData.value.id}/cost`, { params }) as any[]
+    costData.value = resp || []
+    costTotal.value = (resp || []).reduce((sum: number, item: any) => sum + (Number(item.computedAmount) || 0), 0)
+  } catch (e: any) {
+    ElMessage.error('费用查询失败: ' + (e?.message || e))
+    costData.value = []
+    costTotal.value = 0
+  } finally {
+    costLoading.value = false
+  }
+}
+
+function loadCostCustomRange() {
+  if (!costDateRange.value || costDateRange.value.length !== 2) {
+    ElMessage.warning('请选择日期范围')
+    return
+  }
+  loadCost('custom', costDateRange.value[0], costDateRange.value[1])
 }
 
 // --- batch check ---
@@ -2108,8 +2323,8 @@ async function loadRegionSubData() {
       request.get(`/tenants/${regionSubTenantId.value}/regions/unsubscribed`),
     ])
     regionSummary.value = summary as any
-    regionSubscribedList.value = subscribed as any[]
-    regionUnsubscribedList.value = unsubscribed as any[]
+    regionSubscribedList.value = subscribed as unknown as any[]
+    regionUnsubscribedList.value = unsubscribed as unknown as any[]
   } catch (e: any) {
     ElMessage.error('加载区域订阅数据失败: ' + (e?.message || e))
   } finally { regionSubLoading.value = false }
@@ -2222,6 +2437,15 @@ onMounted(load)
 watch(userMgmtTab, (tab) => {
   if (tab === 'notifications') refreshNotifRecipients()
   else if (tab === 'mfa') refreshMfaStatus()
+})
+
+// Watch tab switch in detail dialog to load subscription/cost data
+watch(detailTab, (tab) => {
+  if (tab === 'subscription' && !subscriptionData.value && !subscriptionLoading.value) {
+    loadSubscription()
+  } else if (tab === 'cost' && costData.value.length === 0 && !costLoading.value) {
+    loadCost('current_month')
+  }
 })
 </script>
 

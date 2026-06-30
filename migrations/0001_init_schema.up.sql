@@ -382,18 +382,6 @@ CREATE TABLE app_message (
     create_time TEXT
 );
 
--- entity: NginxConfig.java
-CREATE TABLE nginx_config (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    config_name TEXT,
-    config_content TEXT,
-    is_current INTEGER,
-    config_version INTEGER,
-    config_status TEXT,
-    create_time TEXT,
-    update_time TEXT
-);
-
 -- entity: OTPKey.java
 CREATE TABLE otp_key (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -466,32 +454,6 @@ CREATE TABLE other_boot_instance (
     cloud_type INTEGER DEFAULT 2
 );
 
--- entity: ProxyConfig.java
-CREATE TABLE proxy_config (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    domain TEXT NOT NULL UNIQUE,
-    target_host TEXT NOT NULL,
-    target_port INTEGER NOT NULL,
-    protocol TEXT,
-    enable_ssl INTEGER,
-    enable_websocket INTEGER,
-    ssl_certificate_id BIGINT,
-    config_status TEXT,
-    ssl_status TEXT,
-    custom_config TEXT,
-    remark TEXT,
-    load_balance_type TEXT,
-    enable_health_check INTEGER,
-    health_check_path TEXT,
-    health_check_interval INTEGER,
-    enable_rate_limit INTEGER,
-    rate_limit INTEGER,
-    enable_cache INTEGER,
-    cache_time INTEGER,
-    create_time TEXT,
-    update_time TEXT
-);
-
 -- entity: RegisterDetail.java
 CREATE TABLE register_detail (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -530,24 +492,6 @@ CREATE TABLE server_metrics (
     total_disk REAL,
     total_upload_traffic TEXT,
     total_download_traffic TEXT
-);
-
--- entity: SslCertificate.java
-CREATE TABLE ssl_certificate (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    domain TEXT NOT NULL,
-    certificate_type TEXT NOT NULL,
-    email TEXT,
-    validation_method TEXT,
-    auto_renew INTEGER,
-    certificate_status TEXT,
-    issue_date TEXT,
-    expire_date TEXT,
-    certificate_path TEXT,
-    private_key_path TEXT,
-    create_time TEXT,
-    update_time TEXT,
-    dns_provider TEXT
 );
 
 -- entity: SystemConfig.java

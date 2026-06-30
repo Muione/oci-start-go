@@ -41,8 +41,9 @@ func tenantAuditLog(deps *Deps) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"data":    result,
+			"success":        true,
+			"data":           result.Data,
+			"nextPageToken":  result.NextPageToken,
 		})
 	}
 }

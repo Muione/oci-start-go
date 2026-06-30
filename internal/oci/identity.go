@@ -828,6 +828,116 @@ func GetTenancyDetail(ctx context.Context, prov common.ConfigurationProvider, te
 	return detail, nil
 }
 
+// --- Subscription Days (BE-001) ---
+
+// SubscriptionDaysInfo holds the subscription duration information for a tenancy.
+type SubscriptionDaysInfo struct {
+	TimeCreated  time.Time `json:"timeCreated"`
+	CurrentTime  time.Time `json:"currentTime"`
+	ActiveDays   int64     `json:"activeDays"`
+	ActiveMonths float64   `json:"activeMonths"`
+	ActiveYears  float64   `json:"activeYears"`
+}
+
+// GetTenancyTimeCreated fetches the tenancy creation time from the OCI Identity API.
+// Note: Uses GetCompartment instead of GetTenancy because GetTenancy does not return TimeCreated.
+func GetTenancyTimeCreated(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) (time.Time, error) {
+	client, err := identity.NewIdentityClientWithConfigurationProvider(prov)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("create identity client: %w", err)
+	}
+	resp, err := client.GetCompartment(ctx, identity.GetCompartmentRequest{
+		CompartmentId: common.String(tenancyOCID),
+	})
+	if err != nil {
+		return time.Time{}, fmt.Errorf("get compartment: %w", err)
+	}
+	return resp.Compartment.TimeCreated.Time, nil
+}
+
+// GetSubscriptionDays calculates the subscription duration from the tenancy's TimeCreated.
+func GetSubscriptionDays(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) (*SubscriptionDaysInfo, error) {
+	timeCreated, err := GetTenancyTimeCreated(ctx, prov, tenancyOCID)
+	if err != nil {
+		return nil, fmt.Errorf("get tenancy time created: %w", err)
+	}
+	now := time.Now().UTC()
+	if timeCreated.IsZero() {
+		return &SubscriptionDaysInfo{TimeCreated: timeCreated, CurrentTime: now, ActiveDays: 0}, nil
+	}
+	duration := now.Sub(timeCreated)
+	days := int64(duration.Hours() / 24)
+	if days < 0 {
+		days = 0
+	}
+	if duration.Nanoseconds()%int64(24*time.Hour) > 0 {
+		days++
+	}
+	return &SubscriptionDaysInfo{
+		TimeCreated:  timeCreated,
+		CurrentTime:  now,
+		ActiveDays:   days,
+		ActiveMonths: float64(days) / 30.44,
+		ActiveYears:  float64(days) / 365.25,
+	}, nil
+}
+
+// --- Domain Tenants (BE-003) ---
+
+// DomainInfo holds information about an OCI Identity Domain.
+type DomainInfo struct {
+	Id             string    `json:"id"`
+	DisplayName    string    `json:"displayName"`
+	Description    string    `json:"description"`
+	Url            string    `json:"url"`
+	HomeRegion     string    `json:"homeRegion"`
+	Type           string    `json:"type"`
+	LicenseType    string    `json:"licenseType"`
+	LifecycleState string    `json:"lifecycleState"`
+	TimeCreated    time.Time `json:"timeCreated"`
+}
+
+// ListDomainTenants lists all active Identity Domains for a tenancy.
+func ListDomainTenants(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) ([]DomainInfo, error) {
+	client, err := identity.NewIdentityClientWithConfigurationProvider(prov)
+	if err != nil {
+		return nil, fmt.Errorf("create identity client: %w", err)
+	}
+	var result []DomainInfo
+	var page *string
+	for {
+		resp, err := client.ListDomains(ctx, identity.ListDomainsRequest{
+			CompartmentId: common.String(tenancyOCID),
+			Limit:         common.Int(100),
+			Page:          page,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list domains: %w", err)
+		}
+		for _, d := range resp.Items {
+			info := DomainInfo{
+				Id:             derefStr(d.Id),
+				DisplayName:    derefStr(d.DisplayName),
+				Description:    derefStr(d.Description),
+				Url:            derefStr(d.Url),
+				HomeRegion:     derefStr(d.HomeRegion),
+				LicenseType:    derefStr(d.LicenseType),
+				LifecycleState: string(d.LifecycleState),
+				Type:           string(d.Type),
+			}
+			if d.TimeCreated != nil {
+				info.TimeCreated = d.TimeCreated.Time
+			}
+			result = append(result, info)
+		}
+		if resp.OpcNextPage == nil {
+			break
+		}
+		page = resp.OpcNextPage
+	}
+	return result, nil
+}
+
 // ─── helpers ───────────────────────────────────────────────────────────────
 
 func extractDomain(userName string) string {

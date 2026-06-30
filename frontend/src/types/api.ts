@@ -301,6 +301,39 @@ export interface SubnetInfo {
   lifecycleState: string
 }
 
+// --- Shape & Image (Phase 2) ---
+
+/** Shape info from GET /oci/shapes */
+export interface ShapeInfo {
+  shape: string
+  ocpus: number
+  memoryInGBs: number
+  processorDescription: string
+  architecture: string
+  maxVnicAttachments: number
+  gpuDescription?: string
+  gpuCount?: number
+  localDiskDescription?: string
+  isFlexible: boolean
+  baselineOcpu?: number
+  networkingDescription?: string
+}
+
+/** Image info from GET /oci/images */
+export interface ImageInfo {
+  id: string
+  displayName: string
+  operatingSystem: string
+  operatingSystemVersion: string
+  architecture: string
+  timeCreated: string
+  sizeInGBs?: number
+  launchMode?: string
+}
+
+/** VPU performance levels */
+export type VpuLevel = 0 | 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 | 110 | 120
+
 /** Object Storage bucket from GET /oci/storage/buckets */
 export interface Bucket {
   name: string

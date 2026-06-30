@@ -418,9 +418,10 @@ func calculateActiveDays(timestamp string) string {
 	if timestamp == "" {
 		return "0"
 	}
-	t, err := time.Parse("2006-01-02 15:04:05", timestamp)
+	// Try local-time parse first (format has no timezone indicator).
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", timestamp, time.Local)
 	if err != nil {
-		// Try alternate format (RFC 3339 / ISO 8601)
+		// Try alternate format (RFC 3339 / ISO 8601 — has explicit timezone).
 		t2, err2 := time.Parse(time.RFC3339, timestamp)
 		if err2 != nil {
 			return "0"

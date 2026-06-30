@@ -750,6 +750,20 @@ func (q *Queries) UpdateInstanceDetailRemark(ctx context.Context, arg UpdateInst
 	return err
 }
 
+const updateInstanceDetailVpusPerGb = `-- name: UpdateInstanceDetailVpusPerGb :exec
+UPDATE instance_detail SET vpus_per_gb = ? WHERE id = ?
+`
+
+type UpdateInstanceDetailVpusPerGbParams struct {
+	VpusPerGb sql.NullString `json:"vpus_per_gb"`
+	ID        int64          `json:"id"`
+}
+
+func (q *Queries) UpdateInstanceDetailVpusPerGb(ctx context.Context, arg UpdateInstanceDetailVpusPerGbParams) error {
+	_, err := q.db.ExecContext(ctx, updateInstanceDetailVpusPerGb, arg.VpusPerGb, arg.ID)
+	return err
+}
+
 const updateInstanceOffline = `-- name: UpdateInstanceOffline :exec
 UPDATE instance_detail SET on_line_enable = ?, offline_notify = ? WHERE id = ?
 `

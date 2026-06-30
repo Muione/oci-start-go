@@ -139,6 +139,9 @@
                     <el-dropdown-item command="stop" :disabled="row.state === 'Stopped'">
                       <el-icon><VideoPause /></el-icon> 停止
                     </el-dropdown-item>
+                    <el-dropdown-item command="restart" :disabled="row.state !== 'Running'">
+                      <el-icon><RefreshRight /></el-icon> 重启
+                    </el-dropdown-item>
                     <el-dropdown-item command="modify">
                       <el-icon><Edit /></el-icon> 修改配置
                     </el-dropdown-item>
@@ -309,6 +312,156 @@
               </el-form-item>
             </el-form>
           </el-tab-pane>
+
+          <!-- ============================================================ -->
+          <!-- Config Modification Tab (FE-101) -->
+          <!-- ============================================================ -->
+          <el-tab-pane label="配置修改" name="config">
+            <el-alert
+              title="修改 Shape 需要先停止实例。OCPU/内存调整仅对 Flex 类型 Shape 有效。"
+              type="warning"
+              :closable="false"
+              show-icon
+              style="margin-bottom:16px"
+            />
+            <el-form :model="configForm" label-width="120px" size="small">
+              <el-form-item label="当前 Shape">
+                <el-tag type="info">{{ detail.shape }}</el-tag>
+                <span style="margin-left:8px;color:var(--text-muted);font-size:var(--text-xs)">
+                  {{ detail.ocpus }}C / {{ detail.memoryInGbs }}G
+                </span>
+              </el-form-item>
+              <el-form-item label="显示名称">
+                <el-input v-model="configForm.displayName" placeholder="修改实例显示名称" />
+              </el-form-item>
+              <el-form-item label="新 Shape">
+                <ShapeSelect
+                  v-model="configForm.shape"
+                  :tenant-id="detail.tenantId"
+                  :architecture="detail.architecture"
+                  placeholder="留空则不修改 Shape"
+                />
+              </el-form-item>
+              <el-form-item label="OCPU">
+                <el-input-number v-model="configForm.ocpus" :min="1" :max="128" :step="1" controls-position="right" style="width:100%" />
+              </el-form-item>
+              <el-form-item label="内存(GB)">
+                <el-input-number v-model="configForm.memoryInGbs" :min="1" :max="1024" :step="1" controls-position="right" style="width:100%" />
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" :loading="configSaving" @click="saveConfig">
+                  保存配置
+                </el-button>
+                <el-button v-if="detail.state === 'Running'" type="warning" :loading="restartingForConfig" @click="stopForConfig">
+                  停止实例后修改
+                </el-button>
+              </el-form-item>
+            </el-form>
+          </el-tab-pane>
+
+          <!-- ============================================================ -->
+          <!-- Disk Settings Tab (FE-102) -->
+          <!-- ============================================================ -->
+          <el-tab-pane label="磁盘设置" name="disk">
+            <el-alert
+              title="调整磁盘 VPU 性能需要先停止实例。修改后重新启动实例生效。"
+              type="info"
+              :closable="false"
+              show-icon
+              style="margin-bottom:16px"
+            />
+            <el-descriptions :column="2" border size="small" style="margin-bottom:16px">
+              <el-descriptions-item label="启动卷大小">{{ detail.bootVolumeSizeInGbs }} GB</el-descriptions-item>
+              <el-descriptions-item label="当前 VPU/GB">{{ detail.vpusPerGb || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="启动卷ID" :span="2">
+                <span class="data-mono" style="font-size:var(--text-xs)">{{ detail.bootVolumeId || '-' }}</span>
+              </el-descriptions-item>
+            </el-descriptions>
+            <el-form :model="diskForm" label-width="120px" size="small">
+              <el-form-item label="VPU 性能等级">
+                <el-select v-model="diskForm.vpusPerGb" style="width:100%">
+                  <el-option :value="10" label="10 - 均衡 (Balanced)">
+                    <div class="vpu-option">
+                      <span class="vpu-label">10 - 均衡</span>
+                      <span class="vpu-desc">适用于大多数工作负载</span>
+                    </div>
+                  </el-option>
+                  <el-option :value="20" label="20 - 更高性能 (Higher Performance)">
+                    <div class="vpu-option">
+                      <span class="vpu-label">20 - 更高性能</span>
+                      <span class="vpu-desc">适用于需要更高 IOPS 的场景</span>
+                    </div>
+                  </el-option>
+                  <el-option :value="30" label="30 - 超高性能 (Ultra High)">
+                    <div class="vpu-option">
+                      <span class="vpu-label">30 - 超高性能</span>
+                      <span class="vpu-desc">适用于数据库和高 IO 负载</span>
+                    </div>
+                  </el-option>
+                  <el-option :value="40" label="40 - 超高性能">
+                    <div class="vpu-option">
+                      <span class="vpu-label">40 - 超高性能</span>
+                    </div>
+                  </el-option>
+                  <el-option :value="50" label="50 - 超高性能">
+                    <div class="vpu-option">
+                      <span class="vpu-label">50 - 超高性能</span>
+                    </div>
+                  </el-option>
+                  <el-option :value="60" label="60 - 超高性能">
+                    <div class="vpu-option">
+                      <span class="vpu-label">60 - 超高性能</span>
+                    </div>
+                  </el-option>
+                  <el-option :value="80" label="80 - 超高性能">
+                    <div class="vpu-option">
+                      <span class="vpu-label">80 - 超高性能</span>
+                    </div>
+                  </el-option>
+                  <el-option :value="100" label="100 - 超高性能">
+                    <div class="vpu-option">
+                      <span class="vpu-label">100 - 超高性能</span>
+                    </div>
+                  </el-option>
+                  <el-option :value="120" label="120 - 超高性能">
+                    <div class="vpu-option">
+                      <span class="vpu-label">120 - 超高性能</span>
+                    </div>
+                  </el-option>
+                </el-select>
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" :loading="vpuSaving" @click="saveVpu">
+                  更新 VPU 设置
+                </el-button>
+              </el-form-item>
+            </el-form>
+          </el-tab-pane>
+
+          <!-- ============================================================ -->
+          <!-- VNIC Management Tab (FE-103) -->
+          <!-- ============================================================ -->
+          <el-tab-pane label="VNIC 管理" name="vnic">
+            <el-descriptions :column="2" border size="small" style="margin-bottom:16px">
+              <el-descriptions-item label="VNIC IDs" :span="2">
+                <span class="data-mono" style="font-size:var(--text-xs)">{{ detail.vnicIds || '-' }}</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="公网IP">{{ detail.publicIps || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="私网IP">{{ detail.privateIps || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="IPv6" :span="2">{{ detail.ipv6Addresses || '未启用' }}</el-descriptions-item>
+            </el-descriptions>
+            <div style="display:flex;gap:var(--space-3);flex-wrap:wrap">
+              <el-button type="primary" size="small" @click="router.push({ path: '/vnic', query: { instanceId: detail.instanceId } })">
+                <el-icon><Connection /></el-icon> 打开 VNIC 管理
+              </el-button>
+              <el-button size="small" @click="handleAction('change-ip', detail)">
+                <el-icon><Connection /></el-icon> 更换公网 IP
+              </el-button>
+              <el-button size="small" :disabled="!!detail.ipv6Addresses" @click="handleAction('enable-ipv6', detail)">
+                <el-icon><Link /></el-icon> 启用 IPv6
+              </el-button>
+            </div>
+          </el-tab-pane>
         </el-tabs>
       </template>
     </el-dialog>
@@ -391,9 +544,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Refresh, Download, ArrowDown, Search, InfoFilled,
   VideoPlay, VideoPause, Edit, Connection, Link, Key,
-  Warning, Monitor, Operation, Delete,
+  Warning, Monitor, Operation, Delete, RefreshRight,
 } from '@element-plus/icons-vue'
 import request from '../utils/request'
+import ShapeSelect from '../components/ShapeSelect.vue'
 
 // ---- Types ----
 interface Instance {
@@ -453,6 +607,15 @@ const changeIpTarget = ref<Instance | null>(null)
 const ipv6Visible = ref(false)
 const ipv6Loading = ref(false)
 const ipv6Target = ref<Instance | null>(null)
+
+// Config modification tab (FE-101)
+const configForm = ref({ shape: '', ocpus: 4, memoryInGbs: 24, displayName: '' })
+const configSaving = ref(false)
+const restartingForConfig = ref(false)
+
+// Disk settings tab (FE-102)
+const diskForm = ref({ vpusPerGb: 10 })
+const vpuSaving = ref(false)
 
 // ---- Computed ----
 function stateDotClass(state: string): string {
@@ -548,6 +711,9 @@ async function onDetailOpened() {
   } catch {
     sshForm.value = { username: 'root', port: 22, password: '' }
   }
+  // Initialize config and disk forms
+  initConfigForm()
+  initDiskForm()
 }
 
 async function saveDetailRemark() {
@@ -571,6 +737,7 @@ function handleAction(cmd: string, row: Instance) {
   switch (cmd) {
     case 'start': return confirmStart(row)
     case 'stop': return confirmStop(row)
+    case 'restart': return confirmRestart(row)
     case 'modify': return openModify(row)
     case 'change-ip': return openChangeIp(row)
     case 'enable-ipv6': return openEnableIpv6(row)
@@ -609,6 +776,21 @@ async function confirmStop(row: Instance) {
     await ElMessageBox.confirm(`确定停止实例 ${row.displayName}？`, '确认停止', { type: 'warning' })
     await request.post(`/instances/${row.id}/stop`)
     ElMessage.success('停止请求已发送')
+    await load()
+  } catch (e: any) {
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
+  }
+}
+
+async function confirmRestart(row: Instance) {
+  try {
+    await ElMessageBox.confirm(
+      `确定重启实例 ${row.displayName}？实例将先停止再启动。`,
+      '确认重启',
+      { type: 'warning', confirmButtonText: '确认重启' }
+    )
+    await request.post(`/instances/${row.id}/restart`)
+    ElMessage.success('重启请求已发送')
     await load()
   } catch (e: any) {
     if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
@@ -718,6 +900,87 @@ async function saveSshConfig() {
     ElMessage.success('SSH 配置已保存')
   } catch (e: any) { ElMessage.error(e.message) }
   finally { sshSaving.value = false }
+}
+
+// ---- Config Modification (FE-101) ----
+function initConfigForm() {
+  if (!detail.value) return
+  configForm.value = {
+    shape: '',
+    ocpus: detail.value.ocpus || 4,
+    memoryInGbs: detail.value.memoryInGbs || 24,
+    displayName: detail.value.displayName || '',
+  }
+}
+
+async function saveConfig() {
+  if (!detail.value) return
+  configSaving.value = true
+  try {
+    const body: any = {}
+    if (configForm.value.shape) body.shape = configForm.value.shape
+    if (configForm.value.ocpus !== detail.value.ocpus) body.ocpus = configForm.value.ocpus
+    if (configForm.value.memoryInGbs !== detail.value.memoryInGbs) body.memoryInGbs = configForm.value.memoryInGbs
+    if (configForm.value.displayName && configForm.value.displayName !== detail.value.displayName) {
+      body.displayName = configForm.value.displayName
+    }
+    if (Object.keys(body).length === 0) {
+      ElMessage.warning('没有需要修改的配置')
+      configSaving.value = false
+      return
+    }
+    await request.post(`/instances/${detail.value.id}/modify`, body)
+    ElMessage.success('配置修改请求已提交')
+    await load()
+    // Refresh detail
+    const updated = rows.value.find(r => r.id === detail.value?.id)
+    if (updated) detail.value = { ...updated }
+  } catch (e: any) {
+    ElMessage.error(e.message || '修改失败')
+  } finally { configSaving.value = false }
+}
+
+async function stopForConfig() {
+  if (!detail.value) return
+  try {
+    await ElMessageBox.confirm(
+      '修改 Shape 需要先停止实例。确定停止实例？',
+      '确认停止',
+      { type: 'warning' }
+    )
+    restartingForConfig.value = true
+    await request.post(`/instances/${detail.value.id}/stop`)
+    ElMessage.success('实例正在停止，请稍后再修改配置')
+    await load()
+    const updated = rows.value.find(r => r.id === detail.value?.id)
+    if (updated) detail.value = { ...updated }
+  } catch (e: any) {
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
+  } finally { restartingForConfig.value = false }
+}
+
+// ---- Disk Settings (FE-102) ----
+function initDiskForm() {
+  if (!detail.value) return
+  diskForm.value = {
+    vpusPerGb: parseInt(detail.value.vpusPerGb) || 10,
+  }
+}
+
+async function saveVpu() {
+  if (!detail.value) return
+  vpuSaving.value = true
+  try {
+    await request.post(`/instances/${detail.value.id}/vpu`, {
+      vpusPerGb: diskForm.value.vpusPerGb,
+    })
+    ElMessage.success('VPU 设置已更新')
+    await load()
+    const updated = rows.value.find(r => r.id === detail.value?.id)
+    if (updated) detail.value = { ...updated }
+  } catch (e: any) {
+    ElMessage.error(e.message || '更新 VPU 失败')
+  } finally { vpuSaving.value = false }
 }
 
 // ---- Export ----
@@ -885,6 +1148,24 @@ onMounted(load)
 
 :deep(.el-tabs__item) {
   font-weight: var(--font-medium);
+}
+
+/* ---- VPU options ---- */
+.vpu-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0;
+}
+
+.vpu-label {
+  font-weight: var(--font-medium);
+  font-size: var(--text-sm);
+}
+
+.vpu-desc {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 @media (max-width: 768px) {

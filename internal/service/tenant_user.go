@@ -235,3 +235,34 @@ func (s *TenantUserService) UpdateAccountDetail(ctx context.Context, tenantID in
 	})
 	return detail, nil
 }
+
+// ─── Subscription Days (BE-001) ──────────────────────────────────────────
+
+// GetSubscriptionDays queries the OCI Identity API for the tenancy's creation time
+// and calculates the subscription duration.
+func (s *TenantUserService) GetSubscriptionDays(ctx context.Context, tenantID int64) (*oci.SubscriptionDaysInfo, error) {
+	creds, err := s.getProvider(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	prov, err := oci.NewProvider(creds, s.masterKey)
+	if err != nil {
+		return nil, fmt.Errorf("create provider: %w", err)
+	}
+	return oci.GetSubscriptionDays(ctx, prov, creds.Tenancy)
+}
+
+// ─── Domain Tenants (BE-003) ─────────────────────────────────────────────
+
+// ListDomainTenants lists all active Identity Domains for a tenant.
+func (s *TenantUserService) ListDomainTenants(ctx context.Context, tenantID int64) ([]oci.DomainInfo, error) {
+	creds, err := s.getProvider(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	prov, err := oci.NewProvider(creds, s.masterKey)
+	if err != nil {
+		return nil, fmt.Errorf("create provider: %w", err)
+	}
+	return oci.ListDomainTenants(ctx, prov, creds.Tenancy)
+}

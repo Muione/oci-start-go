@@ -21,18 +21,17 @@ import (
 	"github.com/Muione/oci-start-go/internal/db"
 	"github.com/Muione/oci-start-go/internal/dns"
 	"github.com/Muione/oci-start-go/internal/acme"
-	gcp2 "github.com/Muione/oci-start-go/internal/cloud/gcp"
 	"github.com/Muione/oci-start-go/internal/grabber"
 	"github.com/Muione/oci-start-go/internal/migration"
 	"github.com/Muione/oci-start-go/internal/notify"
 	"github.com/Muione/oci-start-go/internal/httpapi"
 	"github.com/Muione/oci-start-go/internal/oci"
-	"github.com/Muione/oci-start-go/internal/openresty"
 	"github.com/Muione/oci-start-go/internal/repo"
 	"github.com/Muione/oci-start-go/internal/scheduler"
 	"github.com/Muione/oci-start-go/internal/service"
 	"github.com/Muione/oci-start-go/internal/sysconf"
 	"github.com/Muione/oci-start-go/internal/util/crypto"
+	"github.com/Muione/oci-start-go/internal/util/httpclient"
 	logpkg "github.com/Muione/oci-start-go/internal/util/log"
 	"github.com/Muione/oci-start-go/internal/util/rsakey"
 	"github.com/Muione/oci-start-go/internal/ws"
@@ -105,10 +104,12 @@ func main() {
 	tenantSvc := service.NewTenantService(store, masterKey, proxyPool)
 
 	// Phase 7 wiring: notification (before engine so it can be passed in).
+	// Use proxy-aware HTTP client if system proxy is configured.
 	bgCtx := context.Background()
+	proxyClient := httpclient.NewClient(sc, 10*time.Second)
 	tgToken := sc.GetString(bgCtx, "telegram.bot.token")
 	tgChatID := sc.GetString(bgCtx, "telegram.chat.id")
-	tgNotifier := notify.NewTelegramNotifier(tgToken, tgChatID, logger)
+	tgNotifier := notify.NewTelegramNotifier(tgToken, tgChatID, logger, proxyClient)
 
 	// Phase 5: backupSvc created before engine so OnGrabSuccess can reference it.
 	backupSvc := service.NewBackupSvc(store, masterKey, logger)
@@ -189,6 +190,33 @@ func main() {
 			info.AvailabilityDomain = ad.String
 			return &info, nil
 		},
+		BuildClients: func(ctx context.Context, tenantID int64) (oci.Clients, error) {
+			creds, err := lookupTenantCreds(store, tenantID)
+			if err != nil {
+				return oci.Clients{}, err
+			}
+			prov, err := oci.NewProvider(creds, masterKey)
+			if err != nil {
+				return oci.Clients{}, fmt.Errorf("oci provider: %w", err)
+			}
+			return oci.NewClients(prov)
+		},
+		GetCompartmentID: func(ctx context.Context, tenantID int64, instanceID string) (string, error) {
+			// Get the instance's compartment from DB, falling back to tenancy OCID.
+			var compID sql.NullString
+			err := store.Read.QueryRowContext(ctx,
+				`SELECT compartment_id FROM instance_detail WHERE instance_id = ? LIMIT 1`,
+				instanceID).Scan(&compID)
+			if err == nil && compID.Valid && compID.String != "" {
+				return compID.String, nil
+			}
+			// Fallback: use tenant's tenancy OCID as compartment.
+			tenant, err := repo.New(store.Read).FindTenantByID(ctx, tenantID)
+			if err != nil {
+				return "", fmt.Errorf("tenant %d not found: %w", tenantID, err)
+			}
+			return ns(tenant.Tenancy), nil
+		},
 	})
 
 	// Wire rescue handler with OCI operations (full multi-step flow).
@@ -248,21 +276,10 @@ func main() {
 	if err := dnsCacheStore.EnsureTable(); err != nil {
 		logger.Warn().Err(err).Msg("main: failed to ensure api_cache table")
 	}
+	dns.SetCacheLogger(logger)
 	dns.SetGlobalCacheStore(dnsCacheStore)
 
 	certManager := acme.NewCertManager(logger)
-
-	// Phase 8 wiring: GCP Compute Engine (lazy init from system config).
-	var gcpSvc *gcp2.GcpService
-	if creds := sc.GetString(bctx, "gcp.serviceAccountJson"); creds != "" {
-		projectID := sc.GetString(bctx, "gcp.projectId")
-		if client, err := gcp2.NewGcpClient(creds, projectID); err == nil {
-			gcpSvc = gcp2.NewGcpServiceWithClient(client)
-			logger.Info().Msg("main: GCP service initialized")
-		} else {
-			logger.Warn().Err(err).Msg("main: GCP credentials found but invalid")
-		}
-	}
 
 	// Phase 8 wiring: data migration.
 	migSplitter := migration.NewSQLSplitter(logger)
@@ -287,24 +304,11 @@ func main() {
 	// Phase 11.2 wiring: VNIC batch management.
 	vnicMgmtSvc := service.NewVnicManagementService(store, masterKey, proxyPool)
 
-	// Phase 12.1 wiring: Nginx / Reverse Proxy management.
-	orClient := openresty.New(cfg.Openresty.API.BaseURL, "")
-	nginxSvc := service.NewNginxService(store, orClient, cfg, sc, dnsSvc, logger)
-
 	// Phase 12.2 wiring: Email Delivery service.
 	emailSvc := service.NewEmailService(store, dnsSvc, sc, proxyPool, masterKey)
 
-	// Phase 13.1/13.2 wiring: IP quality + Quick DD.
-	ipQualitySvc := service.NewIPQualityService(store, masterKey, proxyPool, logger)
-	quickDDSvc := service.NewQuickDDService(store, logger)
-
-	// Phase 13.3/14 wiring: OCI wrapper services.
-	bastionSvc := service.NewBastionService(store, masterKey, proxyPool)
-	ctrRegSvc := service.NewContainerRegistryService(store, masterKey, proxyPool)
-	aiVisionSvc := service.NewAIVisionService(store, masterKey, proxyPool)
-	noSQLSvc := service.NewNoSQLService(store, masterKey)
-	mySQLSvc := service.NewMySQLService(store, masterKey, proxyPool)
-	resourceMgrSvc := service.NewResourceMgrService(store, masterKey)
+	// Phase B wiring: Billing (subscription + usage/cost).
+	billingSvc := service.NewBillingService(store, masterKey, proxyPool)
 
 	sched := scheduler.New(engine, store, logger, &scheduler.SvcSet{
 		Traffic:        trafficSvc,
@@ -314,7 +318,6 @@ func main() {
 		CertManager:    certManager,
 		WsHub:          wsHub,
 		ObjectStorage:  objectStorageSvc,
-		NginxSvc:       nginxSvc,
 	})
 
 	deps := &httpapi.Deps{
@@ -343,7 +346,6 @@ func main() {
 		DnsSvc:       dnsSvc,
 		CertManager:  certManager,
 		Migration:    migHandler,
-		GcpSvc:       gcpSvc,
 		TenantEmail:  tenantEmailSvc,
 		TenantSocial: tenantSocialSvc,
 		TenantUser:   tenantUserSvc,
@@ -354,16 +356,9 @@ func main() {
 		ObjectStorageSvc: objectStorageSvc,
 		VnicMgmtSvc:     vnicMgmtSvc,
 		SSHConfig:       sshConfig,
-		NginxSvc:        nginxSvc,
 		EmailSvc:        emailSvc,
-		IpQualitySvc:    ipQualitySvc,
-		QuickDDSvc:      quickDDSvc,
-		BastionSvc:      bastionSvc,
-		CtrRegSvc:       ctrRegSvc,
-		AiVisionSvc:     aiVisionSvc,
-		NoSQLSvc:        noSQLSvc,
-		MySQLSvc:        mySQLSvc,
-		ResourceMgrSvc:  resourceMgrSvc,
+		BillingSvc:      billingSvc,
+		TotpSetup:       httpapi.NewTotpSetupCache(),
 	}
 	router := httpapi.NewServer(deps)
 

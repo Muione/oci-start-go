@@ -12,5 +12,5 @@ export default defineConfig({
       '/ws': { target: 'ws://127.0.0.1:9856', ws: true },
     },
   },
-  build: { outDir: '../internal/web/dist', emptyOutDir: true },
+  build: { outDir: '../internal/web/dist', emptyOutDir: true, target: 'esnext' },
 })

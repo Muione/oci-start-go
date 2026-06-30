@@ -15,7 +15,6 @@ import (
 	"github.com/Muione/oci-start-go/internal/oci"
 	"github.com/Muione/oci-start-go/internal/scheduler"
 	"github.com/Muione/oci-start-go/internal/acme"
-	"github.com/Muione/oci-start-go/internal/cloud/gcp"
 	"github.com/Muione/oci-start-go/internal/service"
 	"github.com/Muione/oci-start-go/internal/sysconf"
 	"github.com/Muione/oci-start-go/internal/util/rsakey"
@@ -61,14 +60,14 @@ type Deps struct {
 	Notifier notify.Notifier
 	DnsSvc   *dns.DnsService
 
+	// MFA TOTP setup cache (single-user, in-memory).
+	TotpSetup *totpSetupCache
+
 	// Phase 8: ACME cert manager for SSL issuance.
 	CertManager *acme.CertManager
 
 	// Phase 8: data migration.
 	Migration *MigrationHandler
-
-	// Phase 8: GCP Compute Engine boot instance service.
-	GcpSvc *gcp.GcpService
 
 	// Phase 9: tenant email & social config services.
 	TenantEmail  *service.TenantEmailService
@@ -94,23 +93,9 @@ type Deps struct {
 	// Phase 12.3: SSH root login configurator.
 	SSHConfig *service.SSHConfigurator
 
-	// Phase 12.1: Nginx / Reverse Proxy management.
-	NginxSvc *service.NginxService
-
 	// Phase 12.2: Email Delivery service.
 	EmailSvc *service.EmailService
 
-	// Phase 13.1: IP quality detection + auto switch.
-	IpQualitySvc *service.IPQualityService
-
-	// Phase 13.2: Quick DD one-click reinstall.
-	QuickDDSvc *service.QuickDDService
-
-	// Phase 13.3/14: OCI wrapper services.
-	BastionSvc   *service.BastionService
-	CtrRegSvc    *service.ContainerRegistryService
-	AiVisionSvc  *service.AIVisionService
-	NoSQLSvc     *service.NoSQLService
-	MySQLSvc     *service.MySQLService
-	ResourceMgrSvc *service.ResourceMgrService
+	// Phase B: Billing (subscription + usage/cost).
+	BillingSvc *service.BillingService
 }

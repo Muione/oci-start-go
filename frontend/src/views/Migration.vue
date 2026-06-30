@@ -34,7 +34,7 @@
         <el-card shadow="hover">
           <el-statistic title="错误" :value="stats.errors || 0">
             <template #suffix>
-              <el-icon v-if="stats.errors > 0" style="color: var(--status-down)"><CircleCloseFilled /></el-icon>
+              <el-icon v-if="(stats.errors ?? 0) > 0" style="color: var(--status-down)"><CircleCloseFilled /></el-icon>
               <el-icon v-else style="color: var(--status-up)"><SuccessFilled /></el-icon>
             </template>
           </el-statistic>

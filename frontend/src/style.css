@@ -238,6 +238,38 @@ code, pre, kbd, samp {
   border-top: 1px solid var(--border-subtle);
 }
 
+/* --- Dialog mobile --- */
+@media (max-width: 768px) {
+  .el-dialog {
+    --el-dialog-width: 92vw;
+    width: 92vw !important;
+    max-height: 90vh;
+    margin: 5vh auto;
+  }
+  .el-dialog__body {
+    max-height: calc(90vh - 120px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .el-dialog__header {
+    padding: var(--space-4);
+  }
+  .el-dialog__footer {
+    padding: var(--space-3) var(--space-4);
+  }
+  /* Tables inside dialogs */
+  .el-dialog .el-table {
+    font-size: 12px;
+  }
+  .el-dialog .el-form-item__label {
+    font-size: 13px;
+  }
+  .el-dialog .el-input,
+  .el-dialog .el-select {
+    width: 100% !important;
+  }
+}
+
 /* --- Tag --- */
 .el-tag {
   border-radius: var(--radius-sm);
@@ -327,6 +359,14 @@ code, pre, kbd, samp {
 }
 .el-message-box__message {
   color: var(--text-secondary);
+}
+
+/* --- Message box mobile --- */
+@media (max-width: 768px) {
+  .el-message-box {
+    width: 90vw !important;
+    max-width: 90vw;
+  }
 }
 
 /* --- Notification --- */

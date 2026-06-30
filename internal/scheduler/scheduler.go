@@ -42,9 +42,6 @@ type Scheduler struct {
 
 	// Phase 11.1: Object storage service for multipart upload cleanup.
 	objectStorageSvc *service.ObjectStorageService
-
-	// Phase 12.1: Nginx service for SSL auto-renewal.
-	nginxSvc *service.NginxService
 }
 
 // SvcSet bundles services for the scheduler to consume.
@@ -56,7 +53,6 @@ type SvcSet struct {
 	CertManager   *acme.CertManager // Phase 8: SSL cert renewal
 	WsHub         *ws.Hub           // Phase 8: monitor heartbeat broadcast
 	ObjectStorage *service.ObjectStorageService // Phase 11.1: multipart upload cleanup
-	NginxSvc      *service.NginxService         // Phase 12.1: SSL auto-renewal
 }
 
 // New creates the scheduler, registering all jobs. The engine may be nil
@@ -80,7 +76,6 @@ func New(engine *grabber.Engine, store *db.Store, logger zerolog.Logger, svcs *S
 		s.certManager = svcs.CertManager
 		s.wsHub = svcs.WsHub
 		s.objectStorageSvc = svcs.ObjectStorage
-		s.nginxSvc = svcs.NginxSvc
 	}
 	s.registerJobs()
 	return s
@@ -184,13 +179,6 @@ func (s *Scheduler) bootInstanceRefreshJob() {
 // ACME renewal when available, otherwise falls back to the legacy CertManager.
 func (s *Scheduler) sslCertJob() {
 	ctx := context.Background()
-
-	// Phase 12.1: use NginxService for per-domain auto-renewal.
-	if s.nginxSvc != nil {
-		s.logger.Info().Msg("scheduler: SslCertJob — running Phase 12.1 auto-renewal")
-		s.nginxSvc.ProcessAutoRenewal(ctx)
-		return
-	}
 
 	// Legacy path: single-domain CertManager renewal.
 	if s.certManager == nil {

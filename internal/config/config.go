@@ -24,7 +24,6 @@ type Config struct {
 	Ssl        SslCfg        `mapstructure:"ssl"`
 	Turnstile  TurnstileCfg  `mapstructure:"turnstile"`
 	SaToken    SaTokenCfg    `mapstructure:"sa_token"`
-	Openresty  OpenrestyCfg  `mapstructure:"openresty"`
 	Cache      CacheCfg      `mapstructure:"cache"`
 	Logging    LoggingCfg    `mapstructure:"logging"`
 	Deploy     DeployCfg     `mapstructure:"deploy"`
@@ -76,14 +75,6 @@ type SaTokenCfg struct {
 	ActiveTimeout int    `mapstructure:"active_timeout"`
 	IsConcurrent  bool   `mapstructure:"is_concurrent"`
 	Style         string `mapstructure:"style"`
-}
-
-type OpenrestyCfg struct {
-	API OpenrestyAPICfg `mapstructure:"api"`
-}
-
-type OpenrestyAPICfg struct {
-	BaseURL string `mapstructure:"base_url"`
 }
 
 type CacheCfg struct {

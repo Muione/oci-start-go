@@ -47,6 +47,10 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.GET("/api/version", versionHandler(deps.Store))
 	pro.GET("/api/userInfo", userInfo(deps))
 	pro.POST("/api/change-password", changePassword(deps))
+	pro.GET("/api/mfa/status", mfaStatus(deps))
+	pro.POST("/api/mfa/totp/setup", mfaTotpSetup(deps))
+	pro.POST("/api/mfa/totp/verify", mfaTotpVerify(deps))
+	pro.POST("/api/mfa/disable", mfaDisable(deps))
 	pro.GET("/tenants/listAll", tenantList(deps))
 	pro.POST("/tenants/save", tenantSave(deps))
 	pro.GET("/tenants/deleteApi", tenantDelete(deps))
@@ -80,6 +84,8 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.GET("/tenants/:id/notification-recipients", tenantNotifRecipientsGet(deps))
 	pro.POST("/tenants/:id/notification-recipients/update", tenantNotifRecipientsUpdate(deps))
 	pro.POST("/tenants/:id/update-detail", tenantUpdateDetail(deps))
+	pro.GET("/tenants/:id/subscription-days", tenantSubscriptionDays(deps))
+	pro.GET("/tenants/:id/domains", tenantDomainTenants(deps))
 	pro.GET("/proxies/list", proxyList(deps))
 	pro.POST("/proxies/save", proxySave(deps))
 	pro.GET("/proxies/delete", proxyDelete(deps))
@@ -121,14 +127,12 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.DELETE("/instances/:id", instanceDeleteRecord(deps))
 	pro.POST("/instances/:id/change-ip", instanceChangeIP(deps))
 	pro.POST("/instances/:id/enable-ipv6", instanceEnableIPv6(deps))
+	pro.POST("/instances/:id/restart", instanceRestart(deps))
+	pro.POST("/instances/:id/vpu", instanceUpdateVpu(deps))
 	pro.GET("/instances/:id/ssh-config", instanceGetSSHConfig(deps))
 	pro.POST("/instances/:id/ssh-config", instanceSaveSSHConfig(deps))
 	pro.GET("/backup/list", backupList(deps))
 	pro.GET("/backup/delete", backupDelete(deps))
-	pro.POST("/boot-instance/gcp/launch", gcpBootLaunch(deps))
-	pro.GET("/boot-instance/gcp/list", gcpBootList(deps))
-	pro.GET("/boot-instance/gcp/delete", gcpBootDelete(deps))
-	pro.GET("/boot-instance/gcp/status", gcpBootStatus(deps))
 	pro.GET("/traffic/alert/list", trafficAlertList(deps))
 	pro.GET("/traffic/alert/get", trafficAlertGet(deps))
 	pro.POST("/traffic/alert/save", trafficAlertSave(deps))
@@ -138,6 +142,13 @@ func NewServer(deps *Deps) *gin.Engine {
 	r.GET("/log/ws", func(c *gin.Context) { deps.WsHub.Log.HandleLog(c.Writer, c.Request) })
 	r.GET("/ws/monitor", func(c *gin.Context) { deps.WsHub.Monitor.HandleMonitor(c.Writer, c.Request) })
 	r.GET("/ws/console", func(c *gin.Context) { deps.WsHub.Console.HandleConsole(c.Writer, c.Request) })
+	r.GET("/ws/vnc/:instanceId", func(c *gin.Context) {
+		// Pass instanceId via query param so the handler can read it from standard request.
+		q := c.Request.URL.Query()
+		q.Set("instanceId", c.Param("instanceId"))
+		c.Request.URL.RawQuery = q.Encode()
+		deps.WsHub.Console.HandleVNCBridge(c.Writer, c.Request)
+	})
 	r.GET("/ws/rescue", func(c *gin.Context) { deps.WsHub.Rescue.HandleRescue(c.Writer, c.Request) })
 
 	// Phase 6: monitor agent endpoints (public — agent runs on remote VPS).
@@ -149,6 +160,15 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.GET("/ssl/list", sslList(deps))
 	pro.POST("/ssl/issue", sslIssue(deps))
 	pro.GET("/system/config", systemConfigGet(deps))
+
+	// Phase 3: System outbound proxy configuration.
+	pro.GET("/system/proxy", systemProxyGet(deps))
+	pro.PUT("/system/proxy", systemProxyUpdate(deps))
+	pro.POST("/system/proxy/test", systemProxyTest(deps))
+
+	// Phase 3: Unified system settings API.
+	pro.GET("/system/settings", systemSettingsGet(deps))
+	pro.PUT("/system/settings", systemSettingsUpdate(deps))
 
 	// Cloudflare DNS management (Phase 7).
 	pro.GET("/dns/cloudflare/zones", cloudflareZones(deps))
@@ -186,6 +206,10 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/oci/storage/object/multipart/abort", objectStorageMultipartAbort(deps))
 	pro.GET("/oci/storage/object/multipart/resumeable", objectStorageMultipartResumable(deps))
 
+	// Phase 2: Shape and Image listing.
+	pro.GET("/oci/shapes", listShapes(deps))
+	pro.GET("/oci/images", listImages(deps))
+
 	// Phase 11.2: VNIC batch management.
 	pro.GET("/oci/vnic/loadData", vnicLoadData(deps))
 	pro.POST("/oci/vnic/create", vnicCreate(deps))
@@ -197,35 +221,6 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/oci/vnic/changeSpecIp", vnicChangeSpecIp(deps))
 	pro.POST("/oci/vnic/network/configureLoadBalancer", vnicConfigureLB(deps))
 	pro.POST("/oci/vnic/network/restoreNetwork", vnicRestoreNetwork(deps))
-
-	// Phase 12.1: Nginx / Reverse Proxy management.
-	pro.POST("/ssl/proxy/create", nginxCreateProxy(deps))
-	pro.PUT("/ssl/proxy/:id", nginxUpdateProxy(deps))
-	pro.GET("/ssl/proxy/:id", nginxGetProxy(deps))
-	pro.DELETE("/ssl/proxy/:id", nginxDeleteProxy(deps))
-	pro.GET("/ssl/proxy/list", nginxListProxies(deps))
-	pro.DELETE("/ssl/proxy/batch", nginxBatchDeleteProxies(deps))
-	pro.PUT("/ssl/proxy/:id/toggle", nginxToggleProxy(deps))
-	pro.POST("/ssl/proxy/:id/test-connection", nginxTestProxyConnection(deps))
-	pro.POST("/ssl/proxy/:id/ssl", nginxApplySsl(deps))
-	pro.POST("/ssl/proxy/:id/fix", nginxFixProxy(deps))
-	pro.POST("/ssl/certificates/request", nginxRequestCert(deps))
-	pro.POST("/ssl/certificates/:id/renew", nginxRenewCert(deps))
-	pro.DELETE("/ssl/certificates/:id", nginxDeleteCert(deps))
-	pro.PUT("/ssl/certificates/:id/auto-renew", nginxToggleAutoRenew(deps))
-	pro.GET("/ssl/certificates/list", nginxListCerts(deps))
-	pro.GET("/ssl/certificates/expiring", nginxExpiringCerts(deps))
-	pro.GET("/ssl/certificates/:id/download", nginxDownloadCert(deps))
-	pro.GET("/ssl/certificates/match", nginxMatchCerts(deps))
-	pro.POST("/ssl/nginx/generate", nginxGenerateConfig(deps))
-	pro.POST("/ssl/nginx/:id/apply", nginxApplyConfig(deps))
-	pro.POST("/ssl/nginx/:id/test", nginxTestConfig(deps))
-	pro.POST("/ssl/nginx/reload", nginxReload(deps))
-	pro.GET("/ssl/nginx/diff", nginxConfigDiff(deps))
-	pro.GET("/ssl/nginx/status", nginxStatus(deps))
-	pro.GET("/ssl/nginx/latest", nginxLatestConfig(deps))
-	pro.GET("/ssl/openresty/status", openrestyStatus(deps))
-	pro.POST("/ssl/openresty/start", openrestyStart(deps))
 
 	// Phase 12.2: Email Delivery management.
 	pro.POST("/api/email/receive/list", emailReceiveList(deps))
@@ -242,60 +237,9 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/api/email/enable", emailEnable(deps))
 	pro.POST("/api/email/disable", emailDisable(deps))
 
-	// Phase 13.3: NoSQL Database management.
-	pro.GET("/oci/nosql/tables", nosqlTableList(deps))
-	pro.GET("/oci/nosql/table/get", nosqlTableGet(deps))
-	pro.POST("/oci/nosql/table/create", nosqlTableCreate(deps))
-	pro.POST("/oci/nosql/table/delete", nosqlTableDelete(deps))
-	pro.POST("/oci/nosql/row/get", nosqlRowGet(deps))
-	pro.POST("/oci/nosql/row/put", nosqlRowPut(deps))
-	pro.POST("/oci/nosql/row/delete", nosqlRowDelete(deps))
-	pro.POST("/oci/nosql/query", nosqlQuery(deps))
-
-	// Phase 13.3: MySQL Database Service management.
-	pro.GET("/oci/mysql/db-systems", mysqlDbSystemList(deps))
-	pro.GET("/oci/mysql/db-system/get", mysqlDbSystemGet(deps))
-	pro.POST("/oci/mysql/db-system/create", mysqlDbSystemCreate(deps))
-	pro.POST("/oci/mysql/db-system/delete", mysqlDbSystemDelete(deps))
-	pro.POST("/oci/mysql/db-system/start", mysqlDbSystemStart(deps))
-	pro.POST("/oci/mysql/db-system/stop", mysqlDbSystemStop(deps))
-	pro.POST("/oci/mysql/db-system/restart", mysqlDbSystemRestart(deps))
-	pro.GET("/oci/mysql/backups", mysqlBackupList(deps))
-	pro.POST("/oci/mysql/backup/create", mysqlBackupCreate(deps))
-	pro.POST("/oci/mysql/backup/delete", mysqlBackupDelete(deps))
-	pro.GET("/oci/mysql/channels", mysqlChannelList(deps))
-	pro.POST("/oci/mysql/channel/delete", mysqlChannelDelete(deps))
-
-	// Phase 13.3: Resource Manager management.
-	pro.GET("/oci/resourcemgr/stacks", resMgrStackList(deps))
-	pro.GET("/oci/resourcemgr/stack/get", resMgrStackGet(deps))
-	pro.POST("/oci/resourcemgr/stack/delete", resMgrStackDelete(deps))
-	pro.POST("/oci/resourcemgr/job/create", resMgrJobCreate(deps))
-	pro.GET("/oci/resourcemgr/job/get", resMgrJobGet(deps))
-	pro.GET("/oci/resourcemgr/jobs", resMgrJobList(deps))
-	pro.GET("/oci/resourcemgr/job/logs", resMgrJobLogs(deps))
-	pro.POST("/oci/resourcemgr/job/cancel", resMgrJobCancel(deps))
-
-	// Phase 14.1: Bastion management.
-	pro.GET("/oci/bastion/list", bastionList(deps))
-	pro.POST("/oci/bastion/session/create", bastionSessionCreate(deps))
-	pro.GET("/oci/bastion/session/list", bastionSessionList(deps))
-	pro.GET("/oci/bastion/session/get", bastionSessionGet(deps))
-	pro.POST("/oci/bastion/session/delete", bastionSessionDelete(deps))
-
-	// Phase 14.2: Container Registry management.
-	pro.GET("/oci/container/repositories", ctrRegListRepos(deps))
-	pro.GET("/oci/container/images", ctrRegListImages(deps))
-	pro.POST("/oci/container/image/delete", ctrRegDeleteImage(deps))
-	pro.POST("/oci/container/repository/delete", ctrRegDeleteRepo(deps))
-	pro.POST("/oci/container/cleanup", ctrRegCleanup(deps))
-
-	// Phase 14.3: AI Vision management.
-	pro.POST("/oci/aivision/image/analyze", aiVisionAnalyzeImage(deps))
-	pro.POST("/oci/aivision/document/analyze", aiVisionAnalyzeDocument(deps))
-	pro.POST("/oci/aivision/video/create", aiVisionCreateVideoJob(deps))
-	pro.GET("/oci/aivision/video/status", aiVisionGetVideoJob(deps))
-	pro.POST("/oci/aivision/video/cancel", aiVisionCancelVideoJob(deps))
+	// Phase B: Billing (subscription + usage/cost).
+	pro.GET("/tenants/:id/subscription", billingSubscription(deps))
+	pro.GET("/tenants/:id/cost", billingCost(deps))
 
 	// SPA static assets + NoRoute fallback to index.html
 	web.Register(r)

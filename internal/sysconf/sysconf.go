@@ -7,11 +7,22 @@ package sysconf
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/Muione/oci-start-go/internal/db"
 	"github.com/Muione/oci-start-go/internal/repo"
 )
+
+// ProxyConfig represents the application-level outbound proxy configuration.
+type ProxyConfig struct {
+	Type     string `json:"type"`     // HTTP, HTTPS, SOCKS5
+	Host     string `json:"host"`     // proxy host
+	Port     int    `json:"port"`     // proxy port
+	Username string `json:"username"` // optional auth username
+	Password string `json:"password"` // optional auth password
+	Enabled  bool   `json:"enabled"`  // whether proxy is active
+}
 
 const timeFmt = "2006-01-02 15:04:05"
 
@@ -66,4 +77,32 @@ func boolToInt64(b bool) int64 {
 		return 1
 	}
 	return 0
+}
+
+// GetProxyConfig reads the proxy configuration from system_config.
+func (s *Service) GetProxyConfig(ctx context.Context) ProxyConfig {
+	raw := s.GetString(ctx, "app.proxy.config")
+	if raw == "" {
+		return ProxyConfig{}
+	}
+	var cfg ProxyConfig
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		return ProxyConfig{}
+	}
+	return cfg
+}
+
+// SetProxyConfig writes the proxy configuration to system_config.
+func (s *Service) SetProxyConfig(ctx context.Context, cfg ProxyConfig) error {
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return s.SetString(ctx, "app.proxy.config", string(data))
+}
+
+// IsProxyEnabled returns whether the application proxy is enabled.
+func (s *Service) IsProxyEnabled(ctx context.Context) bool {
+	cfg := s.GetProxyConfig(ctx)
+	return cfg.Enabled && cfg.Host != "" && cfg.Port > 0
 }

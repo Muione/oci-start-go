@@ -196,7 +196,22 @@ onBeforeUnmount(disconnect)
 .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .toolbar h2 { margin: 0; margin-right: auto; }
 .connect-card { margin-bottom: 16px; }
-.terminal-container { height: calc(100vh - 200px); min-height: 400px; }
-.terminal-container :deep(.xterm) { height: 100%; padding: 8px; }
-.terminal-container :deep(.xterm-viewport) { scrollbar-width: thin; }
+.terminal-container {
+  height: calc(100vh - 200px);
+  min-height: 400px;
+  background: #1e1e1e;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.terminal-container :deep(.xterm) {
+  height: 100%;
+  padding: 8px;
+}
+.terminal-container :deep(.xterm-viewport) {
+  scrollbar-width: thin;
+  background: #1e1e1e !important;
+}
+.terminal-container :deep(.xterm-screen) {
+  background: #1e1e1e;
+}
 </style>

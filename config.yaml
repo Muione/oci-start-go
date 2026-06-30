@@ -36,10 +36,6 @@ sa_token:                    # consumed Phase 2; declared now for parity
   is_concurrent: false
   style: uuid
 
-openresty:                   # Phase 7
-  api:
-    base_url: http://127.0.0.1:8080/api
-
 cache:                       # Phase 7
   type: ristretto
   spec:

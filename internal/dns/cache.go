@@ -14,10 +14,18 @@ package dns
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog"
 )
+
+// cacheLog is the package-level logger for cache operations.
+// Defaults to a no-op logger; call SetCacheLogger early in main.
+var cacheLog zerolog.Logger = zerolog.Nop()
+
+// SetCacheLogger sets the logger used by the cache subsystem.
+func SetCacheLogger(l zerolog.Logger) { cacheLog = l }
 
 // cacheEntry holds a cached value with an expiration time.
 type cacheEntry[T any] struct {
@@ -148,7 +156,7 @@ func (c *CfCache) refreshZonesBg() {
 
 	zones, err := c.client.ListZones(ctx)
 	if err != nil {
-		log.Printf("[dns] background zone refresh failed: %v", err)
+		cacheLog.Warn().Err(err).Msg("dns: background zone refresh failed")
 		return
 	}
 
@@ -243,7 +251,7 @@ func (c *CfCache) refreshRecordsBg(zoneID, recordType, name string) {
 
 	records, err := c.client.ListDnsRecords(ctx, zoneID, recordType, name)
 	if err != nil {
-		log.Printf("[dns] background records refresh failed for zone %s: %v", zoneID, err)
+		cacheLog.Warn().Err(err).Str("zone", zoneID).Msg("dns: background records refresh failed")
 		return
 	}
 
@@ -356,7 +364,7 @@ func GetOrCreateCache(apiToken string) *CfCache {
 	globalCacheToken = apiToken
 	if globalCacheStore != nil {
 		globalCache.SetStore(globalCacheStore)
-		log.Println("[dns] cache store attached, preloaded from DB")
+		cacheLog.Info().Msg("dns: cache store attached, preloaded from DB")
 	}
 	return globalCache
 }

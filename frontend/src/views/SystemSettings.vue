@@ -22,17 +22,12 @@
           <el-tag type="primary" size="small">{{ user.username }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="用户角色">
-          <el-tag :type="user.role === 'ADMIN' ? 'danger' : 'info'" size="small">
-            {{ user.role || 'USER' }}
-          </el-tag>
+          <el-tag type="danger" size="small">ADMIN</el-tag>
         </el-descriptions-item>
       </el-descriptions>
-      <div style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
+      <div style="margin-top: 16px;">
         <el-button type="warning" @click="openChangePassword">
           <el-icon><Lock /></el-icon> 修改密码
-        </el-button>
-        <el-button @click="openEdit('app.version', config.appVersion || '')">
-          <el-icon><Edit /></el-icon> 编辑版本号
         </el-button>
       </div>
     </el-card>
@@ -58,13 +53,16 @@
             </template>
             <el-descriptions :column="1" size="small" border>
               <el-descriptions-item label="Bot Token">
-                <span v-if="cfgStr('telegram.bot.token')" style="color:var(--status-up)">••••••••</span>
-                <span v-else style="color:var(--text-muted)">未配置</span>
-                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('telegram.bot.token', cfgStr('telegram.bot.token'))">编辑</el-button>
+                <div class="inline-edit">
+                  <el-input v-model="editValues['telegram.bot.token']" type="password" show-password placeholder="输入 Bot Token" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['telegram.bot.token']" @click="saveField('telegram.bot.token')">保存</el-button>
+                </div>
               </el-descriptions-item>
               <el-descriptions-item label="Chat ID">
-                {{ cfgStr('telegram.chat.id') || '未配置' }}
-                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('telegram.chat.id', cfgStr('telegram.chat.id'))">编辑</el-button>
+                <div class="inline-edit">
+                  <el-input v-model="editValues['telegram.chat.id']" placeholder="输入 Chat ID" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['telegram.chat.id']" @click="saveField('telegram.chat.id')">保存</el-button>
+                </div>
               </el-descriptions-item>
             </el-descriptions>
           </el-card>
@@ -83,13 +81,16 @@
             </template>
             <el-descriptions :column="1" size="small" border>
               <el-descriptions-item label="Webhook URL">
-                <span v-if="cfgStr('dingtalk.webhook')" style="color:var(--status-up)">••••••••</span>
-                <span v-else style="color:var(--text-muted)">未配置</span>
-                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('dingtalk.webhook', cfgStr('dingtalk.webhook'))">编辑</el-button>
+                <div class="inline-edit">
+                  <el-input v-model="editValues['dingtalk.webhook']" placeholder="输入 Webhook URL" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['dingtalk.webhook']" @click="saveField('dingtalk.webhook')">保存</el-button>
+                </div>
               </el-descriptions-item>
               <el-descriptions-item label="签名密钥">
-                {{ cfgStr('dingtalk.secret') ? '*** (已设置)' : '未配置（可选）' }}
-                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('dingtalk.secret', cfgStr('dingtalk.secret'))">编辑</el-button>
+                <div class="inline-edit">
+                  <el-input v-model="editValues['dingtalk.secret']" type="password" show-password placeholder="输入签名密钥（可选）" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['dingtalk.secret']" @click="saveField('dingtalk.secret')">保存</el-button>
+                </div>
               </el-descriptions-item>
             </el-descriptions>
           </el-card>
@@ -108,12 +109,16 @@
             </template>
             <el-descriptions :column="1" size="small" border>
               <el-descriptions-item label="Device Key">
-                {{ cfgStr('bark.key') || '未配置' }}
-                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('bark.key', cfgStr('bark.key'))">编辑</el-button>
+                <div class="inline-edit">
+                  <el-input v-model="editValues['bark.key']" placeholder="输入 Device Key" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['bark.key']" @click="saveField('bark.key')">保存</el-button>
+                </div>
               </el-descriptions-item>
               <el-descriptions-item label="Server">
-                {{ cfgStr('bark.server') || 'https://api.day.app (默认)' }}
-                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('bark.server', cfgStr('bark.server'))">编辑</el-button>
+                <div class="inline-edit">
+                  <el-input v-model="editValues['bark.server']" placeholder="https://api.day.app (默认)" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['bark.server']" @click="saveField('bark.server')">保存</el-button>
+                </div>
               </el-descriptions-item>
             </el-descriptions>
           </el-card>
@@ -132,13 +137,16 @@
             </template>
             <el-descriptions :column="1" size="small" border>
               <el-descriptions-item label="Webhook URL">
-                <span v-if="cfgStr('feishu.webhook')" style="color:var(--status-up)">••••••••</span>
-                <span v-else style="color:var(--text-muted)">未配置</span>
-                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('feishu.webhook', cfgStr('feishu.webhook'))">编辑</el-button>
+                <div class="inline-edit">
+                  <el-input v-model="editValues['feishu.webhook']" placeholder="输入 Webhook URL" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['feishu.webhook']" @click="saveField('feishu.webhook')">保存</el-button>
+                </div>
               </el-descriptions-item>
               <el-descriptions-item label="签名密钥">
-                {{ cfgStr('feishu.secret') ? '*** (已设置)' : '未配置（可选）' }}
-                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('feishu.secret', cfgStr('feishu.secret'))">编辑</el-button>
+                <div class="inline-edit">
+                  <el-input v-model="editValues['feishu.secret']" type="password" show-password placeholder="输入签名密钥（可选）" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['feishu.secret']" @click="saveField('feishu.secret')">保存</el-button>
+                </div>
               </el-descriptions-item>
             </el-descriptions>
           </el-card>
@@ -166,8 +174,10 @@
             </template>
             <el-descriptions :column="1" size="small" border>
               <el-descriptions-item label="API Token">
-                {{ cfgStr('cloudflare.api.token') ? '*** (已设置)' : '未配置' }}
-                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('cloudflare.api.token', cfgStr('cloudflare.api.token'))">编辑</el-button>
+                <div class="inline-edit">
+                  <el-input v-model="editValues['cloudflare.api.token']" type="password" show-password placeholder="输入 API Token" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['cloudflare.api.token']" @click="saveField('cloudflare.api.token')">保存</el-button>
+                </div>
               </el-descriptions-item>
             </el-descriptions>
             <div style="font-size:12px;color:var(--text-muted);margin-top:8px">
@@ -188,12 +198,16 @@
             </template>
             <el-descriptions :column="1" size="small" border>
               <el-descriptions-item label="Secret ID">
-                {{ cfgStr('edgeone.secretId') ? '*** (已设置)' : '未配置' }}
-                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('edgeone.secretId', cfgStr('edgeone.secretId'))">编辑</el-button>
+                <div class="inline-edit">
+                  <el-input v-model="editValues['edgeone.secretId']" type="password" show-password placeholder="输入 Secret ID" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['edgeone.secretId']" @click="saveField('edgeone.secretId')">保存</el-button>
+                </div>
               </el-descriptions-item>
               <el-descriptions-item label="Zone ID">
-                {{ cfgStr('edgeone.zoneId') || '未配置' }}
-                <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('edgeone.zoneId', cfgStr('edgeone.zoneId'))">编辑</el-button>
+                <div class="inline-edit">
+                  <el-input v-model="editValues['edgeone.zoneId']" placeholder="输入 Zone ID" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['edgeone.zoneId']" @click="saveField('edgeone.zoneId')">保存</el-button>
+                </div>
               </el-descriptions-item>
             </el-descriptions>
           </el-card>
@@ -210,12 +224,16 @@
       </template>
       <el-descriptions :column="2" border>
         <el-descriptions-item label="域名">
-          {{ cfgStr('ssl.domain') || '未配置' }}
-          <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('ssl.domain', cfgStr('ssl.domain'))">编辑</el-button>
+          <div class="inline-edit">
+            <el-input v-model="editValues['ssl.domain']" placeholder="输入域名" size="small" />
+            <el-button size="small" type="primary" :loading="savingKeys['ssl.domain']" @click="saveField('ssl.domain')">保存</el-button>
+          </div>
         </el-descriptions-item>
         <el-descriptions-item label="Email">
-          {{ cfgStr('ssl.email') || '未配置' }}
-          <el-button size="small" type="primary" link style="margin-left:8px" @click="openEdit('ssl.email', cfgStr('ssl.email'))">编辑</el-button>
+          <div class="inline-edit">
+            <el-input v-model="editValues['ssl.email']" placeholder="输入 Email" size="small" />
+            <el-button size="small" type="primary" :loading="savingKeys['ssl.email']" @click="saveField('ssl.email')">保存</el-button>
+          </div>
         </el-descriptions-item>
         <el-descriptions-item label="模式">
           <el-tag :type="config.bools?.['ssl.staging'] ? 'warning' : 'success'" size="small">
@@ -237,6 +255,78 @@
       </div>
     </el-card>
 
+    <!-- Network Proxy -->
+    <el-card shadow="hover" class="section-card">
+      <template #header>
+        <div class="card-header">
+          <span>🌐 网络代理</span>
+          <el-tag :type="proxyForm.enabled ? 'success' : 'info'" size="small" style="margin-left: 8px;">
+            {{ proxyForm.enabled ? '已启用' : '已禁用' }}
+          </el-tag>
+        </div>
+      </template>
+      <el-alert
+        title="配置应用级别的出站代理，用于访问外部 API（如 Telegram Bot、OCI API 等）"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px;"
+      />
+      <el-form :model="proxyForm" label-width="100px" :rules="proxyRules" ref="proxyFormRef">
+        <el-row :gutter="16">
+          <el-col :md="12" :sm="24">
+            <el-form-item label="代理类型" prop="type">
+              <el-select v-model="proxyForm.type" style="width: 100%">
+                <el-option label="HTTP" value="HTTP" />
+                <el-option label="HTTPS" value="HTTPS" />
+                <el-option label="SOCKS5（推荐）" value="SOCKS5" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :md="12" :sm="24">
+            <el-form-item label="启用代理">
+              <el-switch v-model="proxyForm.enabled" active-text="启用" inactive-text="禁用" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :md="16" :sm="24">
+            <el-form-item label="代理地址" prop="host">
+              <el-input v-model="proxyForm.host" placeholder="代理服务器 IP 或域名" />
+            </el-form-item>
+          </el-col>
+          <el-col :md="8" :sm="24">
+            <el-form-item label="端口" prop="port">
+              <el-input-number v-model="proxyForm.port" :min="1" :max="65535" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :md="12" :sm="24">
+            <el-form-item label="用户名">
+              <el-input v-model="proxyForm.username" placeholder="选填" />
+            </el-form-item>
+          </el-col>
+          <el-col :md="12" :sm="24">
+            <el-form-item label="密码">
+              <el-input v-model="proxyForm.password" type="password" show-password placeholder="选填" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item>
+          <el-button type="primary" :loading="proxySaving" @click="saveProxyConfig">
+            <el-icon><Check /></el-icon> 保存配置
+          </el-button>
+          <el-button :loading="proxyTesting" @click="testProxyConnection">
+            <el-icon><Connection /></el-icon> 测试连通性
+          </el-button>
+          <el-button @click="loadProxyConfig">
+            <el-icon><Refresh /></el-icon> 重置
+          </el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <!-- Security & Auth -->
     <el-card shadow="hover" class="section-card">
       <template #header>
@@ -244,31 +334,101 @@
           <span>🔐 安全与认证</span>
         </div>
       </template>
-      <el-descriptions :column="2" border size="small">
-        <el-descriptions-item label="MFA">
-          <el-tag :type="config.bools?.['mfa.enabled'] ? 'success' : 'info'" size="small">
-            {{ config.bools?.['mfa.enabled'] ? '已启用' : '已禁用' }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="Turnstile">
-          <el-tag :type="config.bools?.['turnstile.enabled'] ? 'success' : 'info'" size="small">
-            {{ config.bools?.['turnstile.enabled'] ? '已启用' : '已禁用' }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="GitHub OAuth">
-          {{ cfgStr('github.clientId') ? '已配置' : '未配置' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="Google OAuth">
-          {{ cfgStr('google.clientId') ? '已配置' : '未配置' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="GCP Service Account">
-          {{ cfgStr('gcp.serviceAccountJson') ? '已配置' : '未配置' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="GCP Project ID">
-          {{ cfgStr('gcp.projectId') || '未配置' }}
-        </el-descriptions-item>
-      </el-descriptions>
+
+      <el-row :gutter="20">
+        <!-- MFA -->
+        <el-col :xs="24" :sm="8">
+          <div class="security-block">
+            <div class="security-block-header">
+              <span class="security-block-title">MFA 验证</span>
+              <el-tag v-if="mfaStatus.enabled" type="success" size="small" effect="dark">已启用</el-tag>
+              <el-tag v-else type="info" size="small">未启用</el-tag>
+            </div>
+            <p class="security-block-desc">使用 TOTP 动态验证码保护登录安全</p>
+            <div class="security-block-actions">
+              <el-button v-if="mfaStatus.enabled" type="danger" size="small" :loading="mfaDisabling" @click="disableMfa">
+                禁用
+              </el-button>
+              <el-button v-else type="primary" size="small" :loading="mfaSettingUp" @click="setupTotp">
+                设置 TOTP
+              </el-button>
+            </div>
+          </div>
+        </el-col>
+
+        <!-- Turnstile -->
+        <el-col :xs="24" :sm="8">
+          <div class="security-block">
+            <div class="security-block-header">
+              <span class="security-block-title">Turnstile 验证</span>
+              <el-tag v-if="turnstileForm.enabled" type="success" size="small" effect="dark">已启用</el-tag>
+              <el-tag v-else type="info" size="small">未启用</el-tag>
+            </div>
+            <p class="security-block-desc">Cloudflare 人机验证，防止恶意登录</p>
+            <el-form label-width="70px" size="small" class="security-block-form">
+              <el-form-item label="启用">
+                <el-switch v-model="turnstileForm.enabled" />
+              </el-form-item>
+              <el-form-item label="Site Key">
+                <el-input v-model="turnstileForm.siteKey" placeholder="站点密钥" />
+              </el-form-item>
+              <el-form-item label="Secret">
+                <el-input v-model="turnstileForm.secretKey" type="password" show-password placeholder="安全密钥" />
+              </el-form-item>
+            </el-form>
+            <div class="security-block-actions">
+              <el-button type="primary" size="small" :loading="turnstileSaving" @click="saveTurnstile">保存</el-button>
+            </div>
+          </div>
+        </el-col>
+
+        <!-- GitHub OAuth -->
+        <el-col :xs="24" :sm="8">
+          <div class="security-block">
+            <div class="security-block-header">
+              <span class="security-block-title">GitHub OAuth</span>
+              <el-tag v-if="githubForm.enabled" type="success" size="small" effect="dark">已启用</el-tag>
+              <el-tag v-else type="info" size="small">未启用</el-tag>
+            </div>
+            <p class="security-block-desc">使用 GitHub 账号作为替代登录方式</p>
+            <el-form label-width="70px" size="small" class="security-block-form">
+              <el-form-item label="启用">
+                <el-switch v-model="githubForm.enabled" />
+              </el-form-item>
+              <el-form-item label="Client ID">
+                <el-input v-model="githubForm.clientId" placeholder="OAuth App Client ID" />
+              </el-form-item>
+              <el-form-item label="Secret">
+                <el-input v-model="githubForm.clientSecret" type="password" show-password placeholder="Client Secret" />
+              </el-form-item>
+              <el-form-item label="回调地址">
+                <el-input v-model="githubForm.redirectUri" placeholder="http://your-domain/api/github/callback" />
+              </el-form-item>
+            </el-form>
+            <div class="security-block-actions">
+              <el-button type="primary" size="small" :loading="githubSaving" @click="saveGithubOAuth">保存</el-button>
+            </div>
+          </div>
+        </el-col>
+      </el-row>
     </el-card>
+
+    <!-- TOTP Setup Dialog -->
+    <el-dialog v-model="totpDialogVisible" title="设置 TOTP 验证" width="420px" destroy-on-close>
+      <div v-if="totpSetupData.qrCodeBase64" style="text-align: center;">
+        <p>使用 Google Authenticator 或其他 TOTP 应用扫描二维码：</p>
+        <img :src="totpSetupData.qrCodeBase64" alt="TOTP QR Code" style="width: 200px; height: 200px;" />
+        <p style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
+          密钥：<code>{{ totpSetupData.secret }}</code>
+        </p>
+        <el-input v-model="totpVerifyCode" placeholder="输入 6 位验证码" maxlength="6"
+          style="margin-top: 12px; width: 200px;" @keyup.enter="verifyTotp" />
+      </div>
+      <template #footer>
+        <el-button @click="totpDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="totpVerifying" @click="verifyTotp">验证并启用</el-button>
+      </template>
+    </el-dialog>
 
     <!-- Change Password Dialog -->
     <el-dialog v-model="pwdVisible" title="修改密码" width="460px" destroy-on-close>
@@ -288,29 +448,13 @@
         <el-button type="primary" :loading="pwdSaving" @click="doChangePassword">确认修改</el-button>
       </template>
     </el-dialog>
-
-    <!-- Edit Config Dialog -->
-    <el-dialog v-model="editVisible" title="编辑配置" width="520px" destroy-on-close>
-      <el-form :model="{ key: editKey, value: editValue }" label-width="120px">
-        <el-form-item label="配置键">
-          <el-input :model-value="editKey" disabled />
-        </el-form-item>
-        <el-form-item label="配置值">
-          <el-input v-model="editValue" type="textarea" :rows="3" placeholder="输入新的配置值" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="editVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editSaving" @click="saveEdit">保存</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Refresh, Edit, Lock } from '@element-plus/icons-vue'
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Refresh, Lock, Check, Connection } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import request from '../utils/request'
 import type { SystemConfig } from '../types/api'
@@ -323,16 +467,72 @@ const config = ref<SystemConfig>({
   appVersion: '',
 })
 
-// Edit dialog state
-const editVisible = ref(false)
-const editKey = ref('')
-const editValue = ref('')
-const editSaving = ref(false)
+// Inline edit state — all configurable fields
+const editValues = reactive<Record<string, string>>({
+  'telegram.bot.token': '',
+  'telegram.chat.id': '',
+  'dingtalk.webhook': '',
+  'dingtalk.secret': '',
+  'bark.key': '',
+  'bark.server': '',
+  'feishu.webhook': '',
+  'feishu.secret': '',
+  'cloudflare.api.token': '',
+  'edgeone.secretId': '',
+  'edgeone.zoneId': '',
+  'ssl.domain': '',
+  'ssl.email': '',
+})
+const savingKeys = reactive<Record<string, boolean>>({})
 
 // Password change state
 const pwdVisible = ref(false)
 const pwdSaving = ref(false)
 const pwdForm = ref({ currentPassword: '', newPassword: '', confirmPassword: '' })
+
+// MFA state
+const mfaStatus = ref({ enabled: false, configured: false })
+const mfaSettingUp = ref(false)
+const mfaDisabling = ref(false)
+const totpDialogVisible = ref(false)
+const totpSetupData = ref({ secret: '', otpauthUrl: '', qrCodeBase64: '' })
+const totpVerifyCode = ref('')
+const totpVerifying = ref(false)
+
+// Turnstile state
+const turnstileForm = reactive({
+  enabled: false,
+  siteKey: '',
+  secretKey: '',
+})
+const turnstileSaving = ref(false)
+
+// GitHub OAuth state
+const githubForm = reactive({
+  enabled: false,
+  clientId: '',
+  clientSecret: '',
+  redirectUri: '',
+})
+const githubSaving = ref(false)
+
+// Proxy configuration state
+const proxyFormRef = ref()
+const proxySaving = ref(false)
+const proxyTesting = ref(false)
+const proxyForm = reactive({
+  type: 'SOCKS5',
+  host: '',
+  port: 1080,
+  username: '',
+  password: '',
+  enabled: false,
+})
+const proxyRules = {
+  type: [{ required: true, message: '请选择代理类型', trigger: 'change' }],
+  host: [{ required: true, message: '请输入代理地址', trigger: 'blur' }],
+  port: [{ required: true, message: '请输入端口', trigger: 'blur' }],
+}
 
 function cfgStr(key: string): string {
   return config.value.strings?.[key] || ''
@@ -344,28 +544,25 @@ async function loadConfig() {
     const data: SystemConfig = await request.get('/system/config')
     if (data) {
       config.value = data
+      // Sync config values to edit fields
+      for (const key of Object.keys(editValues)) {
+        editValues[key] = data.strings?.[key] || ''
+      }
     }
   } catch { /* silently ignore */ }
   loading.value = false
 }
 
-function openEdit(key: string, currentValue: string) {
-  editKey.value = key
-  editValue.value = currentValue
-  editVisible.value = true
-}
-
-async function saveEdit() {
-  editSaving.value = true
+async function saveField(key: string) {
+  savingKeys[key] = true
   try {
-    await request.post('/system/config/save', { key: editKey.value, value: editValue.value })
+    await request.post('/system/config/save', { key, value: editValues[key] })
     ElMessage.success('配置已保存')
-    editVisible.value = false
     await loadConfig()
   } catch (e: any) {
     ElMessage.error(e.message || '保存失败')
   } finally {
-    editSaving.value = false
+    savingKeys[key] = false
   }
 }
 
@@ -402,8 +599,196 @@ async function doChangePassword() {
   }
 }
 
-onMounted(() => {
-  loadConfig()
+async function loadProxyConfig() {
+  try {
+    const data = await request.get('/system/proxy') as any
+    if (data) {
+      proxyForm.type = data.type || 'SOCKS5'
+      proxyForm.host = data.host || ''
+      proxyForm.port = data.port || 1080
+      proxyForm.username = data.username || ''
+      proxyForm.password = data.password || ''
+      proxyForm.enabled = data.enabled || false
+    }
+  } catch { /* silently ignore */ }
+}
+
+async function saveProxyConfig() {
+  if (!proxyFormRef.value) return
+  try {
+    await proxyFormRef.value.validate()
+  } catch {
+    return
+  }
+  proxySaving.value = true
+  try {
+    await request.put('/system/proxy', {
+      type: proxyForm.type,
+      host: proxyForm.host,
+      port: proxyForm.port,
+      username: proxyForm.username,
+      password: proxyForm.password,
+      enabled: proxyForm.enabled,
+    })
+    ElMessage.success('代理配置已保存')
+  } catch (e: any) {
+    ElMessage.error(e.message || '保存代理配置失败')
+  } finally {
+    proxySaving.value = false
+  }
+}
+
+async function testProxyConnection() {
+  if (!proxyForm.host || !proxyForm.port) {
+    ElMessage.warning('请先填写代理地址和端口')
+    return
+  }
+  proxyTesting.value = true
+  try {
+    const res = await request.post('/system/proxy/test', {
+      type: proxyForm.type,
+      host: proxyForm.host,
+      port: proxyForm.port,
+      username: proxyForm.username,
+      password: proxyForm.password,
+    }) as any
+    if (res?.reachable) {
+      ElMessage.success(res.message || '代理连接成功')
+    } else {
+      ElMessage.error('代理连接失败')
+    }
+  } catch (e: any) {
+    ElMessage.error(e.message || '代理连接测试失败')
+  } finally {
+    proxyTesting.value = false
+  }
+}
+
+// MFA functions
+async function loadMfaStatus() {
+  try {
+    const data = await request.get('/api/mfa/status') as any
+    mfaStatus.value = data || { enabled: false, configured: false }
+  } catch { /* silently ignore */ }
+}
+
+async function setupTotp() {
+  mfaSettingUp.value = true
+  try {
+    const data = await request.post('/api/mfa/totp/setup') as any
+    totpSetupData.value = data
+    totpVerifyCode.value = ''
+    totpDialogVisible.value = true
+  } catch (e: any) {
+    ElMessage.error(e.message || 'TOTP 初始化失败')
+  } finally {
+    mfaSettingUp.value = false
+  }
+}
+
+async function verifyTotp() {
+  if (!totpVerifyCode.value || totpVerifyCode.value.length !== 6) {
+    ElMessage.warning('请输入 6 位验证码')
+    return
+  }
+  totpVerifying.value = true
+  try {
+    await request.post('/api/mfa/totp/verify', { code: totpVerifyCode.value })
+    ElMessage.success('MFA 已启用')
+    totpDialogVisible.value = false
+    await loadMfaStatus()
+  } catch (e: any) {
+    ElMessage.error(e.message || '验证失败')
+  } finally {
+    totpVerifying.value = false
+  }
+}
+
+async function disableMfa() {
+  try {
+    await ElMessageBox.confirm('确定要禁用 MFA 吗？', '确认', { type: 'warning' })
+  } catch { return }
+  mfaDisabling.value = true
+  try {
+    await request.post('/api/mfa/disable')
+    ElMessage.success('MFA 已禁用')
+    await loadMfaStatus()
+  } catch (e: any) {
+    ElMessage.error(e.message || '禁用 MFA 失败')
+  } finally {
+    mfaDisabling.value = false
+  }
+}
+
+// Turnstile functions
+function loadTurnstile() {
+  const strs = config.value.strings || {}
+  turnstileForm.enabled = config.value.bools?.['turnstile.enabled'] || false
+  turnstileForm.siteKey = strs['turnstile.site.key'] || ''
+  turnstileForm.secretKey = strs['turnstile.secret.key'] || ''
+}
+
+async function saveTurnstile() {
+  turnstileSaving.value = true
+  try {
+    await request.put('/system/settings', {
+      security: {
+        turnstile: {
+          enabled: turnstileForm.enabled,
+          siteKey: turnstileForm.siteKey,
+          secretKey: turnstileForm.secretKey,
+        },
+      },
+    })
+    ElMessage.success('Turnstile 配置已保存')
+    await loadConfig()
+    loadTurnstile()
+  } catch (e: any) {
+    ElMessage.error(e.message || '保存失败')
+  } finally {
+    turnstileSaving.value = false
+  }
+}
+
+// GitHub OAuth functions
+function loadGithubOAuth() {
+  // Read from the already-loaded system config
+  const strs = config.value.strings || {}
+  githubForm.enabled = config.value.bools?.['github.enabled'] || false
+  githubForm.clientId = strs['github.client.id'] || ''
+  githubForm.clientSecret = strs['github.client.secret'] || ''
+  githubForm.redirectUri = strs['github.redirect.uri'] || ''
+}
+
+async function saveGithubOAuth() {
+  githubSaving.value = true
+  try {
+    await request.put('/system/settings', {
+      oauth: {
+        github: {
+          enabled: githubForm.enabled,
+          clientId: githubForm.clientId,
+          clientSecret: githubForm.clientSecret,
+          redirectUri: githubForm.redirectUri,
+        },
+      },
+    })
+    ElMessage.success('GitHub OAuth 配置已保存')
+    await loadConfig()
+    loadGithubOAuth()
+  } catch (e: any) {
+    ElMessage.error(e.message || '保存失败')
+  } finally {
+    githubSaving.value = false
+  }
+}
+
+onMounted(async () => {
+  await loadConfig()
+  loadProxyConfig()
+  loadMfaStatus()
+  loadTurnstile()
+  loadGithubOAuth()
 })
 </script>
 
@@ -527,6 +912,16 @@ onMounted(() => {
   font-weight: var(--font-semibold);
 }
 
+.inline-edit {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.inline-edit .el-input {
+  flex: 1;
+}
+
 @media (max-width: 768px) {
   .toolbar {
     flex-direction: column;
@@ -544,5 +939,64 @@ onMounted(() => {
   .card-header {
     font-size: var(--text-base);
   }
+}
+
+:deep(.el-form-item) {
+  margin-bottom: 18px;
+}
+
+:deep(.el-alert) {
+  border-radius: var(--radius-md);
+}
+
+:deep(.el-input-number) {
+  width: 100%;
+}
+
+.security-block {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.security-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.security-block-title {
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.security-block-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0 0 12px 0;
+  line-height: 1.4;
+}
+
+.security-block-form {
+  flex: 1;
+}
+
+.security-block-form :deep(.el-form-item) {
+  margin-bottom: 10px;
+}
+
+.security-block-form :deep(.el-form-item__label) {
+  font-size: 12px;
+}
+
+.security-block-actions {
+  margin-top: auto;
+  padding-top: 10px;
+  text-align: right;
 }
 </style>

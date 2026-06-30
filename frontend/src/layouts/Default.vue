@@ -1,5 +1,13 @@
 <template>
   <div class="shell">
+    <!-- Mobile overlay -->
+    <div v-if="isMobile && !collapsed" class="sidebar-overlay" @click="collapsed = true"></div>
+
+    <!-- Mobile expand button -->
+    <button v-if="isMobile && collapsed" class="sidebar-expand-btn" @click="collapsed = false" title="展开导航">
+      <el-icon :size="20"><DArrowRight /></el-icon>
+    </button>
+
     <!-- Sidebar -->
     <aside class="sidebar" :class="{ 'sidebar--collapsed': collapsed }">
       <!-- Accent line — the single decorative element in the chrome -->
@@ -30,6 +38,7 @@
           :to="item.path"
           class="nav-item"
           :class="{ 'nav-item--active': isActive(item.path) }"
+          @click="onNavClick"
         >
           <span class="nav-icon">
             <el-icon :size="18"><component :is="item.icon" /></el-icon>
@@ -83,13 +92,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Monitor, Connection, Setting, VideoPlay, Operation,
   Download, WarningFilled, DataBoard, Platform, Coin,
-  SwitchButton, DArrowLeft, DArrowRight, Folder, Message,
-  Lock, Menu, View, Histogram, Cpu, Document, DataLine, SetUp,
+  SwitchButton, DArrowLeft, DArrowRight, Folder,
 } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import request from '../utils/request'
@@ -98,6 +106,21 @@ const route = useRoute()
 const router = useRouter()
 const user = useUserStore()
 const collapsed = ref(false)
+const isMobile = ref(false)
+
+function checkMobile() {
+  isMobile.value = window.innerWidth < 768
+  if (isMobile.value) collapsed.value = true
+}
+
+onMounted(() => {
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', checkMobile)
+})
 
 interface NavItem {
   path: string
@@ -109,20 +132,9 @@ interface NavItem {
 const navItems: NavItem[] = [
   { path: '/',           label: '仪表盘',     icon: DataBoard },
   { path: '/tenants',    label: '租户管理',   icon: Connection },
-  { path: '/proxies',    label: '代理管理',   icon: Platform },
   { path: '/boot',       label: '抢机任务',   icon: VideoPlay },
   { path: '/instances',  label: '实例管理',   icon: Monitor },
   { path: '/vnic',       label: 'VNIC 管理',  icon: Connection },
-  { path: '/bastion',    label: '堡垒机',     icon: Lock },
-  { path: '/registry',   label: '镜像仓库',   icon: Menu },
-  { path: '/vision',     label: 'AI 视觉',    icon: View },
-  { path: '/ip-quality', label: 'IP 质量检测', icon: Histogram },
-  { path: '/quick-dd',   label: 'Quick DD',   icon: Cpu },
-  { path: '/nosql',      label: 'NoSQL DB',   icon: Document },
-  { path: '/mysql',      label: 'MySQL DB',   icon: DataLine },
-  { path: '/resmgr',     label: 'Resource Mgr', icon: SetUp },
-  { path: '/email',      label: '邮件管理',   icon: Message },
-  { path: '/nginx',      label: 'Nginx 管理', icon: Setting },
   { path: '/dns',        label: 'DNS 管理',   icon: Coin },
   { path: '/storage',    label: '对象存储',   icon: Folder },
   { path: '/terminal',   label: 'SSH 终端',   icon: Operation },
@@ -137,13 +149,15 @@ function isActive(path: string): boolean {
   return route.path.startsWith(path)
 }
 
+function onNavClick() {
+  if (isMobile.value) collapsed.value = true
+}
+
 const pageTitle = computed(() => {
   const titles: Record<string, string> = {
     dashboard: '仪表盘', tenants: '租户管理', proxies: '代理管理',
     boot: '抢机任务', instances: '实例管理', vnic: 'VNIC 管理',
-    bastion: '堡垒机', registry: '镜像仓库', vision: 'AI 视觉',
-    'ip-quality': 'IP 质量检测', 'quick-dd': 'Quick DD', nosql: 'NoSQL DB', mysql: 'MySQL DB', resmgr: 'Resource Manager',
-    email: '邮件管理', nginx: 'Nginx 管理', dns: 'DNS 管理', storage: '对象存储', terminal: 'SSH 终端', console: 'VNC 控制台',
+    email: '邮件管理', dns: 'DNS 管理', storage: '对象存储', terminal: 'SSH 终端', console: 'VNC 控制台',
     rescue: '实例救援', migration: '数据迁移', settings: '系统设置',
   }
   return (route.name && titles[route.name as string]) || ''
@@ -434,17 +448,19 @@ async function logout() {
 
 @media (max-width: 768px) {
   .sidebar {
-    width: 60px;
+    width: 220px;
     position: fixed;
     left: 0;
     top: 0;
     bottom: 0;
-    z-index: 50;
+    z-index: 100;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
   }
 
   .sidebar--collapsed {
     width: 0;
     overflow: hidden;
+    box-shadow: none;
   }
 
   .content {
@@ -458,5 +474,43 @@ async function logout() {
   .topbar-user {
     display: none;
   }
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 99;
+  animation: fade-in 200ms ease;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.sidebar-expand-btn {
+  position: fixed;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 98;
+  width: 32px;
+  height: 48px;
+  border: 1px solid var(--border-default);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+}
+
+.sidebar-expand-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 </style>

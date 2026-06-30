@@ -23,10 +23,13 @@
 
     <!-- Stat cards -->
     <div class="stat-grid">
-      <div
+      <component
         v-for="card in statCards"
         :key="card.label"
+        :is="card.link ? 'router-link' : 'div'"
+        :to="card.link"
         class="stat-card"
+        :class="{ 'stat-card--link': card.link }"
       >
         <div class="stat-header">
           <span class="stat-icon">
@@ -43,68 +46,30 @@
           <span class="status-dot" :class="'status-dot--' + card.statusColor"></span>
           <span class="stat-status-text">{{ card.statusText }}</span>
         </div>
-      </div>
+      </component>
+
+      <!-- Engine stat card -->
+      <router-link to="/boot" class="stat-card stat-card--link">
+        <div class="stat-header">
+          <span class="stat-icon">
+            <el-icon :size="16"><SetUp /></el-icon>
+          </span>
+          <span class="stat-label">抢机引擎</span>
+        </div>
+        <div class="stat-body">
+          <span class="stat-value">{{ engine.runningTasks ?? 0 }}</span>
+          <span class="stat-sub"> / {{ engine.totalTasks ?? 0 }}</span>
+        </div>
+        <div class="stat-rule"></div>
+        <div class="stat-status">
+          <span class="status-dot" :class="engineRunning ? 'status-dot--up' : 'status-dot--down'"></span>
+          <span class="stat-status-text">{{ engineRunning ? '运行中' : '已停止' }}</span>
+        </div>
+      </router-link>
     </div>
 
     <!-- Engine + Channels -->
     <div class="panel-grid">
-      <!-- Engine -->
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">
-            <el-icon :size="16"><SetUp /></el-icon> 抢机引擎
-          </span>
-          <span class="engine-state" :class="engineRunning ? 'engine-state--up' : 'engine-state--down'">
-            <span class="status-dot" :class="engineRunning ? 'status-dot--up' : 'status-dot--down'"></span>
-            {{ engineRunning ? '运行中' : '已停止' }}
-          </span>
-        </div>
-        <div class="panel-body">
-          <div class="metric-row">
-            <div class="metric-group">
-              <div class="metric-label">父池 Parent Pool</div>
-              <div class="metric-pair">
-                <div class="metric">
-                  <span class="metric-value">{{ engine.parentActive }}</span>
-                  <span class="metric-unit">活跃</span>
-                </div>
-                <div class="metric">
-                  <span class="metric-value">{{ engine.parentCapacity }}</span>
-                  <span class="metric-unit">容量</span>
-                </div>
-              </div>
-            </div>
-            <div class="metric-group">
-              <div class="metric-label">API 池</div>
-              <div class="metric-pair">
-                <div class="metric">
-                  <span class="metric-value">{{ engine.apiActive }}</span>
-                  <span class="metric-unit">活跃</span>
-                </div>
-                <div class="metric">
-                  <span class="metric-value">{{ engine.apiCapacity }}</span>
-                  <span class="metric-unit">容量</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="engine-extra">
-            <div class="extra-item">
-              <span class="extra-value">{{ engine.registeredJobs }}</span>
-              <span class="extra-label">已注册 Cron</span>
-            </div>
-            <div class="extra-item">
-              <span class="extra-value">{{ engine.totalTasks ?? '-' }}</span>
-              <span class="extra-label">总任务</span>
-            </div>
-            <div class="extra-item">
-              <span class="extra-value">{{ engine.runningTasks ?? '-' }}</span>
-              <span class="extra-label">运行中</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- Notification channels -->
       <div class="panel">
         <div class="panel-header">
@@ -114,7 +79,7 @@
         </div>
         <div class="panel-body">
           <div class="channel-list">
-            <div v-for="ch in notificationChannels" :key="ch.name" class="channel-row">
+            <router-link v-for="ch in notificationChannels" :key="ch.name" to="/settings" class="channel-row channel-row--link">
               <div class="channel-left">
                 <el-icon :size="16" :color="ch.enabled ? 'var(--status-up)' : 'var(--text-muted)'">
                   <ChatDotRound v-if="ch.name === 'Telegram'" />
@@ -127,7 +92,7 @@
               <span class="channel-state" :class="ch.enabled ? 'channel-state--up' : ''">
                 {{ ch.enabled ? '已配置' : '未配置' }}
               </span>
-            </div>
+            </router-link>
           </div>
         </div>
       </div>
@@ -170,22 +135,17 @@
               <span class="info-label">应用版本</span>
               <span class="info-value data-mono">{{ appVersion || '-' }}</span>
             </div>
-            <div class="info-row">
+            <router-link to="/settings" class="info-row info-row--link">
               <span class="info-label">MFA</span>
               <span class="info-state" :class="mfaEnabled ? 'info-state--up' : ''">
                 {{ mfaEnabled ? '已启用' : '已禁用' }}
+                <el-icon :size="12" style="margin-left: 4px;"><ArrowRight /></el-icon>
               </span>
-            </div>
+            </router-link>
             <div class="info-row">
               <span class="info-label">SSL 证书</span>
               <span class="info-state" :class="sslDomain ? 'info-state--up' : ''">
                 {{ sslDomain ? '已配置' : '未配置' }}
-              </span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">GCP</span>
-              <span class="info-state" :class="gcpConfigured ? 'info-state--up' : ''">
-                {{ gcpConfigured ? '已配置' : '未配置' }}
               </span>
             </div>
           </div>
@@ -198,8 +158,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import {
-  Refresh, Monitor, User, Connection, Files,
-  SetUp, Bell, Link, InfoFilled,
+  Refresh, Monitor, User, Connection,
+  SetUp, Bell, Link, InfoFilled, ArrowRight,
   ChatDotRound, Message, Notification,
   Platform, Share, Setting, Promotion, VideoCamera, Warning
 } from '@element-plus/icons-vue'
@@ -226,21 +186,12 @@ const notificationChannels = ref<Array<{ name: string; label: string; enabled: b
 const appVersion = ref('')
 const mfaEnabled = ref(false)
 const sslDomain = ref('')
-const gcpConfigured = ref(false)
 
 const engineRunning = computed(() => {
   return engine.value.parentActive > 0 || engine.value.registeredJobs > 0
 })
 
 const statCards = computed(() => [
-  {
-    label: '实例总数',
-    value: stats.value.instanceCount,
-    icon: Monitor,
-    sub: undefined,
-    statusColor: 'idle',
-    statusText: '全部',
-  },
   {
     label: '在线实例',
     value: stats.value.onlineCount,
@@ -250,6 +201,7 @@ const statCards = computed(() => [
     statusText: stats.value.instanceCount
       ? Math.round((stats.value.onlineCount / stats.value.instanceCount) * 100) + '% 在线率'
       : '暂无数据',
+    link: '/instances',
   },
   {
     label: '租户数量',
@@ -258,22 +210,7 @@ const statCards = computed(() => [
     sub: undefined,
     statusColor: 'idle',
     statusText: '已配置',
-  },
-  {
-    label: '代理数量',
-    value: stats.value.proxyCount,
-    icon: Connection,
-    sub: undefined,
-    statusColor: 'idle',
-    statusText: '已注册',
-  },
-  {
-    label: '备份总数',
-    value: stats.value.backupCount,
-    icon: Files,
-    sub: undefined,
-    statusColor: 'idle',
-    statusText: '累计',
+    link: '/tenants',
   },
 ])
 
@@ -295,7 +232,6 @@ async function loadAll() {
       loadEngine(),
       loadNotifications(),
       loadSystemInfo(),
-      loadGcpStatus(),
     ])
   } catch {
     // individual load functions handle errors
@@ -354,13 +290,6 @@ async function loadSystemInfo() {
   } catch { /* optional */ }
 }
 
-async function loadGcpStatus() {
-  try {
-    const data = await request.get('/boot-instance/gcp/status')
-    gcpConfigured.value = data?.configured || false
-  } catch { /* GCP optional */ }
-}
-
 onMounted(loadAll)
 </script>
 
@@ -388,11 +317,22 @@ onMounted(loadAll)
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  transition: border-color var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .stat-card:hover {
   border-color: var(--border-default);
+}
+
+.stat-card--link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.stat-card--link:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-subtle);
 }
 
 /* Header row */
@@ -513,93 +453,6 @@ onMounted(loadAll)
    Engine
    ============================================================ */
 
-.engine-state {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
-}
-
-.engine-state--up {
-  color: var(--status-up);
-  background: rgba(52, 168, 83, 0.08);
-}
-
-.engine-state--down {
-  color: var(--text-muted);
-}
-
-.metric-row {
-  display: flex;
-  gap: var(--space-8);
-}
-
-.metric-group {
-  flex: 1;
-}
-
-.metric-label {
-  font-size: var(--text-2xs);
-  font-weight: var(--font-semibold);
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
-  margin-bottom: var(--space-2);
-}
-
-.metric-pair {
-  display: flex;
-  gap: var(--space-6);
-}
-
-.metric {
-  display: flex;
-  flex-direction: column;
-}
-
-.metric-value {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-.metric-unit {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  margin-top: 2px;
-}
-
-.engine-extra {
-  display: flex;
-  gap: var(--space-8);
-  margin-top: var(--space-4);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--border-subtle);
-}
-
-.extra-item {
-  display: flex;
-  flex-direction: column;
-}
-
-.extra-value {
-  font-size: var(--text-md);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.extra-label {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
-}
-
 /* ============================================================
    Notification Channels
    ============================================================ */
@@ -643,6 +496,16 @@ onMounted(loadAll)
 
 .channel-state--up {
   color: var(--status-up);
+}
+
+.channel-row--link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.channel-row--link:hover {
+  background: var(--bg-hover);
 }
 
 /* ============================================================
@@ -695,6 +558,21 @@ onMounted(loadAll)
   padding: var(--space-2) 0;
 }
 
+.info-row--link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+  padding-left: var(--space-1);
+  padding-right: var(--space-1);
+  margin: 0 calc(var(--space-1) * -1);
+}
+
+.info-row--link:hover {
+  background: var(--bg-hover);
+}
+
 .info-row + .info-row {
   border-top: 1px solid var(--border-subtle);
 }
@@ -734,21 +612,12 @@ onMounted(loadAll)
   .stat-value {
     font-size: var(--text-2xl);
   }
-
-  .metric-row {
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-
-  .engine-extra {
-    gap: var(--space-4);
-    flex-wrap: wrap;
-  }
 }
 
 @media (max-width: 480px) {
   .stat-grid {
     grid-template-columns: 1fr 1fr;
   }
+
 }
 </style>

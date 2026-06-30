@@ -581,6 +581,26 @@ function truncateIpv6(addr: string): string {
   return addr.substring(0, 20) + '...' + addr.substring(addr.length - 8)
 }
 
+// ---- localStorage persistence for last selection ----
+const STORAGE_KEY = 'vnic_last_selection'
+
+function saveLastSelection(tenantId: number | null, instanceId: string) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ tenantId, instanceId }))
+  } catch { /* ignore */ }
+}
+
+function loadLastSelection(): { tenantId: number | null; instanceId: string } {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      return { tenantId: parsed.tenantId ?? null, instanceId: parsed.instanceId ?? '' }
+    }
+  } catch { /* ignore */ }
+  return { tenantId: null, instanceId: '' }
+}
+
 // ---- Data Loading ----
 async function loadTenants() {
   try {
@@ -589,12 +609,42 @@ async function loadTenants() {
       id: t.id,
       name: t.userName || t.tenancy || `#${t.id}`,
     }))
+
+    // Auto-select: single tenant or restore from localStorage
+    if (tenantOptions.value.length === 1) {
+      const only = tenantOptions.value[0]
+      selectedTenantId.value = only.id
+      saveLastSelection(only.id, '')
+      await loadInstances(only.id)
+    } else {
+      const last = loadLastSelection()
+      if (last.tenantId && tenantOptions.value.some(t => t.id === last.tenantId)) {
+        selectedTenantId.value = last.tenantId
+        await loadInstances(last.tenantId)
+      }
+    }
   } catch { /* ignore */ }
 }
 
 async function loadInstances(tenantId: number) {
   try {
     instanceOptions.value = await request.get(`/tenants/${tenantId}/instances`) as Instance[]
+
+    // Auto-select: single instance or restore from localStorage
+    if (instanceOptions.value.length === 1) {
+      const only = instanceOptions.value[0]
+      selectedInstanceId.value = only.instanceId
+      selectedInstance.value = only
+      saveLastSelection(tenantId, only.instanceId)
+      await loadVnicData(only.instanceId)
+    } else {
+      const last = loadLastSelection()
+      if (last.instanceId && instanceOptions.value.some(i => i.instanceId === last.instanceId)) {
+        selectedInstanceId.value = last.instanceId
+        selectedInstance.value = instanceOptions.value.find(i => i.instanceId === last.instanceId) || null
+        await loadVnicData(last.instanceId)
+      }
+    }
   } catch {
     instanceOptions.value = []
   }
@@ -652,7 +702,10 @@ function onTenantChange(tenantId: number | null) {
   vnicData.value = null
   instanceOptions.value = []
   if (tenantId) {
+    saveLastSelection(tenantId, '')
     loadInstances(tenantId)
+  } else {
+    saveLastSelection(null, '')
   }
 }
 
@@ -660,7 +713,10 @@ function onInstanceChange(instanceId: string) {
   selectedInstance.value = instanceOptions.value.find(i => i.instanceId === instanceId) || null
   vnicData.value = null
   if (instanceId) {
+    saveLastSelection(selectedTenantId.value, instanceId)
     loadVnicData(instanceId)
+  } else {
+    saveLastSelection(selectedTenantId.value, '')
   }
 }
 

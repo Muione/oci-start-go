@@ -11,7 +11,6 @@ import (
 
 type Querier interface {
 	AdvanceNextExecutionTime(ctx context.Context, arg AdvanceNextExecutionTimeParams) error
-	ClearCurrentNginxConfig(ctx context.Context, updateTime sql.NullString) error
 	CountAppVersion(ctx context.Context) (int64, error)
 	CountBootInstancesByTenantId(ctx context.Context, tenantID sql.NullInt64) (int64, error)
 	CountByLoginType(ctx context.Context, loginType string) (int64, error)
@@ -19,9 +18,7 @@ type Querier interface {
 	CountEmailReceives(ctx context.Context, arg CountEmailReceivesParams) (int64, error)
 	CountEmailSendRecords(ctx context.Context, emailBodyID sql.NullString) (int64, error)
 	CountInstanceDetails(ctx context.Context) (int64, error)
-	CountProxyConfigs(ctx context.Context) (int64, error)
 	CountRunningTasks(ctx context.Context) (int64, error)
-	CountSslCertificates(ctx context.Context) (int64, error)
 	CountTenantChildren(ctx context.Context, parenID sql.NullInt64) (int64, error)
 	CountTenantEmailConfigs(ctx context.Context) (int64, error)
 	CountTotalTasks(ctx context.Context) (int64, error)
@@ -34,6 +31,7 @@ type Querier interface {
 	DeleteEmailReceive(ctx context.Context, id int64) error
 	DeleteEmailSendRecordsByBodyId(ctx context.Context, emailBodyID sql.NullString) error
 	DeleteEmailSendRecordsByConfigId(ctx context.Context, tenantEmailConfigID sql.NullInt64) error
+	DeleteImageCacheByTenant(ctx context.Context, tenantID int64) error
 	DeleteInstanceBackupDetail(ctx context.Context, id int64) error
 	DeleteInstanceDetail(ctx context.Context, id int64) error
 	// instance_detail queries (Phase 3 instance sync). Sync is delete-by-tenant
@@ -43,10 +41,9 @@ type Querier interface {
 	DeleteLock(ctx context.Context, taskID string) error
 	DeleteMultipartUploadsByTenant(ctx context.Context, tenantID int64) error
 	DeleteProcessingLocks(ctx context.Context) error
-	DeleteProxyConfig(ctx context.Context, id int64) error
 	DeleteSession(ctx context.Context, token string) error
 	DeleteSessionsByUsername(ctx context.Context, username string) error
-	DeleteSslCertificate(ctx context.Context, id int64) error
+	DeleteShapeCacheByTenant(ctx context.Context, tenantID int64) error
 	DeleteTemInstancesByTenancy(ctx context.Context, tenancy sql.NullString) error
 	DeleteTenant(ctx context.Context, id int64) error
 	DeleteTenantEmailConfig(ctx context.Context, tenantID sql.NullInt64) error
@@ -55,11 +52,7 @@ type Querier interface {
 	DisableBootInstance(ctx context.Context, arg DisableBootInstanceParams) error
 	EnableBootInstance(ctx context.Context, arg EnableBootInstanceParams) error
 	ExistsByUsername(ctx context.Context, username string) (int64, error)
-	ExistsProxyConfigByDomain(ctx context.Context, domain string) (int64, error)
-	ExistsProxyConfigBySslCertId(ctx context.Context, sslCertificateID sql.NullInt64) (int64, error)
-	ExistsSslCertificateById(ctx context.Context, id int64) (int64, error)
 	FindActiveUploads(ctx context.Context, arg FindActiveUploadsParams) ([]OciMultipartUploadRecord, error)
-	FindAllActiveSslCertificates(ctx context.Context) ([]SslCertificate, error)
 	FindBootInstanceByBootID(ctx context.Context, bootID sql.NullString) (BootInstance, error)
 	FindBootInstanceByID(ctx context.Context, id int64) (BootInstance, error)
 	FindByUploadId(ctx context.Context, uploadID string) (OciMultipartUploadRecord, error)
@@ -72,7 +65,6 @@ type Querier interface {
 	// Boolean configs use the config_enabled column (INTEGER 0/1);
 	// string configs use config_value. Mirrors Java SystemConfigService.
 	FindConfigByKey(ctx context.Context, configKey sql.NullString) (SystemConfig, error)
-	FindCurrentNginxConfig(ctx context.Context) (NginxConfig, error)
 	// Grabber queries (Phase 4). boot_instance, open_boot_lock, oci_computer_info,
 	// tem_instance. See SPEC S8; parity with BootInstanceRepository +
 	// OpenBootLockRepository + BootTotalInstanceService queries.
@@ -92,19 +84,13 @@ type Querier interface {
 	// instance_traffic queries
 	FindInstanceTrafficByInstanceId(ctx context.Context, arg FindInstanceTrafficByInstanceIdParams) ([]InstanceTraffic, error)
 	FindInstancesByTenantId(ctx context.Context, tenantID sql.NullInt64) ([]FindInstancesByTenantIdRow, error)
-	FindLatestNginxConfig(ctx context.Context) (NginxConfig, error)
 	// open_boot_lock queries
 	FindLockByTaskID(ctx context.Context, taskID string) (OpenBootLock, error)
-	FindNginxConfigById(ctx context.Context, id int64) (NginxConfig, error)
 	FindOfflineInstances(ctx context.Context, lastHeartbeat sql.NullString) ([]FindOfflineInstancesRow, error)
-	FindProxyConfigById(ctx context.Context, id int64) (ProxyConfig, error)
-	FindProxyConfigsBySslCertId(ctx context.Context, sslCertificateID sql.NullInt64) ([]ProxyConfig, error)
 	// VpnProxyRecord queries (Phase 3 SOCKS proxy pool). Random available pick
 	// parity with VpnProxyRecordRepository.findRandomAvailableRecord.
 	FindRandomAvailableProxy(ctx context.Context) (VpnProxyRecord, error)
 	FindSessionByToken(ctx context.Context, token string) (LoginSession, error)
-	FindSslCertificateByDomain(ctx context.Context, domain string) (SslCertificate, error)
-	FindSslCertificateById(ctx context.Context, id int64) (SslCertificate, error)
 	FindStaleUploads(ctx context.Context, updateTime sql.NullString) ([]OciMultipartUploadRecord, error)
 	FindTenantByID(ctx context.Context, id int64) (Tenant, error)
 	// Extended tenant email config queries (Phase 12.2). OCI provisioning fields,
@@ -143,35 +129,24 @@ type Querier interface {
 	InsertInstanceTraffic(ctx context.Context, arg InsertInstanceTrafficParams) error
 	InsertLockIgnore(ctx context.Context, arg InsertLockIgnoreParams) error
 	InsertLoginUser(ctx context.Context, arg InsertLoginUserParams) error
-	// NginxConfig queries (Phase 12.1). nginx_config stores versioned, compiled
-	// nginx server-block content. is_current marks the version currently applied
-	// to OpenResty. ALL COMMENTS MUST BE ASCII-ONLY.
-	InsertNginxConfig(ctx context.Context, arg InsertNginxConfigParams) (int64, error)
-	// ProxyConfig queries (Phase 12.1). proxy_config stores per-domain reverse
-	// proxy rules with target host/port, SSL, WebSocket, rate limiting, caching,
-	// and custom config blocks. ALL COMMENTS MUST BE ASCII-ONLY.
-	InsertProxyConfig(ctx context.Context, arg InsertProxyConfigParams) error
 	InsertSession(ctx context.Context, arg InsertSessionParams) error
-	// SslCertificate queries (Phase 12.1). ssl_certificate stores SSL cert
-	// lifecycle data: domain, type, status, paths to PEM files, auto-renew.
-	// ALL COMMENTS MUST BE ASCII-ONLY.
-	InsertSslCertificate(ctx context.Context, arg InsertSslCertificateParams) (int64, error)
 	// tem_instance queries (temp instance tracking during grab)
 	InsertTemInstance(ctx context.Context, arg InsertTemInstanceParams) error
 	InsertTenant(ctx context.Context, arg InsertTenantParams) error
 	InsertTenantSocial(ctx context.Context, arg InsertTenantSocialParams) error
 	InsertVpnProxyRecord(ctx context.Context, arg InsertVpnProxyRecordParams) error
-	ListActiveProxyConfigs(ctx context.Context) ([]ProxyConfig, error)
 	ListAllInstanceDetails(ctx context.Context, arg ListAllInstanceDetailsParams) ([]ListAllInstanceDetailsRow, error)
 	ListBootInstances(ctx context.Context) ([]BootInstance, error)
 	ListEmailBodies(ctx context.Context, arg ListEmailBodiesParams) ([]EmailBody, error)
 	ListEmailReceives(ctx context.Context, arg ListEmailReceivesParams) ([]EmailReceive, error)
 	ListEmailSendRecords(ctx context.Context, arg ListEmailSendRecordsParams) ([]EmailSendRecord, error)
-	ListExpiringCertificates(ctx context.Context, expireDate sql.NullString) ([]SslCertificate, error)
+	ListImageCacheByTenant(ctx context.Context, tenantID int64) ([]ImageCache, error)
+	ListImageCacheByTenantAndArch(ctx context.Context, arg ListImageCacheByTenantAndArchParams) ([]ImageCache, error)
+	ListImageCacheByTenantAndOS(ctx context.Context, arg ListImageCacheByTenantAndOSParams) ([]ImageCache, error)
 	ListInstanceDetailsByTenantId(ctx context.Context, tenantID sql.NullInt64) ([]ListInstanceDetailsByTenantIdRow, error)
-	ListProxyConfigs(ctx context.Context, arg ListProxyConfigsParams) ([]ProxyConfig, error)
 	ListResumableUploads(ctx context.Context, arg ListResumableUploadsParams) ([]OciMultipartUploadRecord, error)
-	ListSslCertificates(ctx context.Context, arg ListSslCertificatesParams) ([]SslCertificate, error)
+	ListShapeCacheByTenant(ctx context.Context, tenantID int64) ([]ShapeCache, error)
+	ListShapeCacheByTenantAndArch(ctx context.Context, arg ListShapeCacheByTenantAndArchParams) ([]ShapeCache, error)
 	ListTenantEmailConfigs(ctx context.Context, arg ListTenantEmailConfigsParams) ([]ListTenantEmailConfigsRow, error)
 	// Tenant social config queries (Phase 9). tenant_social stores third-party OAuth
 	// configuration per tenant (Google, GitHub, Microsoft, etc.).
@@ -182,7 +157,6 @@ type Querier interface {
 	ListTrafficAlerts(ctx context.Context) ([]TrafficAlert, error)
 	ListVpnProxyRecords(ctx context.Context) ([]VpnProxyRecord, error)
 	MarkDailyReset(ctx context.Context, lastResetDate sql.NullString) error
-	MarkNginxConfigCurrent(ctx context.Context, arg MarkNginxConfigCurrentParams) error
 	MarkNotificationAsSent(ctx context.Context, id int64) error
 	ResetDailyCounts(ctx context.Context, lastResetDate sql.NullString) error
 	SeedAppVersion(ctx context.Context, arg SeedAppVersionParams) error
@@ -200,6 +174,7 @@ type Querier interface {
 	UpdateInstanceDetailIpv6(ctx context.Context, arg UpdateInstanceDetailIpv6Params) error
 	UpdateInstanceDetailPublicIp(ctx context.Context, arg UpdateInstanceDetailPublicIpParams) error
 	UpdateInstanceDetailRemark(ctx context.Context, arg UpdateInstanceDetailRemarkParams) error
+	UpdateInstanceDetailVpusPerGb(ctx context.Context, arg UpdateInstanceDetailVpusPerGbParams) error
 	UpdateInstanceOffline(ctx context.Context, arg UpdateInstanceOfflineParams) error
 	UpdateInstanceResumeNotify(ctx context.Context, id int64) error
 	UpdateInstanceSSHConfig(ctx context.Context, arg UpdateInstanceSSHConfigParams) error
@@ -207,10 +182,6 @@ type Querier interface {
 	UpdateLockSuccess(ctx context.Context, arg UpdateLockSuccessParams) error
 	UpdateMultipartUploadParts(ctx context.Context, arg UpdateMultipartUploadPartsParams) error
 	UpdateMultipartUploadStatus(ctx context.Context, arg UpdateMultipartUploadStatusParams) error
-	UpdateProxyConfig(ctx context.Context, arg UpdateProxyConfigParams) error
-	UpdateProxyConfigSslFields(ctx context.Context, arg UpdateProxyConfigSslFieldsParams) error
-	UpdateProxyConfigStatus(ctx context.Context, arg UpdateProxyConfigStatusParams) error
-	UpdateSslCertificate(ctx context.Context, arg UpdateSslCertificateParams) error
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) error
 	UpdateTenantEmailActive(ctx context.Context, arg UpdateTenantEmailActiveParams) error
 	UpdateTenantEmailSentCount(ctx context.Context, arg UpdateTenantEmailSentCountParams) error
@@ -226,6 +197,8 @@ type Querier interface {
 	UpsertConfig(ctx context.Context, arg UpsertConfigParams) error
 	UpsertConfigEnabled(ctx context.Context, arg UpsertConfigEnabledParams) error
 	UpsertConfigValue(ctx context.Context, arg UpsertConfigValueParams) error
+	UpsertImageCache(ctx context.Context, arg UpsertImageCacheParams) error
+	UpsertShapeCache(ctx context.Context, arg UpsertShapeCacheParams) error
 	UpsertTenantEmailConfig(ctx context.Context, arg UpsertTenantEmailConfigParams) error
 	UpsertTenantEmailConfigFull(ctx context.Context, arg UpsertTenantEmailConfigFullParams) error
 	UpsertTrafficAlert(ctx context.Context, arg UpsertTrafficAlertParams) error

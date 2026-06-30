@@ -191,7 +191,6 @@
             <el-form-item label="云类型">
               <el-select v-model="form.cloudType" style="width:100%">
                 <el-option label="Oracle Cloud" :value="1" />
-                <el-option label="GCP" :value="2" />
               </el-select>
             </el-form-item>
           </el-col>
