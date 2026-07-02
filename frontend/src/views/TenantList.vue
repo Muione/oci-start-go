@@ -1,100 +1,80 @@
 <template>
   <div class="tenants-page">
     <!-- Toolbar -->
-    <div class="toolbar">
-      <div class="toolbar-left">
-        <h2>租户管理</h2>
+    <PageHeader title="租户管理">
+      <template #extra>
         <el-tag type="info" size="small">{{ rows.length }} 个租户</el-tag>
         <el-input v-model="searchText" placeholder="搜索租户名称..." size="small" clearable
           style="width: 200px" :prefix-icon="Search" />
-      </div>
-      <div class="toolbar-right">
+      </template>
+      <template #actions>
         <el-button type="primary" @click="openAdd"><el-icon><Plus /></el-icon> 新增租户</el-button>
         <el-button @click="startBatchCheck" :disabled="rows.length === 0"><el-icon><Connection /></el-icon> 批量检测</el-button>
         <el-button @click="load" :loading="loading"><el-icon><Refresh /></el-icon> 刷新</el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- Table -->
-    <el-card shadow="none" class="table-card">
-      <el-table :data="filteredRows" v-loading="loading" border stripe style="width: 100%">
-        <template #empty>
-          <el-empty description="暂无租户，请新增" :image-size="80">
-            <el-button type="primary" @click="openAdd">新增租户</el-button>
-          </el-empty>
+    <el-table :data="filteredRows" v-loading="loading" border stripe style="width: 100%">
+      <template #empty>
+        <el-empty description="暂无租户，请新增" :image-size="80">
+          <el-button type="primary" @click="openAdd">新增租户</el-button>
+        </el-empty>
+      </template>
+      <el-table-column type="index" label="#" width="50" align="center" />
+      <el-table-column label="租户名" min-width="110">
+        <template #default="{ row }">
+          <span class="spoiler-link" @click="showName = showName === row.id ? 0 : row.id">
+            <template v-if="showName === row.id">{{ row.tenancyName || row.userName }}</template>
+            <template v-else>{{ maskedName(row.tenancyName || row.userName) }}</template>
+          </span>
         </template>
-        <el-table-column type="index" label="#" width="50" align="center" />
-        <el-table-column label="租户名" min-width="110">
-          <template #default="{ row }">
-            <span class="spoiler-link" @click="showName = showName === row.id ? 0 : row.id">
-              <template v-if="showName === row.id">{{ row.tenancyName || row.userName }}</template>
-              <template v-else>{{ maskedName(row.tenancyName || row.userName) }}</template>
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column label="自定义名称" min-width="120">
-          <template #default="{ row }">
-            <span class="cell-edit-link" @click="router.push({name:'tenant-detail', params:{id:row.id}})" :title="row.tenancyDes || '点击设置'">{{ row.tenancyDes || '—' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="账号成本" width="100" align="center">
-          <template #default="{ row }">
-            <span class="cell-edit-link data-mono" @click="router.push({name:'tenant-detail', params:{id:row.id}})">{{ row.accountCost || '—' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="订阅天数" width="90" align="center">
-          <template #default="{ row }"><span class="days-chip">{{ row.activeDays || '—' }}</span></template>
-        </el-table-column>
-        <el-table-column label="实例数" width="80" align="center">
-          <template #default="{ row }">{{ row.instanceCount ?? 0 }}</template>
-        </el-table-column>
-        <el-table-column label="开机任务" width="100" align="center">
-          <template #default="{ row }">
-            <span class="status-badge" :class="row.hasBootTask ? 'status-running' : 'status-idle'">
-              <el-icon v-if="row.hasBootTask" class="is-loading" :size="10"><Operation /></el-icon>
-              {{ row.hasBootTask ? '有任务' : '无任务' }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column label="主区域" width="100">
-          <template #default="{ row }"><span class="data-mono">{{ row.regionName || row.region || '—' }}</span></template>
-        </el-table-column>
-        <el-table-column label="多区" width="60" align="center">
-          <template #default="{ row }">
-            <span :class="row.hasChildren ? 'home-region-badge is-home' : 'home-region-badge not-home'">{{ row.hasChildren ? '是' : '否' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="账号类型" width="110">
-          <template #default="{ row }">
-            <el-tag size="small" :type="accountTypeTag(row.planType || row.accountType)">{{ accountTypeLabel(row.planType || row.accountType) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="创建时间" width="150">
-          <template #default="{ row }"><span class="data-mono" style="font-size:12px">{{ row.createdAt || '—' }}</span></template>
-        </el-table-column>
-        <el-table-column label="状态" width="80" align="center">
-          <template #default="{ row }">
-            <span class="status-dot" :class="row.isActive ? 'status-dot--up status-dot--pulse' : 'status-dot--down'" />
-            {{ row.isActive ? '正常' : '停用' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="60" fixed="right" align="center">
-          <template #default="{ row }">
-            <el-dropdown trigger="click" @command="(cmd: string) => handleAction(cmd, row)">
-              <el-button size="small" text><el-icon><MoreFilled /></el-icon></el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="detail"><el-icon><InfoFilled /></el-icon> 详情</el-dropdown-item>
-                  <el-dropdown-item command="sync"><el-icon><Connection /></el-icon> 同步 OCI</el-dropdown-item>
-                  <el-dropdown-item command="export" divided><el-icon><Download /></el-icon> 导出租户</el-dropdown-item>
-                  <el-dropdown-item command="delete" divided style="color:var(--status-down)"><el-icon><Delete /></el-icon> 删除</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+      </el-table-column>
+      <el-table-column label="自定义名称" min-width="120">
+        <template #default="{ row }">
+          <span class="cell-edit-link" @click="router.push({name:'tenant-detail', params:{id:row.id}})" :title="row.tenancyDes || '点击设置'">{{ row.tenancyDes || '—' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="区域" width="100">
+        <template #default="{ row }"><MonoText>{{ row.regionName || row.region || '—' }}</MonoText></template>
+      </el-table-column>
+      <el-table-column label="订阅天数" width="90" align="center">
+        <template #default="{ row }">
+          <span class="days-chip" :class="daysChipClass(row.activeDays)">{{ row.activeDays || '—' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="账号类型" width="90" align="center">
+        <template #default="{ row }">
+          <el-tag size="small" :type="row.planType === 'PAYG' ? '' : 'info'">
+            {{ row.planType || '—' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="实例" width="80" align="center">
+        <template #default="{ row }">{{ row.instanceCount ?? 0 }}</template>
+      </el-table-column>
+      <el-table-column label="状态" width="80" align="center">
+        <template #default="{ row }">
+          <StatusBadge :status="row.isActive ? 'up' : 'down'" :pulse="row.isActive" />
+          <span class="status-text">{{ row.isActive ? '正常' : '停用' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="60" fixed="right" align="center">
+        <template #default="{ row }">
+          <el-dropdown trigger="click" @command="(cmd: string) => handleAction(cmd, row)">
+            <el-button size="small" text><el-icon><MoreFilled /></el-icon></el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="detail"><el-icon><InfoFilled /></el-icon> 详情</el-dropdown-item>
+                <el-dropdown-item command="sync"><el-icon><Connection /></el-icon> 同步 OCI</el-dropdown-item>
+                <el-dropdown-item command="export" divided><el-icon><Download /></el-icon> 导出租户</el-dropdown-item>
+                <el-dropdown-item command="delete" divided style="color:var(--status-down)"><el-icon><Delete /></el-icon> 删除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </template>
+      </el-table-column>
+    </el-table>
 
     <!-- ======================== dialogs ======================== -->
 
@@ -163,11 +143,14 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Plus, Refresh, Connection, InfoFilled, Download, Delete, Search,
-  Operation, MoreFilled
+  MoreFilled
 } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import request from '../utils/request'
-import { maskedName, accountTypeTag, accountTypeLabel } from '../utils/tenant-utils'
+import { maskedName } from '../utils/tenant-utils'
+import PageHeader from '../components/common/PageHeader.vue'
+import StatusBadge from '../components/common/StatusBadge.vue'
+import MonoText from '../components/common/MonoText.vue'
 
 defineOptions({ name: 'tenants' })
 
@@ -406,42 +389,58 @@ async function startBatchCheck() {
   finally { batchChecking.value = false }
 }
 
+// --- days chip color ---
+function daysChipClass(days: string | undefined): string {
+  if (!days) return ''
+  const num = parseInt(days)
+  if (isNaN(num)) return ''
+  if (num > 365) return 'days-chip--green'
+  if (num >= 90) return ''
+  if (num >= 30) return 'days-chip--yellow'
+  return 'days-chip--red'
+}
+
 onMounted(load)
 </script>
 
 <style scoped>
 .tenants-page { padding: 20px; }
-.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
-.toolbar-left { display: flex; align-items: center; gap: 12px; }
-.toolbar-left h2 { margin: 0; font-size: var(--text-xl); font-weight: var(--font-bold); }
-.toolbar-right { display: flex; align-items: center; gap: 8px; }
-.table-card { margin-bottom: 16px; }
 
 .spoiler-link { cursor: pointer; color: var(--accent); }
 .spoiler-link:hover { text-decoration: underline; }
 .cell-edit-link { cursor: pointer; color: var(--accent); }
 .cell-edit-link:hover { text-decoration: underline; }
-.data-mono { font-family: 'JetBrains Mono', monospace; font-size: var(--text-sm); }
-
-.status-badge {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 8px; border-radius: var(--radius-sm);
-  font-size: var(--text-xs); font-weight: var(--font-medium);
-}
-.status-badge.status-running { background: color-mix(in srgb, var(--status-up) 15%, transparent); color: var(--status-up); }
-.status-badge.status-idle { background: var(--bg-raised); color: var(--text-secondary); }
 
 .days-chip {
-  display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm);
-  background: var(--bg-raised); font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--text-primary);
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
 }
 
-.home-region-badge {
-  display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm);
-  font-size: var(--text-xs); font-weight: var(--font-medium);
+.days-chip--green {
+  background: color-mix(in srgb, var(--status-up) 15%, transparent);
+  color: var(--status-up);
 }
-.home-region-badge.is-home { background: color-mix(in srgb, var(--status-up) 15%, transparent); color: var(--status-up); }
-.home-region-badge.not-home { background: var(--bg-raised); color: var(--text-secondary); }
+
+.days-chip--yellow {
+  background: color-mix(in srgb, var(--status-warn) 15%, transparent);
+  color: var(--status-warn);
+}
+
+.days-chip--red {
+  background: color-mix(in srgb, var(--status-down) 15%, transparent);
+  color: var(--status-down);
+}
+
+.status-text {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-left: var(--space-1);
+}
 
 :deep(.el-table) { border-radius: var(--radius-md); overflow: hidden; }
 :deep(.el-table th) { background: var(--bg-raised); font-weight: var(--font-semibold); color: var(--text-primary); }
@@ -452,10 +451,4 @@ onMounted(load)
 :deep(.el-collapse-item:last-child) { border-bottom: none; }
 :deep(.el-collapse-item__header) { font-size: var(--text-base); font-weight: var(--font-semibold); color: var(--accent); }
 :deep(.el-collapse-item__header:hover) { color: var(--accent-hover); }
-
-@media (max-width: 768px) {
-  .toolbar { flex-direction: column; align-items: flex-start; }
-  .toolbar-left h2 { font-size: var(--text-lg); }
-  .toolbar-right { width: 100%; justify-content: flex-start; }
-}
 </style>
