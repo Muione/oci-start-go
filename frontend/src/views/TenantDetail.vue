@@ -363,6 +363,11 @@
 
         <!-- Quota -->
         <h4 style="margin:16px 0 8px">配额</h4>
+        <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center">
+          <el-select v-model="quotaServiceName" size="small" style="width:200px" @change="loadQuota">
+            <el-option v-for="s in quotaServices" :key="s.name" :label="s.description || s.name" :value="s.name"/>
+          </el-select>
+        </div>
         <el-table v-loading="quotaLoading" :data="quotaItems" border stripe size="small" max-height="300">
           <template #empty><el-empty description="暂无配额数据" :image-size="40"/></template>
           <el-table-column prop="name" label="配额名称" min-width="280" show-overflow-tooltip/>
@@ -510,6 +515,8 @@ const notifSaving = ref(false)
 // quota
 const quotaItems = ref<any[]>([])
 const quotaLoading = ref(false)
+const quotaServices = ref<any[]>([])
+const quotaServiceName = ref('compute')
 
 // audit log
 const auditLogs = ref<any[]>([])
@@ -543,7 +550,7 @@ function onTabChange(tab: string | number) {
   if (t === 'email') loadEmail()
   if (t === 'social' && !socialList.value.length) loadSocial()
   if (t === 'secRules' && !secRulesList.value.length) loadSecRules()
-  if (t === 'settings' && !Object.keys(mfaStatus.value).some(k => mfaStatus.value[k])) { loadMfaStatus(); loadNotifRecipients(); loadQuota() }
+  if (t === 'settings' && !Object.keys(mfaStatus.value).some(k => mfaStatus.value[k])) { loadMfaStatus(); loadNotifRecipients(); loadQuota(); loadQuotaServices() }
   if (t === 'overview' && !domains.value.length) loadDomains()
   if (t === 'regions') loadRegions()
 }
@@ -828,10 +835,18 @@ async function updateNotifRecipients() {
 async function loadQuota() {
   quotaLoading.value = true
   try {
-    const r: any = await request.get(`/tenants/${tenantId}/quota`, { params: { serviceName: 'compute', pageSize: 100 } })
+    const r: any = await request.get(`/tenants/${tenantId}/quota`, {
+      params: { serviceName: quotaServiceName.value, pageSize: 100 }
+    })
     quotaItems.value = r?.items || []
   } catch { quotaItems.value = [] }
   finally { quotaLoading.value = false }
+}
+
+async function loadQuotaServices() {
+  try {
+    quotaServices.value = await request.get(`/tenants/${tenantId}/quota/services`) as any[]
+  } catch { quotaServices.value = [] }
 }
 
 // --- audit log ---

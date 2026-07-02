@@ -42,6 +42,12 @@ type QuotaPage struct {
 	HasNextPage bool       `json:"hasNextPage"`
 }
 
+// ServiceInfo is a simplified service summary for the API.
+type ServiceInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
 // limitNameWithAD tracks whether a limit is AD-level and the ADs it appeared in.
 type limitNameWithAD struct {
 	name      string

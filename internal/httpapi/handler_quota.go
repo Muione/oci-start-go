@@ -36,3 +36,20 @@ func tenantQuota(deps *Deps) gin.HandlerFunc {
 		c.JSON(http.StatusOK, result)
 	}
 }
+
+// tenantQuotaServices — GET /tenants/:id/quota/services
+func tenantQuotaServices(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "参数 id 无效")
+			return
+		}
+		services, err := deps.Quota.ListServices(c.Request.Context(), id)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "获取服务列表失败: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessData(services))
+	}
+}

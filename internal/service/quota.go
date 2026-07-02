@@ -45,3 +45,38 @@ func (s *QuotaService) GetQuota(ctx context.Context, tenantID int64, serviceName
 	}
 	return result, nil
 }
+
+// ListServices returns all available OCI limit services for a tenant.
+func (s *QuotaService) ListServices(ctx context.Context, tenantID int64) ([]oci.ServiceInfo, error) {
+	t, err := repo.New(s.store.Read).FindTenantByID(ctx, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("tenant not found: %w", err)
+	}
+	creds := tenantToCreds(t)
+
+	var result []oci.ServiceInfo
+	err = oci.WithProxy(ctx, s.pool, creds, s.masterKey, func(clients oci.Clients) error {
+		services, qErr := oci.ListLimitServices(ctx, clients, creds.Tenancy)
+		if qErr != nil {
+			return qErr
+		}
+		result = make([]oci.ServiceInfo, 0, len(services))
+		for _, svc := range services {
+			if svc.Name != nil {
+				desc := ""
+				if svc.Description != nil {
+					desc = *svc.Description
+				}
+				result = append(result, oci.ServiceInfo{
+					Name:        *svc.Name,
+					Description: desc,
+				})
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}

@@ -100,6 +100,7 @@ func NewServer(deps *Deps) *gin.Engine {
 
 	// Phase 11.4: Quota, Region Subscription, Audit Log.
 	pro.GET("/tenants/:id/quota", tenantQuota(deps))
+	pro.GET("/tenants/:id/quota/services", tenantQuotaServices(deps))
 	pro.GET("/tenants/:id/regions/summary", tenantRegionSummary(deps))
 	pro.GET("/tenants/:id/regions/subscribed", tenantRegionsSubscribed(deps))
 	pro.GET("/tenants/:id/regions/unsubscribed", tenantRegionsUnsubscribed(deps))
