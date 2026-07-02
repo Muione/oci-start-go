@@ -89,7 +89,7 @@
              session survives page switches (onBeforeUnmount doesn't fire under
              keep-alive, so the WS + terminal stay open; onActivated refits). -->
         <router-view v-slot="{ Component }">
-          <keep-alive :include="['console', 'terminal']">
+          <keep-alive :include="['console', 'terminal', 'tenants', 'tenant-detail']">
             <component :is="Component" />
           </keep-alive>
         </router-view>

@@ -12,7 +12,8 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: '', name: 'dashboard', component: () => import('../views/Dashboard.vue') },
-        { path: 'tenants', name: 'tenants', component: () => import('../views/Tenants.vue') },
+        { path: 'tenants', name: 'tenants', component: () => import('../views/TenantList.vue') },
+        { path: 'tenants/:id', name: 'tenant-detail', component: () => import('../views/TenantDetail.vue') },
         { path: 'proxies', name: 'proxies', component: () => import('../views/ProxyManager.vue') },
         { path: 'boot', name: 'boot', component: () => import('../views/BootTasks.vue') },
         { path: 'instances', name: 'instances', component: () => import('../views/Instances.vue') },
