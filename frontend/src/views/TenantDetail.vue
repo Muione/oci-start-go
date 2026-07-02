@@ -673,27 +673,9 @@ async function loadSubscription() {
   catch { subscriptionData.value = null }
 }
 async function loadSubscriptionDays() {
-  try {
-    // Prefer subscription timeStart (most accurate)
-    if (subscriptionData.value?.timeStart) {
-      const start = new Date(subscriptionData.value.timeStart)
-      const days = Math.ceil((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24))
-      subscriptionDays.value = String(days > 0 ? days : 0)
-      return
-    }
-    // Fallback: OCI API
-    const r: any = await request.get(`/tenants/${tenantId}/subscription-days`)
-    subscriptionDays.value = r?.activeDays ?? '—'
-  } catch {
-    // Final fallback: tenant createdAt
-    if (tenant.value.createdAt) {
-      const start = new Date(tenant.value.createdAt)
-      const days = Math.ceil((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24))
-      subscriptionDays.value = String(days > 0 ? days : 0)
-    } else {
-      subscriptionDays.value = '—'
-    }
-  }
+  // activeDays is computed server-side from register_detail.register_time
+  // (same source as the list page) — subscription days === active days.
+  subscriptionDays.value = tenant.value?.activeDays || '—'
 }
 async function loadCost(type?: string, start?: string, end?: string) {
   const qType = type || costQueryType.value; costQueryType.value = qType; costLoading.value = true; costData.value = []

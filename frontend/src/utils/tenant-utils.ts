@@ -11,19 +11,21 @@ export function maskedName(n: string): string {
 export function accountTypeTag(t: string | undefined): 'success' | 'warning' | 'info' | '' {
   if (!t) return 'info'
   const s = t.toLowerCase()
-  if (s.includes('trial') || s.includes('试用') || s === 'free_tier') return 'warning'
-  if (s.includes('paid') || s.includes('付费') || s === 'payg') return 'success'
+  if (s === 'free_tier' || s === 'free' || s.includes('trial') || s.includes('试用')) return 'warning'
+  if (s === 'payg' || s.includes('paid') || s.includes('付费')) return 'success'
   if (s.includes('enterprise') || s.includes('企业')) return ''
-  if (s === 'free') return 'warning'
   return 'info'
 }
 
-/** Human-readable label for the account type */
+/** Human-readable label for the account type (= subscription plan type) */
 export function accountTypeLabel(t: string | undefined): string {
   if (!t) return '—'
   const m: Record<string, string> = {
+    FREE_TIER: '免费', PAYG: '升级号',
+    FREE: '免费', PAYG: '升级号',
+    // legacy values (pre-sync) — keep for backward compat
     trial: '免费试用', paid: '付费账户', enterprise: '企业账户', free: '免费账户',
-    FREE_TIER: '免费层', PAYG: '按量付费', PERSONAL: '个人', CORPORATE: '企业',
+    PERSONAL: '个人', CORPORATE: '企业',
   }
   return m[t] || t
 }
