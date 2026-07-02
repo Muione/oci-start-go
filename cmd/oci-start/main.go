@@ -323,6 +323,9 @@ func main() {
 	// Phase 10 wiring: tenant IAM user management.
 	tenantUserSvc := service.NewTenantUserService(store, masterKey, proxyPool)
 
+	// Phase 11.5 wiring: tenant IAM credentials, sign-on policies, account recovery.
+	tenantCredentialsSvc := service.NewTenantCredentialsService(store, masterKey, proxyPool)
+
 	// Phase 11.4 wiring: quota, region subscription, audit log.
 	quotaSvc := service.NewQuotaService(store, masterKey, proxyPool)
 	regionSubSvc := service.NewRegionSubService(store, masterKey, proxyPool)
@@ -379,6 +382,7 @@ func main() {
 		TenantEmail:      tenantEmailSvc,
 		TenantSocial:     tenantSocialSvc,
 		TenantUser:       tenantUserSvc,
+		TenantCredentials: tenantCredentialsSvc,
 		SecurityRule:     securityRuleSvc,
 		Quota:            quotaSvc,
 		RegionSub:        regionSubSvc,

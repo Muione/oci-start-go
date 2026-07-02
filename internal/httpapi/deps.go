@@ -76,6 +76,9 @@ type Deps struct {
 	// Phase 10: tenant IAM user management.
 	TenantUser *service.TenantUserService
 
+	// Phase 11.5: tenant IAM credentials, sign-on policies, account recovery.
+	TenantCredentials *service.TenantCredentialsService
+
 	// Phase 11.3: security list rule management.
 	SecurityRule *service.SecurityRuleService
 

@@ -87,6 +87,25 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/tenants/:id/update-detail", tenantUpdateDetail(deps))
 	pro.GET("/tenants/:id/subscription-days", tenantSubscriptionDays(deps))
 	pro.GET("/tenants/:id/domains", tenantDomainTenants(deps))
+
+	// Phase 11.5: tenant IAM credentials, sign-on policies, account recovery.
+	// Route param :userOcid matches the existing tenant-user routes (gin
+	// requires the same param name at a shared path position).
+	pro.GET("/tenants/:id/users/:userOcid/api-keys", tenantListApiKeys(deps))
+	pro.POST("/tenants/:id/users/:userOcid/api-keys", tenantCreateApiKey(deps))
+	pro.DELETE("/tenants/:id/users/:userOcid/api-keys/:keyId", tenantDeleteApiKey(deps))
+	pro.GET("/tenants/:id/users/:userOcid/auth-tokens", tenantListAuthTokens(deps))
+	pro.POST("/tenants/:id/users/:userOcid/auth-tokens", tenantCreateAuthToken(deps))
+	pro.DELETE("/tenants/:id/users/:userOcid/auth-tokens/:tokenId", tenantDeleteAuthToken(deps))
+	pro.GET("/tenants/:id/users/:userOcid/smtp-credentials", tenantListSmtpCredentials(deps))
+	pro.POST("/tenants/:id/users/:userOcid/smtp-credentials", tenantCreateSmtpCredential(deps))
+	pro.DELETE("/tenants/:id/users/:userOcid/smtp-credentials/:credId", tenantDeleteSmtpCredential(deps))
+	pro.GET("/tenants/:id/users/:userOcid/customer-secret-keys", tenantListCustomerSecretKeys(deps))
+	pro.POST("/tenants/:id/users/:userOcid/customer-secret-keys", tenantCreateCustomerSecretKey(deps))
+	pro.DELETE("/tenants/:id/users/:userOcid/customer-secret-keys/:keyId", tenantDeleteCustomerSecretKey(deps))
+	pro.GET("/tenants/:id/signon-policies", tenantListSignOnPolicies(deps))
+	pro.GET("/tenants/:id/account-recovery", tenantGetAccountRecovery(deps))
+	pro.PUT("/tenants/:id/account-recovery", tenantUpdateAccountRecovery(deps))
 	pro.GET("/proxies/list", proxyList(deps))
 	pro.POST("/proxies/save", proxySave(deps))
 	pro.GET("/proxies/delete", proxyDelete(deps))
