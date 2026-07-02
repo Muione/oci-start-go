@@ -9,8 +9,7 @@
         <el-tag v-if="tenant.isActive !== undefined" :type="tenant.isActive ? 'success' : 'danger'" size="small">{{ tenant.isActive ? '正常' : '停用' }}</el-tag>
       </div>
       <div class="header-right">
-        <el-button size="small" @click="syncOci" :loading="syncing"><el-icon><Connection /></el-icon> 同步</el-button>
-        <el-button size="small" @click="doUpdateDetail" :loading="updateSaving"><el-icon><Refresh /></el-icon> 更新信息</el-button>
+        <el-button size="small" @click="syncOci" :loading="syncing"><el-icon><Connection /></el-icon> 同步 OCI</el-button>
         <el-button size="small" @click="checkTenant" :loading="checking"><el-icon><Monitor /></el-icon> 测试存活</el-button>
       </div>
     </div>
@@ -738,10 +737,17 @@ function onTabChange(tab: string | number) {
 // --- overview actions ---
 async function syncOci() {
   try {
-    await ElMessageBox.confirm(`从 OCI 同步租户 ${tenant.value.userName} 的实例？`, '确认同步', { type: 'info' })
+    await ElMessageBox.confirm(`从 OCI 同步租户 ${tenant.value.userName} 的全部信息（实例、订阅、账号）？`, '确认同步', { type: 'info' })
     syncing.value = true
     await request.get('/tenants/syncOci', { params: { tenantId } })
     ElMessage.success('同步完成')
+    // Refresh overview (email, subscription days) + already-loaded tabs so
+    // synced data shows without a manual page reload. The backend syncOci now
+    // syncs instances + tenancy detail + subscription in one call.
+    tenant.value = await request.get(`/tenants/${tenantId}`)
+    subscriptionDays.value = tenant.value?.activeDays || '—'
+    if (costLoaded.value) await loadSubscription()
+    if (instLoaded.value) await loadInstances()
   } catch (e: any) { if (e !== 'cancel' && e?.message) ElMessage.error('同步失败: ' + e.message) }
   finally { syncing.value = false }
 }

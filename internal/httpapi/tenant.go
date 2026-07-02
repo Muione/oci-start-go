@@ -14,6 +14,7 @@ import (
 
 	"github.com/Muione/oci-start-go/internal/response"
 	"github.com/Muione/oci-start-go/internal/service"
+	logpkg "github.com/Muione/oci-start-go/internal/util/log"
 )
 
 // tenantList — GET /tenants/listAll
@@ -85,6 +86,11 @@ func tenantDelete(deps *Deps) gin.HandlerFunc {
 }
 
 // tenantSyncOci — GET /tenants/syncOci?tenantId=
+// Syncs all tenant info from OCI: instance list (replaces local cache) plus
+// tenancy detail + subscription (email, plan type, subscription start) so the
+// overview reflects synced data. Account-detail refresh is best-effort —
+// instance sync is the primary action and must not be rolled back if the
+// subscription/identity fetch fails.
 func tenantSyncOci(deps *Deps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := strconv.ParseInt(c.Query("tenantId"), 10, 64)
@@ -95,6 +101,11 @@ func tenantSyncOci(deps *Deps) gin.HandlerFunc {
 		if err := deps.Tenant.SyncOci(c.Request.Context(), id); err != nil {
 			response.Fail(c, http.StatusInternalServerError, "同步失败: "+err.Error())
 			return
+		}
+		if _, err := deps.TenantUser.UpdateAccountDetail(c.Request.Context(), id); err != nil {
+			log := logpkg.FromContext(c.Request.Context())
+			log.Warn().Err(err).Int64("tenantID", id).
+				Msg("sync: refresh account detail failed, overview may be stale")
 		}
 		response.OK(c, response.Success())
 	}

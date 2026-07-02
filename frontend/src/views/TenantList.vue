@@ -300,7 +300,7 @@ async function load() {
 // --- sync ---
 async function syncOci(row: Tenant) {
   try {
-    await ElMessageBox.confirm(`从 OCI 同步租户 ${row.userName} 的实例？`, '确认同步', { type: 'info' })
+    await ElMessageBox.confirm(`从 OCI 同步租户 ${row.userName} 的全部信息（实例、订阅、账号）？`, '确认同步', { type: 'info' })
     await request.get('/tenants/syncOci', { params: { tenantId: row.id } })
     ElMessage.success('同步完成')
     await load()
