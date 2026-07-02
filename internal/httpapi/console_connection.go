@@ -6,6 +6,7 @@
 package httpapi
 
 import (
+	"database/sql"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +21,7 @@ import (
 func instanceConsoleConnectionsList(deps *Deps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		instanceID := c.Param("id")
-		row, err := repo.New(deps.Store.Read).FindConsoleInstanceInfo(c.Request.Context(), instanceID)
+		row, err := repo.New(deps.Store.Read).FindConsoleInstanceInfo(c.Request.Context(), sql.NullString{String: instanceID, Valid: true})
 		if err != nil {
 			respondOciClientsErr(c, err) // 404 when instance absent, 500 otherwise
 			return
@@ -45,7 +46,7 @@ func instanceConsoleConnectionDelete(deps *Deps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		instanceID := c.Param("id")
 		connID := c.Param("connId")
-		row, err := repo.New(deps.Store.Read).FindConsoleInstanceInfo(c.Request.Context(), instanceID)
+		row, err := repo.New(deps.Store.Read).FindConsoleInstanceInfo(c.Request.Context(), sql.NullString{String: instanceID, Valid: true})
 		if err != nil {
 			respondOciClientsErr(c, err)
 			return

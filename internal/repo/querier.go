@@ -59,12 +59,20 @@ type Querier interface {
 	// Cloud tenancy queries (Phase 9). cloud_tenancy stores account cost and
 	// custom name per tenancy.
 	FindCloudTenancyByName(ctx context.Context, tenancyName string) (CloudTenancy, error)
+	// Replaces the inline compartment_id lookup in wsHub.Console.SetDeps
+	// GetCompartmentID.
+	FindCompartmentID(ctx context.Context, instanceID sql.NullString) (sql.NullString, error)
 	// oci_computer_info queries
 	FindComputerInfoByBootIDStr(ctx context.Context, bootIDStr sql.NullString) (OciComputerInfo, error)
 	// system_config is the runtime KV store (config_key UNIQUE).
 	// Boolean configs use the config_enabled column (INTEGER 0/1);
 	// string configs use config_value. Mirrors Java SystemConfigService.
 	FindConfigByKey(ctx context.Context, configKey sql.NullString) (SystemConfig, error)
+	// Replaces the inline SELECT in cmd/oci-start/main.go wsHub.Console.SetDeps.
+	// Returns the columns the console closure scans: instance_id, display_name,
+	// public_ips, private_ips, shape, username, port, password, tenant_id,
+	// compartment_id, availability_domain.
+	FindConsoleInstanceInfo(ctx context.Context, instanceID sql.NullString) (FindConsoleInstanceInfoRow, error)
 	// Grabber queries (Phase 4). boot_instance, open_boot_lock, oci_computer_info,
 	// tem_instance. See SPEC S8; parity with BootInstanceRepository +
 	// OpenBootLockRepository + BootTotalInstanceService queries.
@@ -90,6 +98,10 @@ type Querier interface {
 	// VpnProxyRecord queries (Phase 3 SOCKS proxy pool). Random available pick
 	// parity with VpnProxyRecordRepository.findRandomAvailableRecord.
 	FindRandomAvailableProxy(ctx context.Context) (VpnProxyRecord, error)
+	// Replaces the inline SELECT in cmd/oci-start/main.go wsHub.Rescue.SetDeps.
+	// Returns: instance_id, display_name, state, boot_volume_id, shape,
+	// availability_domain, compartment_id, public_ips, username, password.
+	FindRescueInstanceInfo(ctx context.Context, instanceID sql.NullString) (FindRescueInstanceInfoRow, error)
 	FindSessionByToken(ctx context.Context, token string) (LoginSession, error)
 	FindStaleUploads(ctx context.Context, updateTime sql.NullString) ([]OciMultipartUploadRecord, error)
 	FindTenantByID(ctx context.Context, id int64) (Tenant, error)
@@ -154,6 +166,16 @@ type Querier interface {
 	// Tenant queries (Phase 3). key_file_blob holds the AES-256-GCM encrypted
 	// PEM (base64). List/mask queries deliberately omit key_file/key_file_blob.
 	ListTenants(ctx context.Context) ([]ListTenantsRow, error)
+	// Aggregates tenant + register_detail.register_time + boot_instance count
+	// (status=1) + child count in a single round-trip, replacing the per-tenant
+	// FindRegisterDetailByTenantId / CountBootInstancesByTenantId / CountTenantChildren
+	// fan-out in service.TenantService.List. All three enrichments are correlated
+	// subqueries: this avoids the row-multiplication a LEFT JOIN would introduce
+	// when register_detail has duplicate tenant_id rows (UpsertRegisterDetail uses
+	// INSERT OR REPLACE with no unique constraint), and matches the first-row
+	// semantics of FindRegisterDetailByTenantId (:one).
+	// ALL COMMENTS MUST BE ASCII-ONLY.
+	ListTenantsWithCounts(ctx context.Context) ([]ListTenantsWithCountsRow, error)
 	ListTrafficAlerts(ctx context.Context) ([]TrafficAlert, error)
 	ListVpnProxyRecords(ctx context.Context) ([]VpnProxyRecord, error)
 	MarkDailyReset(ctx context.Context, lastResetDate sql.NullString) error

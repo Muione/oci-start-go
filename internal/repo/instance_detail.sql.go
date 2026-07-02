@@ -22,6 +22,102 @@ func (q *Queries) DeleteInstanceDetailsByTenantId(ctx context.Context, tenantID 
 	return err
 }
 
+const findCompartmentID = `-- name: FindCompartmentID :one
+SELECT compartment_id FROM instance_detail WHERE instance_id = ? LIMIT 1
+`
+
+// Replaces the inline compartment_id lookup in wsHub.Console.SetDeps
+// GetCompartmentID.
+func (q *Queries) FindCompartmentID(ctx context.Context, instanceID sql.NullString) (sql.NullString, error) {
+	row := q.db.QueryRowContext(ctx, findCompartmentID, instanceID)
+	var compartment_id sql.NullString
+	err := row.Scan(&compartment_id)
+	return compartment_id, err
+}
+
+const findConsoleInstanceInfo = `-- name: FindConsoleInstanceInfo :one
+SELECT instance_id, display_name, public_ips, private_ips, shape,
+       username, port, password, tenant_id, compartment_id, availability_domain
+FROM instance_detail WHERE instance_id = ? LIMIT 1
+`
+
+type FindConsoleInstanceInfoRow struct {
+	InstanceID         sql.NullString `json:"instance_id"`
+	DisplayName        sql.NullString `json:"display_name"`
+	PublicIps          sql.NullString `json:"public_ips"`
+	PrivateIps         sql.NullString `json:"private_ips"`
+	Shape              sql.NullString `json:"shape"`
+	Username           sql.NullString `json:"username"`
+	Port               sql.NullInt64  `json:"port"`
+	Password           sql.NullString `json:"password"`
+	TenantID           sql.NullInt64  `json:"tenant_id"`
+	CompartmentID      sql.NullString `json:"compartment_id"`
+	AvailabilityDomain sql.NullString `json:"availability_domain"`
+}
+
+// Replaces the inline SELECT in cmd/oci-start/main.go wsHub.Console.SetDeps.
+// Returns the columns the console closure scans: instance_id, display_name,
+// public_ips, private_ips, shape, username, port, password, tenant_id,
+// compartment_id, availability_domain.
+func (q *Queries) FindConsoleInstanceInfo(ctx context.Context, instanceID sql.NullString) (FindConsoleInstanceInfoRow, error) {
+	row := q.db.QueryRowContext(ctx, findConsoleInstanceInfo, instanceID)
+	var i FindConsoleInstanceInfoRow
+	err := row.Scan(
+		&i.InstanceID,
+		&i.DisplayName,
+		&i.PublicIps,
+		&i.PrivateIps,
+		&i.Shape,
+		&i.Username,
+		&i.Port,
+		&i.Password,
+		&i.TenantID,
+		&i.CompartmentID,
+		&i.AvailabilityDomain,
+	)
+	return i, err
+}
+
+const findRescueInstanceInfo = `-- name: FindRescueInstanceInfo :one
+SELECT instance_id, display_name, state, boot_volume_id, shape,
+       availability_domain, compartment_id, public_ips, username, password
+FROM instance_detail WHERE instance_id = ? LIMIT 1
+`
+
+type FindRescueInstanceInfoRow struct {
+	InstanceID         sql.NullString `json:"instance_id"`
+	DisplayName        sql.NullString `json:"display_name"`
+	State              sql.NullString `json:"state"`
+	BootVolumeID       sql.NullString `json:"boot_volume_id"`
+	Shape              sql.NullString `json:"shape"`
+	AvailabilityDomain sql.NullString `json:"availability_domain"`
+	CompartmentID      sql.NullString `json:"compartment_id"`
+	PublicIps          sql.NullString `json:"public_ips"`
+	Username           sql.NullString `json:"username"`
+	Password           sql.NullString `json:"password"`
+}
+
+// Replaces the inline SELECT in cmd/oci-start/main.go wsHub.Rescue.SetDeps.
+// Returns: instance_id, display_name, state, boot_volume_id, shape,
+// availability_domain, compartment_id, public_ips, username, password.
+func (q *Queries) FindRescueInstanceInfo(ctx context.Context, instanceID sql.NullString) (FindRescueInstanceInfoRow, error) {
+	row := q.db.QueryRowContext(ctx, findRescueInstanceInfo, instanceID)
+	var i FindRescueInstanceInfoRow
+	err := row.Scan(
+		&i.InstanceID,
+		&i.DisplayName,
+		&i.State,
+		&i.BootVolumeID,
+		&i.Shape,
+		&i.AvailabilityDomain,
+		&i.CompartmentID,
+		&i.PublicIps,
+		&i.Username,
+		&i.Password,
+	)
+	return i, err
+}
+
 const insertInstanceDetail = `-- name: InsertInstanceDetail :exec
 INSERT INTO instance_detail (
     tenant_id, instance_id, display_name, shape, state, ocpus, memory_in_gbs,

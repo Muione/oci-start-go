@@ -66,7 +66,7 @@ INSERT INTO instance_detail (
 		t.Fatalf("seed: %v", err)
 	}
 
-	got, err := q.FindConsoleInstanceInfo(ctx, instID)
+	got, err := q.FindConsoleInstanceInfo(ctx, sql.NullString{String: instID, Valid: true})
 	if err != nil {
 		t.Fatalf("FindConsoleInstanceInfo: %v", err)
 	}
@@ -88,7 +88,7 @@ INSERT INTO instance_detail (
 	}
 
 	// Missing instance -> sql.ErrNoRows (matches the current inline QueryRow behaviour).
-	if _, err := q.FindConsoleInstanceInfo(ctx, "does-not-exist"); !errors.Is(err, sql.ErrNoRows) {
+	if _, err := q.FindConsoleInstanceInfo(ctx, sql.NullString{String: "does-not-exist", Valid: true}); !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("missing instance err = %v, want sql.ErrNoRows", err)
 	}
 }
@@ -111,7 +111,7 @@ INSERT INTO instance_detail (
 		t.Fatalf("seed: %v", err)
 	}
 
-	got, err := q.FindRescueInstanceInfo(ctx, instID)
+	got, err := q.FindRescueInstanceInfo(ctx, sql.NullString{String: instID, Valid: true})
 	if err != nil {
 		t.Fatalf("FindRescueInstanceInfo: %v", err)
 	}
@@ -127,7 +127,7 @@ INSERT INTO instance_detail (
 	checkStr(t, "username", got.Username, wantNull("root"))
 	checkStr(t, "password", got.Password, wantNull("r00t"))
 
-	if _, err := q.FindRescueInstanceInfo(ctx, "nope"); !errors.Is(err, sql.ErrNoRows) {
+	if _, err := q.FindRescueInstanceInfo(ctx, sql.NullString{String: "nope", Valid: true}); !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("missing instance err = %v, want sql.ErrNoRows", err)
 	}
 }
@@ -144,7 +144,7 @@ INSERT INTO instance_detail (instance_id, compartment_id) VALUES (?, ?)
 `, instID, "ocid1.compartment.oc1..zzz"); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	got, err := q.FindCompartmentID(ctx, instID)
+	got, err := q.FindCompartmentID(ctx, sql.NullString{String: instID, Valid: true})
 	if err != nil {
 		t.Fatalf("FindCompartmentID: %v", err)
 	}
@@ -157,7 +157,7 @@ INSERT INTO instance_detail (instance_id, compartment_id) VALUES (?, ?)
 	if _, err := q.db.ExecContext(ctx, `INSERT INTO instance_detail (instance_id) VALUES (?)`, instID2); err != nil {
 		t.Fatalf("seed null: %v", err)
 	}
-	got2, err := q.FindCompartmentID(ctx, instID2)
+	got2, err := q.FindCompartmentID(ctx, sql.NullString{String: instID2, Valid: true})
 	if err != nil {
 		t.Fatalf("FindCompartmentID null row: %v", err)
 	}
@@ -166,7 +166,7 @@ INSERT INTO instance_detail (instance_id, compartment_id) VALUES (?, ?)
 	}
 
 	// Missing instance -> sql.ErrNoRows.
-	if _, err := q.FindCompartmentID(ctx, "nope"); !errors.Is(err, sql.ErrNoRows) {
+	if _, err := q.FindCompartmentID(ctx, sql.NullString{String: "nope", Valid: true}); !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("missing instance err = %v, want sql.ErrNoRows", err)
 	}
 }

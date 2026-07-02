@@ -57,6 +57,7 @@ SELECT
     t.api_synced, t.enable_icmp, t.enable_all_protocol, t.is_home_region, t.paren_id,
     t.tenancy_name, t.tenancy_des, t.account_type, t.cloud_type, t.region_en, t.id_str,
     t.email_address, t.email_enable, t.transfer_status, t.transfer_amount, t.is_active,
+    (SELECT COUNT(*) FROM instance_detail WHERE tenant_id = t.id) AS instance_count,
     (SELECT rd.register_time FROM register_detail rd WHERE rd.tenant_id = t.tenant_id LIMIT 1) AS register_time,
     (SELECT COUNT(*) FROM boot_instance b WHERE b.tenant_id = t.id AND b.status = 1) AS boot_count,
     (SELECT COUNT(*) FROM tenant c WHERE c.paren_id = t.id) AS child_count

@@ -206,7 +206,7 @@ func main() {
 		InstanceLookup: func(instanceID string) (*ws.ConsoleInstanceInfo, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			row, err := repo.New(store.Read).FindConsoleInstanceInfo(ctx, instanceID)
+			row, err := repo.New(store.Read).FindConsoleInstanceInfo(ctx, sql.NullString{String: instanceID, Valid: true})
 			if err != nil {
 				return nil, fmt.Errorf("instance %s not found: %w", instanceID, err)
 			}
@@ -227,7 +227,7 @@ func main() {
 		BuildClients: buildClients,
 		GetCompartmentID: func(ctx context.Context, tenantID int64, instanceID string) (string, error) {
 			// Get the instance's compartment from DB, falling back to tenancy OCID.
-			compID, err := repo.New(store.Read).FindCompartmentID(ctx, instanceID)
+			compID, err := repo.New(store.Read).FindCompartmentID(ctx, sql.NullString{String: instanceID, Valid: true})
 			if err == nil && compID.Valid && compID.String != "" {
 				return compID.String, nil
 			}
@@ -251,7 +251,7 @@ func main() {
 		GetInstance: func(instanceID string, tenantID int64) (*ws.RescueInstanceInfo, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			row, err := repo.New(store.Read).FindRescueInstanceInfo(ctx, instanceID)
+			row, err := repo.New(store.Read).FindRescueInstanceInfo(ctx, sql.NullString{String: instanceID, Valid: true})
 			if err != nil {
 				return nil, fmt.Errorf("instance %s not found: %w", instanceID, err)
 			}

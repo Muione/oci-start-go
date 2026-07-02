@@ -27,6 +27,7 @@ func setupTenantAggDB(t *testing.T) *Queries {
 DROP TABLE IF EXISTS tenant;
 DROP TABLE IF EXISTS register_detail;
 DROP TABLE IF EXISTS boot_instance;
+DROP TABLE IF EXISTS instance_detail;
 CREATE TABLE tenant (
     id INTEGER PRIMARY KEY,
     tenant_id TEXT,
@@ -77,6 +78,10 @@ CREATE TABLE boot_instance (
     tenant_id BIGINT,
     status INTEGER
 );
+CREATE TABLE instance_detail (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id BIGINT
+);
 `)
 	if err != nil {
 		t.Fatalf("create tables: %v", err)
@@ -116,6 +121,12 @@ INSERT INTO boot_instance (tenant_id, status) VALUES
     (1, 1), (1, 1), (1, 0), (2, 1);
 `); err != nil {
 		t.Fatalf("seed boot_instance: %v", err)
+	}
+	// Seed instance_detail: tenant 1 has 3 instances, tenant 2 has 0.
+	if _, err := q.db.ExecContext(ctx, `
+INSERT INTO instance_detail (tenant_id) VALUES (1), (1), (1);
+`); err != nil {
+		t.Fatalf("seed instance_detail: %v", err)
 	}
 
 	rows, err := q.ListTenantsWithCounts(ctx)
@@ -192,6 +203,14 @@ INSERT INTO boot_instance (tenant_id, status) VALUES
 	}
 	if rows[1].ChildCount != 0 {
 		t.Errorf("tenant 2 child_count = %d, want 0", rows[1].ChildCount)
+	}
+
+	// instance_count spot-check.
+	if rows[0].InstanceCount != 3 {
+		t.Errorf("tenant 1 instance_count = %d, want 3", rows[0].InstanceCount)
+	}
+	if rows[1].InstanceCount != 0 {
+		t.Errorf("tenant 2 instance_count = %d, want 0", rows[1].InstanceCount)
 	}
 }
 
