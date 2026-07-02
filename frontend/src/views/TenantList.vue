@@ -34,12 +34,12 @@
         </el-table-column>
         <el-table-column label="自定义名称" min-width="120">
           <template #default="{ row }">
-            <span class="cell-edit-link" @click="openEditCustomName(row)" :title="row.tenancyDes || '点击设置'">{{ row.tenancyDes || '—' }}</span>
+            <span class="cell-edit-link" @click="router.push({name:'tenant-detail', params:{id:row.id}})" :title="row.tenancyDes || '点击设置'">{{ row.tenancyDes || '—' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="账号成本" width="100" align="center">
           <template #default="{ row }">
-            <span class="cell-edit-link data-mono" @click="openEditCost(row)">{{ row.accountCost || '—' }}</span>
+            <span class="cell-edit-link data-mono" @click="router.push({name:'tenant-detail', params:{id:row.id}})">{{ row.accountCost || '—' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="存活天数" width="90" align="center">
@@ -125,30 +125,6 @@
       </template>
     </el-dialog>
 
-    <!-- Edit custom name -->
-    <el-dialog v-model="editNameVisible" title="设置自定义名称" width="460px" destroy-on-close>
-      <el-form label-width="100px">
-        <el-form-item label="租户名"><el-input :model-value="editTarget?.userName || editTarget?.tenancyName" disabled/></el-form-item>
-        <el-form-item label="自定义名称"><el-input v-model="editNameValue" placeholder="输入自定义名称"/></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="editNameVisible=false">取消</el-button>
-        <el-button type="primary" :loading="editSaving" @click="saveCustomName">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- Edit account cost -->
-    <el-dialog v-model="editCostVisible" title="设置账号成本" width="460px" destroy-on-close>
-      <el-form label-width="100px">
-        <el-form-item label="租户名"><el-input :model-value="editTarget?.userName || editTarget?.tenancyName" disabled/></el-form-item>
-        <el-form-item label="账号成本"><el-input v-model="editCostValue" placeholder="例如: $29.99/月"/></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="editCostVisible=false">取消</el-button>
-        <el-button type="primary" :loading="editSaving" @click="saveAccountCost">保存</el-button>
-      </template>
-    </el-dialog>
-
     <!-- Export tenant -->
     <el-dialog v-model="exportVisible" title="导出租户数据" width="460px" destroy-on-close>
       <p style="color:var(--text-secondary);font-size:var(--text-sm)">租户: <strong>{{ exportTarget?.userName || exportTarget?.tenancyName }}</strong></p>
@@ -223,14 +199,6 @@ const fileBytes = ref<File | null>(null)
 const form = ref({ tenancy: '', tenantId: '', fingerprint: '', region: '', userName: '' })
 const configCollapse = ref<string[]>([])
 const ociConfigText = ref('')
-
-// edit name / cost
-const editTarget = ref<Tenant | null>(null)
-const editNameVisible = ref(false)
-const editNameValue = ref('')
-const editCostVisible = ref(false)
-const editCostValue = ref('')
-const editSaving = ref(false)
 
 // export
 const exportVisible = ref(false)
@@ -414,49 +382,6 @@ async function remove(row: Tenant) {
 }
 
 // --- edit custom name ---
-function openEditCustomName(row: Tenant) {
-  editTarget.value = row; editNameValue.value = row.tenancyDes || ''; editNameVisible.value = true
-}
-async function saveCustomName() {
-  if (!editTarget.value) return
-  editSaving.value = true
-  try {
-    await request.put(`/tenants/${editTarget.value.id}`, {
-      tenancyName: editTarget.value.tenancyName || editTarget.value.userName,
-      tenancyDes: editNameValue.value,
-      accountType: editTarget.value.accountType || '',
-      emailAddress: editTarget.value.emailAddress || '',
-      isActive: editTarget.value.isActive ?? true,
-    })
-    ElMessage.success('已更新')
-    editTarget.value.tenancyDes = editNameValue.value
-    editNameVisible.value = false
-  } catch (e: any) { ElMessage.error(e.message) }
-  finally { editSaving.value = false }
-}
-
-// --- edit cost ---
-function openEditCost(row: Tenant) {
-  editTarget.value = row; editCostValue.value = row.accountCost || ''; editCostVisible.value = true
-}
-async function saveAccountCost() {
-  if (!editTarget.value) return
-  editSaving.value = true
-  try {
-    await request.put(`/tenants/${editTarget.value.id}`, {
-      tenancyName: editTarget.value.tenancyName || editTarget.value.userName,
-      tenancyDes: editTarget.value.tenancyDes || '',
-      accountType: editTarget.value.accountType || '',
-      emailAddress: editTarget.value.emailAddress || '',
-      isActive: editTarget.value.isActive ?? true,
-    })
-    ElMessage.success('已更新')
-    editTarget.value.accountCost = editCostValue.value
-    editCostVisible.value = false
-  } catch (e: any) { ElMessage.error(e.message) }
-  finally { editSaving.value = false }
-}
-
 // --- export ---
 async function doExport() {
   if (!exportTarget.value) return
