@@ -22,49 +22,32 @@
 
     <!-- Stat cards -->
     <div class="stat-grid">
-      <component
-        v-for="card in statCards"
-        :key="card.label"
-        :is="card.link ? 'router-link' : 'div'"
-        :to="card.link"
-        class="stat-card"
-        :class="{ 'stat-card--link': card.link }"
-      >
-        <div class="stat-header">
-          <span class="stat-icon">
-            <el-icon :size="16"><component :is="card.icon" /></el-icon>
-          </span>
-          <span class="stat-label">{{ card.label }}</span>
-        </div>
-        <div class="stat-body">
-          <span class="stat-value">{{ card.value }}</span>
-          <span v-if="card.sub" class="stat-sub">{{ card.sub }}</span>
-        </div>
-        <div class="stat-rule"></div>
-        <div class="stat-status">
-          <span class="status-dot" :class="'status-dot--' + card.statusColor"></span>
-          <span class="stat-status-text">{{ card.statusText }}</span>
-        </div>
-      </component>
-
-      <!-- Engine stat card -->
-      <router-link to="/boot" class="stat-card stat-card--link">
-        <div class="stat-header">
-          <span class="stat-icon">
-            <el-icon :size="16"><SetUp /></el-icon>
-          </span>
-          <span class="stat-label">抢机引擎</span>
-        </div>
-        <div class="stat-body">
-          <span class="stat-value">{{ engine.runningTasks ?? 0 }}</span>
-          <span class="stat-sub"> / {{ engine.totalTasks ?? 0 }}</span>
-        </div>
-        <div class="stat-rule"></div>
-        <div class="stat-status">
-          <span class="status-dot" :class="engineRunning ? 'status-dot--up' : 'status-dot--down'"></span>
-          <span class="stat-status-text">{{ engineRunning ? '运行中' : '已停止' }}</span>
-        </div>
-      </router-link>
+      <StatusCard
+        :value="stats.onlineCount"
+        label="在线实例"
+        :icon="Monitor"
+        :sub="stats.instanceCount ? `/ ${stats.instanceCount}` : undefined"
+        status="up"
+        :status-text="onlineRateText"
+        link="/instances"
+      />
+      <StatusCard
+        :value="stats.tenantCount"
+        label="租户数量"
+        :icon="User"
+        status="idle"
+        status-text="已配置"
+        link="/tenants"
+      />
+      <StatusCard
+        :value="engine.runningTasks ?? 0"
+        label="抢机引擎"
+        :icon="SetUp"
+        :sub="`/ ${engine.totalTasks ?? 0}`"
+        :status="engineRunning ? 'up' : 'down'"
+        :status-text="engineRunning ? '运行中' : '已停止'"
+        link="/boot"
+      />
     </div>
 
     <!-- Engine + Channels -->
@@ -157,12 +140,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import {
-  Refresh, Monitor, User, Connection,
+  Refresh, Monitor, User,
   SetUp, Bell, Link, InfoFilled, ArrowRight,
   ChatDotRound, Message, Notification,
   Platform, Share, Setting, Promotion, VideoCamera, Warning
 } from '@element-plus/icons-vue'
 import PageHeader from '../components/common/PageHeader.vue'
+import StatusCard from '../components/common/StatusCard.vue'
 import request from '../utils/request'
 import type { DashboardStats, EngineStatus, MessageChannels, SystemConfig } from '../types/api'
 
@@ -191,28 +175,12 @@ const engineRunning = computed(() => {
   return engine.value.parentActive > 0 || engine.value.registeredJobs > 0
 })
 
-const statCards = computed(() => [
-  {
-    label: '在线实例',
-    value: stats.value.onlineCount,
-    icon: Monitor,
-    sub: stats.value.instanceCount ? ` / ${stats.value.instanceCount}` : undefined,
-    statusColor: 'up',
-    statusText: stats.value.instanceCount
-      ? Math.round((stats.value.onlineCount / stats.value.instanceCount) * 100) + '% 在线率'
-      : '暂无数据',
-    link: '/instances',
-  },
-  {
-    label: '租户数量',
-    value: stats.value.tenantCount,
-    icon: User,
-    sub: undefined,
-    statusColor: 'idle',
-    statusText: '已配置',
-    link: '/tenants',
-  },
-])
+const onlineRateText = computed(() => {
+  if (stats.value.instanceCount) {
+    return `${Math.round((stats.value.onlineCount / stats.value.instanceCount) * 100)}% 在线率`
+  }
+  return '暂无数据'
+})
 
 const quickLinks = [
   { label: '抢机任务', path: '/boot', icon: Platform },
@@ -304,96 +272,9 @@ onMounted(loadAll)
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--space-4);
   margin-bottom: var(--space-6);
-}
-
-.stat-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: var(--space-4) var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.stat-card:hover {
-  border-color: var(--border-default);
-}
-
-.stat-card--link {
-  text-decoration: none;
-  color: inherit;
-  cursor: pointer;
-}
-
-.stat-card--link:hover {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-subtle);
-}
-
-/* Header row */
-.stat-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.stat-icon {
-  display: flex;
-  align-items: center;
-  color: var(--text-muted);
-}
-
-.stat-label {
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  color: var(--text-muted);
-  letter-spacing: var(--tracking-wide);
-}
-
-/* Value row */
-.stat-body {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-1);
-}
-
-.stat-value {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  line-height: 1;
-  letter-spacing: var(--tracking-tight);
-  font-variant-numeric: tabular-nums;
-}
-
-.stat-sub {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  font-weight: var(--font-medium);
-}
-
-/* Rule */
-.stat-rule {
-  height: 1px;
-  background: var(--border-subtle);
-}
-
-/* Status row */
-.stat-status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.stat-status-text {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  font-weight: var(--font-medium);
 }
 
 /* ============================================================
@@ -605,19 +486,13 @@ onMounted(loadAll)
 
 @media (max-width: 768px) {
   .stat-grid {
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: var(--space-3);
-  }
-
-  .stat-value {
-    font-size: var(--text-2xl);
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 480px) {
   .stat-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
-
 }
 </style>
