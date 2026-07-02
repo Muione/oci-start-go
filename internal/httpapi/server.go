@@ -60,6 +60,7 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.PUT("/tenants/:id", tenantUpdate(deps))
 	pro.GET("/tenants/:id/check", tenantCheck(deps))
 	pro.GET("/tenants/:id/export", tenantExport(deps))
+	pro.POST("/tenants/:id/account-cost", tenantAccountCostUpdate(deps))
 	pro.POST("/tenants/check-batch", tenantCheckBatch(deps))
 	pro.GET("/tenants/:id/email", tenantEmailGet(deps))
 	pro.POST("/tenants/:id/email", tenantEmailSave(deps))

@@ -323,6 +323,20 @@ func (s *TenantService) UpdateCost(ctx context.Context, tenancyName, accountCost
 	})
 }
 
+// UpdateCostByID updates the account cost for a tenant by its ID.
+// Looks up the tenant's tenancy name, then updates cloud_tenancy.
+func (s *TenantService) UpdateCostByID(ctx context.Context, id int64, cost string) error {
+	t, err := repo.New(s.store.Read).FindTenantByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("find tenant %d: %w", id, err)
+	}
+	tenancyName := ns(t.Tenancy)
+	if tenancyName == "" {
+		return fmt.Errorf("tenant %d has no tenancy name", id)
+	}
+	return s.UpdateCost(ctx, tenancyName, cost)
+}
+
 // Check tests whether a tenant's credentials are still valid by attempting
 // to list compartments via the OCI Identity API.
 func (s *TenantService) Check(ctx context.Context, id int64) CheckResult {

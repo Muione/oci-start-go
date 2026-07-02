@@ -105,3 +105,31 @@ func tenantCheckBatch(deps *Deps) gin.HandlerFunc {
 		response.OK(c, response.SuccessData(results))
 	}
 }
+
+// tenantAccountCostUpdate — POST /tenants/:id/account-cost
+func tenantAccountCostUpdate(deps *Deps) gin.HandlerFunc {
+	type costReq struct {
+		Cost string `json:"cost"`
+	}
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "参数 id 无效")
+			return
+		}
+		var req costReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.Fail(c, http.StatusBadRequest, "请求数据无效: "+err.Error())
+			return
+		}
+		if req.Cost == "" {
+			response.Fail(c, http.StatusBadRequest, "成本不能为空")
+			return
+		}
+		if err := deps.Tenant.UpdateCostByID(c.Request.Context(), id, req.Cost); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "更新成本失败: "+err.Error())
+			return
+		}
+		response.OK(c, response.Success())
+	}
+}
