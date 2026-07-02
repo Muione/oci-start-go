@@ -3,11 +3,11 @@
 // MFAUtils, NotificationUtils from the Java reference implementation.
 //
 // Identity Domains (SCIM) API support:
-// The Go SDK v65 does not include the identitydomains subpackage (it exists in
-// the Java SDK as IdentityDomainsClient). Password policy, MFA factor settings,
-// and notification settings are all managed through the Identity Domain's SCIM
-// REST endpoints. This file calls those endpoints directly using OCI-signed HTTP
-// requests, following the same patterns as the Java MFAUtils / NotificationUtils.
+// MFA factor settings and notification settings use the OCI Go SDK
+// identitydomains client (NewIdentityDomainsClientWithConfigurationProvider),
+// which handles IDCS token auth internally — raw OCI-signed HTTP gets 401 on
+// /admin/v1 endpoints. Password policy still calls the SCIM REST endpoints
+// directly via doIdDomainCall (see GetPasswordPolicy/UpdatePasswordPolicy).
 package oci
 
 import (
@@ -22,6 +22,7 @@ import (
 
 	"github.com/oracle/oci-go-sdk/v65/common"
 	"github.com/oracle/oci-go-sdk/v65/identity"
+	"github.com/oracle/oci-go-sdk/v65/identitydomains"
 )
 
 // ─── Compartment operations ────────────────────────────────────────────────
@@ -96,6 +97,21 @@ func getDomainURL(ctx context.Context, prov common.ConfigurationProvider, tenanc
 		return "", fmt.Errorf("identity domain has no URL")
 	}
 	return *domain.Url, nil
+}
+
+// getIdDomainsClient builds an IdentityDomainsClient configured with the
+// tenant's domain URL. The SDK client handles IDCS token authentication
+// internally (raw HTTP + DefaultRequestSigner gets 401 on /admin/v1 endpoints).
+func getIdDomainsClient(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) (identitydomains.IdentityDomainsClient, error) {
+	domainURL, err := getDomainURL(ctx, prov, tenancyOCID)
+	if err != nil {
+		return identitydomains.IdentityDomainsClient{}, fmt.Errorf("get domain URL: %w", err)
+	}
+	client, err := identitydomains.NewIdentityDomainsClientWithConfigurationProvider(prov, domainURL)
+	if err != nil {
+		return identitydomains.IdentityDomainsClient{}, fmt.Errorf("create identity domains client: %w", err)
+	}
+	return client, nil
 }
 
 // httpClient is the shared HTTP client used for Identity Domains SCIM calls.
@@ -602,84 +618,56 @@ type MfaStatus struct {
 	PhoneCallEnabled        bool `json:"phoneCallEnabled"`
 }
 
-// idDomainAuthFactorSetting represents a SCIM AuthenticationFactorSetting
-// resource from the Identity Domain.
-type idDomainAuthFactorSetting struct {
-	ID                          string   `json:"id"`
-	EmailEnabled                *bool    `json:"emailEnabled"`
-	SmsEnabled                  *bool    `json:"smsEnabled"`
-	TotpEnabled                 *bool    `json:"totpEnabled"`
-	PushEnabled                 *bool    `json:"pushEnabled"`
-	SecurityQuestionsEnabled    *bool    `json:"securityQuestionsEnabled"`
-	FidoAuthenticatorEnabled    *bool    `json:"fidoAuthenticatorEnabled"`
-	PhoneCallEnabled            *bool    `json:"phoneCallEnabled"`
-	Schemas                     []string `json:"schemas"`
-}
-
-type idDomainAuthFactorPutBody struct {
-	Schemas                   []string `json:"schemas"`
-	EmailEnabled              *bool    `json:"emailEnabled,omitempty"`
-	SmsEnabled                *bool    `json:"smsEnabled,omitempty"`
-	TotpEnabled               *bool    `json:"totpEnabled,omitempty"`
-	PushEnabled               *bool    `json:"pushEnabled,omitempty"`
-	SecurityQuestionsEnabled  *bool    `json:"securityQuestionsEnabled,omitempty"`
-	FidoAuthenticatorEnabled  *bool    `json:"fidoAuthenticatorEnabled,omitempty"`
-	PhoneCallEnabled          *bool    `json:"phoneCallEnabled,omitempty"`
-}
-
 const authFactorSettingsID = "AuthenticationFactorSettings"
 
 // GetMfaStatus retrieves the current MFA configuration.
 // Java reference: MFAUtils.getMFAConfiguration
 func GetMfaStatus(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) (*MfaStatus, error) {
-	domainURL, err := getDomainURL(ctx, prov, tenancyOCID)
+	client, err := getIdDomainsClient(ctx, prov, tenancyOCID)
 	if err != nil {
-		return nil, fmt.Errorf("get domain URL: %w", err)
+		return nil, err
 	}
-
-	resp, err := doIdDomainCall(ctx, prov, "GET", domainURL,
-		"/admin/v1/AuthenticationFactorSettings/"+authFactorSettingsID, nil)
+	resp, err := client.GetAuthenticationFactorSetting(ctx, identitydomains.GetAuthenticationFactorSettingRequest{
+		AuthenticationFactorSettingId: common.String(authFactorSettingsID),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("get auth factor settings: %w", err)
 	}
-	defer resp.Body.Close()
-
-	var settings idDomainAuthFactorSetting
-	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
-		return nil, fmt.Errorf("decode auth factor settings: %w", err)
-	}
-
+	s := resp.AuthenticationFactorSetting
 	return &MfaStatus{
-		TotpEnabled:              boolPtrVal(settings.TotpEnabled),
-		EmailEnabled:             boolPtrVal(settings.EmailEnabled),
-		SmsEnabled:               boolPtrVal(settings.SmsEnabled),
-		PushEnabled:              boolPtrVal(settings.PushEnabled),
-		SecurityQuestionsEnabled: boolPtrVal(settings.SecurityQuestionsEnabled),
-		FidoAuthenticatorEnabled: boolPtrVal(settings.FidoAuthenticatorEnabled),
-		PhoneCallEnabled:         boolPtrVal(settings.PhoneCallEnabled),
+		TotpEnabled:              boolPtrVal(s.TotpEnabled),
+		EmailEnabled:             boolPtrVal(s.EmailEnabled),
+		SmsEnabled:               boolPtrVal(s.SmsEnabled),
+		PushEnabled:              boolPtrVal(s.PushEnabled),
+		SecurityQuestionsEnabled: boolPtrVal(s.SecurityQuestionsEnabled),
+		FidoAuthenticatorEnabled: boolPtrVal(s.FidoAuthenticatorEnabled),
+		PhoneCallEnabled:         boolPtrVal(s.PhoneCallEnabled),
 	}, nil
 }
 
 // ToggleEmailMFA enables or disables email-based MFA for the tenancy.
 // Returns the new state (true = enabled, false = disabled).
-// Java reference: MFAUtils.enableEmailMFA
+// Java reference: MFAUtils.enableEmailMFA (GET → modify → PUT full object)
 func ToggleEmailMFA(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string, enable bool) (bool, error) {
-	domainURL, err := getDomainURL(ctx, prov, tenancyOCID)
+	client, err := getIdDomainsClient(ctx, prov, tenancyOCID)
 	if err != nil {
-		return false, fmt.Errorf("get domain URL: %w", err)
+		return false, err
 	}
-
-	putBody := idDomainAuthFactorPutBody{
-		Schemas:      []string{"urn:ietf:params:scim:schemas:oracle:idcs:AuthenticationFactorSettings"},
-		EmailEnabled: common.Bool(enable),
+	getResp, err := client.GetAuthenticationFactorSetting(ctx, identitydomains.GetAuthenticationFactorSettingRequest{
+		AuthenticationFactorSettingId: common.String(authFactorSettingsID),
+	})
+	if err != nil {
+		return false, fmt.Errorf("get auth factor settings: %w", err)
 	}
-
-	resp, err := doIdDomainCall(ctx, prov, "PUT", domainURL,
-		"/admin/v1/AuthenticationFactorSettings/"+authFactorSettingsID, putBody)
+	settings := getResp.AuthenticationFactorSetting // copy by value
+	settings.EmailEnabled = common.Bool(enable)
+	_, err = client.PutAuthenticationFactorSetting(ctx, identitydomains.PutAuthenticationFactorSettingRequest{
+		AuthenticationFactorSettingId: common.String(authFactorSettingsID),
+		AuthenticationFactorSetting:   settings,
+	})
 	if err != nil {
 		return false, fmt.Errorf("update auth factor settings: %w", err)
 	}
-	resp.Body.Close()
 	return enable, nil
 }
 
@@ -698,47 +686,24 @@ type NotifRecipient struct {
 	State string `json:"state"`
 }
 
-// idDomainNotificationSetting represents a SCIM NotificationSettings resource.
-type idDomainNotificationSetting struct {
-	ID                              string    `json:"id"`
-	NotificationEnabled             *bool     `json:"notificationEnabled"`
-	TestModeEnabled                 *bool     `json:"testModeEnabled"`
-	TestRecipients                  []string  `json:"testRecipients"`
-	SendNotificationsToSecondaryEmail *bool   `json:"sendNotificationsToSecondaryEmail"`
-	Schemas                         []string  `json:"schemas"`
-}
-
 const notificationSettingsID = "NotificationSettings"
-
-// notifPutBody is the PUT body for updating notification settings.
-type notifPutBody struct {
-	Schemas      []string `json:"schemas"`
-	TestModeEnabled bool   `json:"testModeEnabled"`
-	TestRecipients  []string `json:"testRecipients"`
-}
 
 // GetNotificationRecipients returns the current notification email recipients.
 // Java reference: NotificationUtils.getCurrentRecipients
 func GetNotificationRecipients(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) ([]NotifRecipient, error) {
-	domainURL, err := getDomainURL(ctx, prov, tenancyOCID)
+	client, err := getIdDomainsClient(ctx, prov, tenancyOCID)
 	if err != nil {
-		return nil, fmt.Errorf("get domain URL: %w", err)
+		return nil, err
 	}
-
-	resp, err := doIdDomainCall(ctx, prov, "GET", domainURL,
-		"/admin/v1/NotificationSettings/"+notificationSettingsID, nil)
+	resp, err := client.GetNotificationSetting(ctx, identitydomains.GetNotificationSettingRequest{
+		NotificationSettingId: common.String(notificationSettingsID),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("get notification settings: %w", err)
 	}
-	defer resp.Body.Close()
-
-	var settings idDomainNotificationSetting
-	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
-		return nil, fmt.Errorf("decode notification settings: %w", err)
-	}
-
-	out := make([]NotifRecipient, 0, len(settings.TestRecipients))
-	for i, email := range settings.TestRecipients {
+	recipients := resp.NotificationSetting.TestRecipients
+	out := make([]NotifRecipient, 0, len(recipients))
+	for i, email := range recipients {
 		out = append(out, NotifRecipient{
 			ID:    i + 1,
 			Email: email,
@@ -751,23 +716,26 @@ func GetNotificationRecipients(ctx context.Context, prov common.ConfigurationPro
 // UpdateNotificationRecipients replaces the entire notification recipients list.
 // Java reference: NotificationUtils.updateNotificationRecipients
 func UpdateNotificationRecipients(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string, emails []string) error {
-	domainURL, err := getDomainURL(ctx, prov, tenancyOCID)
+	client, err := getIdDomainsClient(ctx, prov, tenancyOCID)
 	if err != nil {
-		return fmt.Errorf("get domain URL: %w", err)
+		return err
 	}
-
-	putBody := notifPutBody{
-		Schemas:        []string{"urn:ietf:params:scim:schemas:oracle:idcs:NotificationSettings"},
-		TestModeEnabled: true,
-		TestRecipients:  emails,
+	getResp, err := client.GetNotificationSetting(ctx, identitydomains.GetNotificationSettingRequest{
+		NotificationSettingId: common.String(notificationSettingsID),
+	})
+	if err != nil {
+		return fmt.Errorf("get notification settings: %w", err)
 	}
-
-	resp, err := doIdDomainCall(ctx, prov, "PUT", domainURL,
-		"/admin/v1/NotificationSettings/"+notificationSettingsID, putBody)
+	settings := getResp.NotificationSetting // copy by value
+	settings.TestModeEnabled = common.Bool(true)
+	settings.TestRecipients = emails
+	_, err = client.PutNotificationSetting(ctx, identitydomains.PutNotificationSettingRequest{
+		NotificationSettingId: common.String(notificationSettingsID),
+		NotificationSetting:   settings,
+	})
 	if err != nil {
 		return fmt.Errorf("update notification settings: %w", err)
 	}
-	resp.Body.Close()
 	return nil
 }
 
