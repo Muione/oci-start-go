@@ -33,6 +33,7 @@ sql:
       - migrations/0007_console_connection_timestamp.up.sql
       - migrations/0008_shape_image_cache.up.sql
       - migrations/0011_subscription_fields.up.sql
+      - migrations/0012_clear_stale_register_time.up.sql
     gen:
       go:
         package: "repo"

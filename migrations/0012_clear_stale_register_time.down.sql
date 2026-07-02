@@ -1,0 +1,2 @@
+-- No-op: cannot restore the previous (stale) register_time values after NULL.
+-- They will be repopulated from OCI on the next tenant sync.

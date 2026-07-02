@@ -122,11 +122,12 @@ func (s *TenantService) Save(ctx context.Context, in SaveInput) error {
 	if err := repo.New(s.store.Write).InsertTenant(ctx, params); err != nil {
 		return err
 	}
-	// Also insert register_detail with current time as register_time (OCI subscription timeStart).
-	// This is used for active-days calculation and matches Java register_time behavior.
+	// Insert register_detail WITHOUT register_time — it's only set on OCI sync
+	// (UpdateAccountDetail) from the real subscription timeStart. Leaving it null
+	// makes active-days fall back to created_at, and GetSubscriptionDetail fall
+	// back to live OCI (correct subscription start) until the first sync.
 	_ = repo.New(s.store.Write).UpsertRegisterDetail(ctx, repo.UpsertRegisterDetailParams{
 		TenantID:     in.TenantID,
-		RegisterTime: nullStr(now),
 		CloudType:    nullInt64(cloudType),
 		CreatedTime:  nullStr(now),
 		UpdatedTime:  nullStr(now),

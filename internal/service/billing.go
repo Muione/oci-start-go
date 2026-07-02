@@ -52,15 +52,12 @@ func (s *BillingService) GetSubscriptionDetail(ctx context.Context, tenantID int
 	if err != nil {
 		return nil, err
 	}
-	// Persist for next time.
+	// Persist for next time. Only set register_time from a real subscription
+	// timeStart — never fall back to now (that would store the fetch time as
+	// the subscription start).
 	now := time.Now().Format("2006-01-02 15:04:05")
-	registerTime := now
-	if result.TimeStart != nil {
-		registerTime = result.TimeStart.Time.Format("2006-01-02 15:04:05")
-	}
-	_ = repo.New(s.store.Write).UpsertRegisterDetail(ctx, repo.UpsertRegisterDetailParams{
+	regParams := repo.UpsertRegisterDetailParams{
 		TenantID:               creds.UserID,
-		RegisterTime:           nullStr(registerTime),
 		EmailAddress:           nullStr(result.EmailAddress),
 		SubscriptionPlanNumber: nullStr(result.SubscriptionPlanNumber),
 		UpgradeState:           nullStr(result.UpgradeState),
@@ -68,7 +65,11 @@ func (s *BillingService) GetSubscriptionDetail(ctx context.Context, tenantID int
 		IsIntentToPay:          nullInt64(boolToInt(result.IsIntentToPay)),
 		CreatedTime:            nullStr(now),
 		UpdatedTime:            nullStr(now),
-	})
+	}
+	if result.TimeStart != nil {
+		regParams.RegisterTime = nullStr(result.TimeStart.Time.Format("2006-01-02 15:04:05"))
+	}
+	_ = repo.New(s.store.Write).UpsertRegisterDetail(ctx, regParams)
 	return result, nil
 }
 

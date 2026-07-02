@@ -218,7 +218,6 @@ func (s *TenantUserService) UpdateAccountDetail(ctx context.Context, tenantID in
 
 	// Fetch subscription info to get real planType (FREE_TIER/PAYG) and timeStart.
 	accountType := detail.AccountType
-	registerTime := time.Now().Format("2006-01-02 15:04:05") // fallback
 	var subInfo *oci.SubscriptionInfo
 	_ = oci.WithProxy(ctx, s.pool, creds, s.masterKey, func(clients oci.Clients) error {
 		var subErr error
@@ -229,9 +228,6 @@ func (s *TenantUserService) UpdateAccountDetail(ctx context.Context, tenantID in
 		}
 		if subInfo.PlanType != "" {
 			accountType = subInfo.PlanType
-		}
-		if subInfo.TimeStart != nil {
-			registerTime = subInfo.TimeStart.Time.Format("2006-01-02 15:04:05")
 		}
 		return nil
 	})
@@ -247,22 +243,32 @@ func (s *TenantUserService) UpdateAccountDetail(ctx context.Context, tenantID in
 		return nil, fmt.Errorf("update tenant fields: %w", err)
 	}
 
-	// Persist full subscription data to register_detail.
-	now := time.Now().Format("2006-01-02 15:04:05")
-	regParams := repo.UpsertRegisterDetailParams{
-		TenantID:     creds.UserID,
-		RegisterTime: nullStr(registerTime),
-		CreatedTime:  nullStr(now),
-		UpdatedTime:  nullStr(now),
-	}
+	// Persist full subscription data to register_detail — ONLY on successful
+	// fetch, and only set register_time from a real subscription timeStart
+	// (never fall back to now, which would store the sync time as the
+	// subscription start). Preserve any existing register_time otherwise.
 	if subInfo != nil {
-		regParams.EmailAddress = nullStr(subInfo.EmailAddress)
-		regParams.SubscriptionPlanNumber = nullStr(subInfo.SubscriptionPlanNumber)
-		regParams.UpgradeState = nullStr(subInfo.UpgradeState)
-		regParams.CurrencyCode = nullStr(subInfo.CurrencyCode)
-		regParams.IsIntentToPay = nullInt64(boolToInt(subInfo.IsIntentToPay))
+		now := time.Now().Format("2006-01-02 15:04:05")
+		var existingRegisterTime string
+		if rd, e := repo.New(s.store.Read).FindRegisterDetailByTenantId(ctx, creds.UserID); e == nil {
+			existingRegisterTime = ns(rd.RegisterTime)
+		}
+		regParams := repo.UpsertRegisterDetailParams{
+			TenantID:                creds.UserID,
+			RegisterTime:            nullStr(existingRegisterTime),
+			CreatedTime:             nullStr(now),
+			UpdatedTime:             nullStr(now),
+			EmailAddress:            nullStr(subInfo.EmailAddress),
+			SubscriptionPlanNumber:  nullStr(subInfo.SubscriptionPlanNumber),
+			UpgradeState:            nullStr(subInfo.UpgradeState),
+			CurrencyCode:            nullStr(subInfo.CurrencyCode),
+			IsIntentToPay:           nullInt64(boolToInt(subInfo.IsIntentToPay)),
+		}
+		if subInfo.TimeStart != nil {
+			regParams.RegisterTime = nullStr(subInfo.TimeStart.Time.Format("2006-01-02 15:04:05"))
+		}
+		_ = repo.New(s.store.Write).UpsertRegisterDetail(ctx, regParams)
 	}
-	_ = repo.New(s.store.Write).UpsertRegisterDetail(ctx, regParams)
 	return detail, nil
 }
 
