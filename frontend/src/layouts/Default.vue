@@ -32,24 +32,36 @@
 
       <!-- Navigation -->
       <nav class="nav">
+        <template v-for="group in navGroups" :key="group.label">
+          <div v-if="!collapsed" class="nav-group-label">{{ group.label }}</div>
+          <router-link
+            v-for="item in group.items"
+            :key="item.path"
+            :to="item.path"
+            class="nav-item"
+            :class="{ 'nav-item--active': isActive(item.path) }"
+            @click="onNavClick"
+          >
+            <span class="nav-icon">
+              <el-icon :size="18"><component :is="item.icon" /></el-icon>
+            </span>
+            <transition name="fade-text">
+              <span v-if="!collapsed" class="nav-label">{{ item.label }}</span>
+            </transition>
+          </router-link>
+        </template>
+        <!-- System settings — standalone at bottom -->
         <router-link
-          v-for="item in navItems"
-          :key="item.path"
-          :to="item.path"
+          to="/settings"
           class="nav-item"
-          :class="{ 'nav-item--active': isActive(item.path) }"
+          :class="{ 'nav-item--active': isActive('/settings') }"
           @click="onNavClick"
         >
           <span class="nav-icon">
-            <el-icon :size="18"><component :is="item.icon" /></el-icon>
+            <el-icon :size="18"><Setting /></el-icon>
           </span>
           <transition name="fade-text">
-            <span v-if="!collapsed" class="nav-label">{{ item.label }}</span>
-          </transition>
-          <transition name="fade-text">
-            <span v-if="!collapsed && item.count !== undefined && item.count > 0" class="nav-badge">
-              {{ item.count }}
-            </span>
+            <span v-if="!collapsed" class="nav-label">系统设置</span>
           </transition>
         </router-link>
       </nav>
@@ -133,22 +145,45 @@ interface NavItem {
   path: string
   label: string
   icon: any
-  count?: number
 }
 
-const navItems: NavItem[] = [
-  { path: '/',           label: '仪表盘',     icon: DataBoard },
-  { path: '/tenants',    label: '租户管理',   icon: Connection },
-  { path: '/boot',       label: '抢机任务',   icon: VideoPlay },
-  { path: '/instances',  label: '实例管理',   icon: Monitor },
-  { path: '/vnic',       label: 'VNIC 管理',  icon: Connection },
-  { path: '/dns',        label: 'DNS 管理',   icon: Coin },
-  { path: '/storage',    label: '对象存储',   icon: Folder },
-  { path: '/terminal',   label: 'SSH 终端',   icon: Operation },
-  { path: '/console',    label: 'VNC 控制台', icon: Monitor },
-  { path: '/rescue',     label: '实例救援',   icon: WarningFilled },
-  { path: '/migration',  label: '数据迁移',   icon: Download },
-  { path: '/settings',   label: '系统设置',   icon: Setting },
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
+const navGroups: NavGroup[] = [
+  {
+    label: '概览',
+    items: [
+      { path: '/', label: '仪表盘', icon: DataBoard },
+    ]
+  },
+  {
+    label: '资源管理',
+    items: [
+      { path: '/tenants', label: '租户管理', icon: Connection },
+      { path: '/instances', label: '实例管理', icon: Monitor },
+      { path: '/vnic', label: 'VNIC 管理', icon: Connection },
+      { path: '/storage', label: '对象存储', icon: Folder },
+    ]
+  },
+  {
+    label: '运维工具',
+    items: [
+      { path: '/boot', label: '抢机任务', icon: VideoPlay },
+      { path: '/dns', label: 'DNS 管理', icon: Coin },
+      { path: '/migration', label: '数据迁移', icon: Download },
+      { path: '/rescue', label: '实例救援', icon: WarningFilled },
+    ]
+  },
+  {
+    label: '访问终端',
+    items: [
+      { path: '/terminal', label: 'SSH 终端', icon: Operation },
+      { path: '/console', label: 'VNC 控制台', icon: Monitor },
+    ]
+  },
 ]
 
 function isActive(path: string): boolean {
@@ -268,6 +303,16 @@ async function logout() {
   padding: var(--space-2) var(--space-2);
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.nav-group-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  padding: var(--space-3) var(--space-3) var(--space-1);
+  white-space: nowrap;
 }
 
 .nav-item {
