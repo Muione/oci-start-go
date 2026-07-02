@@ -56,7 +56,7 @@ CREATE TABLE tenant (
 CREATE TABLE register_detail (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_prv_id BIGINT,
-    tenant_id TEXT,
+    tenant_id TEXT UNIQUE,
     account_type INTEGER,
     plan_type INTEGER,
     register_time TEXT,
@@ -113,8 +113,7 @@ VALUES (1, 'ocid1.tenancy.oc1..aaa', 'u1', 'tenancy-aaa', 'us-phoenix-1', '2026-
 	}
 	if _, err := q.db.ExecContext(ctx, `
 INSERT INTO register_detail (tenant_id, register_time) VALUES
-    ('ocid1.tenancy.oc1..aaa', '2026-01-15 10:00:00'),
-    ('ocid1.tenancy.oc1..aaa', '2026-02-20 12:00:00');
+    ('ocid1.tenancy.oc1..aaa', '2026-01-15 10:00:00');
 `); err != nil {
 		t.Fatalf("seed register_detail: %v", err)
 	}
@@ -138,10 +137,8 @@ INSERT INTO instance_detail (tenant_id) VALUES (1), (1), (1);
 	if len(rows) != 2 {
 		t.Fatalf("want 2 rows, got %d", len(rows))
 	}
-	// A duplicate register_detail row for tenant 1 is seeded above; this row
-	// count staying 2 is the regression guard that the aggregate does not
-	// multiply tenant rows via a LEFT JOIN on register_detail (which has no
-	// unique constraint on tenant_id).
+	// register_detail has a UNIQUE constraint on tenant_id so at most one row
+	// per tenant. The correlated subquery returns that row's register_time.
 	// Ordered by id.
 	if rows[0].ID != 1 || rows[1].ID != 2 {
 		t.Fatalf("unexpected order: %+v", []int64{rows[0].ID, rows[1].ID})

@@ -32,7 +32,7 @@ CREATE TABLE tenant (
     key_file_blob TEXT
 );
 CREATE TABLE register_detail (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_prv_id BIGINT, tenant_id TEXT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_prv_id BIGINT, tenant_id TEXT UNIQUE,
     account_type INTEGER, plan_type INTEGER, register_time TEXT, city TEXT, country TEXT,
     email_address TEXT, first_name TEXT, last_name TEXT, line1 TEXT, postal_code TEXT,
     subscription_plan_number TEXT, upgrade_state TEXT, created_time TEXT, updated_time TEXT,

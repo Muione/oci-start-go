@@ -244,18 +244,30 @@ func (s *TenantUserService) UpdateAccountDetail(ctx context.Context, tenantID in
 	}
 
 	// Persist full subscription data to register_detail — ONLY on successful
-	// fetch, and only set register_time from a real subscription timeStart
-	// (never fall back to now, which would store the sync time as the
-	// subscription start). Preserve any existing register_time otherwise.
+	// fetch. register_time priority: (1) subscription timeStart, (2) existing
+	// value preserved from prior sync, (3) tenancy TimeCreated from Identity
+	// API as last resort. Never fall back to "now" (that stores the sync time
+	// as the subscription start).
 	if subInfo != nil {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		var existingRegisterTime string
+		var registerTime string
+		// Check existing value first.
 		if rd, e := repo.New(s.store.Read).FindRegisterDetailByTenantId(ctx, creds.UserID); e == nil {
-			existingRegisterTime = ns(rd.RegisterTime)
+			registerTime = ns(rd.RegisterTime)
+		}
+		// Prefer real subscription timeStart.
+		if subInfo.TimeStart != nil {
+			registerTime = subInfo.TimeStart.Time.Format("2006-01-02 15:04:05")
+		}
+		// Fallback to tenancy creation time if still empty.
+		if registerTime == "" {
+			if tc, err := oci.GetTenancyTimeCreated(ctx, prov, creds.Tenancy); err == nil && !tc.IsZero() {
+				registerTime = tc.Format("2006-01-02 15:04:05")
+			}
 		}
 		regParams := repo.UpsertRegisterDetailParams{
 			TenantID:                creds.UserID,
-			RegisterTime:            nullStr(existingRegisterTime),
+			RegisterTime:            nullStr(registerTime),
 			CreatedTime:             nullStr(now),
 			UpdatedTime:             nullStr(now),
 			EmailAddress:            nullStr(subInfo.EmailAddress),
@@ -263,9 +275,6 @@ func (s *TenantUserService) UpdateAccountDetail(ctx context.Context, tenantID in
 			UpgradeState:            nullStr(subInfo.UpgradeState),
 			CurrencyCode:            nullStr(subInfo.CurrencyCode),
 			IsIntentToPay:           nullInt64(boolToInt(subInfo.IsIntentToPay)),
-		}
-		if subInfo.TimeStart != nil {
-			regParams.RegisterTime = nullStr(subInfo.TimeStart.Time.Format("2006-01-02 15:04:05"))
 		}
 		_ = repo.New(s.store.Write).UpsertRegisterDetail(ctx, regParams)
 	}
