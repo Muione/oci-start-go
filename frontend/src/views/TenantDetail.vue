@@ -64,7 +64,11 @@
         <el-skeleton v-if="instLoading" :rows="5" animated/>
         <el-table v-else :data="instances" border stripe size="small">
           <template #empty><el-empty description="该租户下暂无实例" :image-size="60"/></template>
-          <el-table-column prop="displayName" label="名称" min-width="160"/>
+          <el-table-column prop="displayName" label="名称" min-width="160">
+            <template #default="{ row }">
+              <el-link type="primary" @click="router.push(`/instances/${row.id}`)">{{ row.displayName }}</el-link>
+            </template>
+          </el-table-column>
           <el-table-column prop="instanceId" label="实例 ID" min-width="200" show-overflow-tooltip/>
           <el-table-column prop="shape" label="Shape" min-width="140"/>
           <el-table-column label="状态" width="100"><template #default="{ row }"><div class="state-cell"><span class="status-dot" :class="instStateDot(row.state)"/>{{ row.state || '—' }}</div></template></el-table-column>
@@ -479,7 +483,7 @@ const emailDisabling = ref(false)
 // social
 const socialList = ref<any[]>([])
 const socialLoading = ref(false)
-const socialTypes = ['GITHUB', 'GOOGLE', 'WEIXIN']
+const socialTypes = ['GITHUB', 'GOOGLE']
 const socialEditVisible = ref(false)
 const socialEditSaving = ref(false)
 const socialEditId = ref('')

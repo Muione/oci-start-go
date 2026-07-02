@@ -65,21 +65,23 @@ func QueryCost(ctx context.Context, c Clients, tenancyOCID string, startUTC, end
 	return out, nil
 }
 
-// QueryYesterdayCost returns DAILY cost for yesterday (00:00 to 00:00 UTC).
-func QueryYesterdayCost(ctx context.Context, c Clients, tenancyOCID string) ([]CostSummary, error) {
-	now := time.Now().UTC()
-	start := time.Date(now.Year(), now.Month(), now.Day()-1, 0, 0, 0, 0, time.UTC)
-	end := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	return QueryCost(ctx, c, tenancyOCID, start, end, nil, usageapi.RequestSummarizedUsagesDetailsGranularityDaily)
-}
-
 // QueryTodayCost returns DAILY cost for today (00:00 to start of tomorrow UTC).
 // OCI Usage API requires all dates to have zero hours/minutes/seconds.
 func QueryTodayCost(ctx context.Context, c Clients, tenancyOCID string) ([]CostSummary, error) {
 	now := time.Now().UTC()
 	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	end := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
-	return QueryCost(ctx, c, tenancyOCID, start, end, nil, usageapi.RequestSummarizedUsagesDetailsGranularityDaily)
+	groupBy := []string{"service", "skuName", "region"}
+	return QueryCost(ctx, c, tenancyOCID, start, end, groupBy, usageapi.RequestSummarizedUsagesDetailsGranularityDaily)
+}
+
+// QueryYesterdayCost returns DAILY cost for yesterday (00:00 to 00:00 UTC).
+func QueryYesterdayCost(ctx context.Context, c Clients, tenancyOCID string) ([]CostSummary, error) {
+	now := time.Now().UTC()
+	start := time.Date(now.Year(), now.Month(), now.Day()-1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	groupBy := []string{"service", "skuName", "region"}
+	return QueryCost(ctx, c, tenancyOCID, start, end, groupBy, usageapi.RequestSummarizedUsagesDetailsGranularityDaily)
 }
 
 // QueryCurrentMonthCost returns MONTHLY cost from the 1st of the current month to the 1st of next month UTC.
@@ -88,7 +90,8 @@ func QueryCurrentMonthCost(ctx context.Context, c Clients, tenancyOCID string) (
 	now := time.Now().UTC()
 	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
-	return QueryCost(ctx, c, tenancyOCID, start, end, nil, usageapi.RequestSummarizedUsagesDetailsGranularityMonthly)
+	groupBy := []string{"service", "skuName", "region"}
+	return QueryCost(ctx, c, tenancyOCID, start, end, groupBy, usageapi.RequestSummarizedUsagesDetailsGranularityMonthly)
 }
 
 // QueryLastMonthCost returns MONTHLY cost for the entire previous month.
@@ -96,7 +99,8 @@ func QueryLastMonthCost(ctx context.Context, c Clients, tenancyOCID string) ([]C
 	now := time.Now().UTC()
 	start := time.Date(now.Year(), now.Month()-1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	return QueryCost(ctx, c, tenancyOCID, start, end, nil, usageapi.RequestSummarizedUsagesDetailsGranularityMonthly)
+	groupBy := []string{"service", "skuName", "region"}
+	return QueryCost(ctx, c, tenancyOCID, start, end, groupBy, usageapi.RequestSummarizedUsagesDetailsGranularityMonthly)
 }
 
 // QueryCustomCost queries cost for a custom date range. Dates should be in "2006-01-02" format.
@@ -110,5 +114,6 @@ func QueryCustomCost(ctx context.Context, c Clients, tenancyOCID string, startSt
 	if err != nil {
 		return nil, fmt.Errorf("invalid end date %q: %w", endStr, err)
 	}
-	return QueryCost(ctx, c, tenancyOCID, start.UTC(), end.UTC(), nil, usageapi.RequestSummarizedUsagesDetailsGranularityDaily)
+	groupBy := []string{"service", "skuName", "region"}
+	return QueryCost(ctx, c, tenancyOCID, start.UTC(), end.UTC(), groupBy, usageapi.RequestSummarizedUsagesDetailsGranularityDaily)
 }
