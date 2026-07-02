@@ -38,6 +38,11 @@
       <el-table-column label="区域" width="100">
         <template #default="{ row }"><MonoText>{{ row.regionName || row.region || '—' }}</MonoText></template>
       </el-table-column>
+      <el-table-column label="多区" width="60" align="center">
+        <template #default="{ row }">
+          <span :class="row.hasChildren ? 'home-region-badge is-home' : 'home-region-badge not-home'">{{ row.hasChildren ? '是' : '否' }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="订阅天数" width="90" align="center">
         <template #default="{ row }">
           <span class="days-chip" :class="daysChipClass(row.activeDays)">{{ row.activeDays || '—' }}</span>
@@ -441,6 +446,13 @@ onMounted(load)
   color: var(--text-secondary);
   margin-left: var(--space-1);
 }
+
+.home-region-badge {
+  display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm);
+  font-size: var(--text-xs); font-weight: var(--font-medium);
+}
+.home-region-badge.is-home { background: color-mix(in srgb, var(--status-up) 15%, transparent); color: var(--status-up); }
+.home-region-badge.not-home { background: var(--bg-raised); color: var(--text-secondary); }
 
 :deep(.el-table) { border-radius: var(--radius-md); overflow: hidden; }
 :deep(.el-table th) { background: var(--bg-raised); font-weight: var(--font-semibold); color: var(--text-primary); }
