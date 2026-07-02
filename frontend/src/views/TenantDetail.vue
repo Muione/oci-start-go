@@ -610,7 +610,7 @@ async function loadSubscription() {
   catch { subscriptionData.value = null }
 }
 async function loadSubscriptionDays() {
-  try { const r: any = await request.get(`/tenants/${tenantId}/subscription-days`); subscriptionDays.value = r?.days || r?.subscriptionDays || '—' }
+  try { const r: any = await request.get(`/tenants/${tenantId}/subscription-days`); subscriptionDays.value = r?.activeDays ?? r?.days ?? r?.subscriptionDays ?? '—' }
   catch { subscriptionDays.value = '—' }
 }
 async function loadCost(type?: string, start?: string, end?: string) {
