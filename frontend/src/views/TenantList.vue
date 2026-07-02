@@ -42,8 +42,8 @@
             <span class="cell-edit-link data-mono" @click="router.push({name:'tenant-detail', params:{id:row.id}})">{{ row.accountCost || '—' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="存活天数" width="90" align="center">
-          <template #default="{ row }"><span class="days-chip">{{ row.activeDays || '0' }}</span></template>
+        <el-table-column label="订阅天数" width="90" align="center">
+          <template #default="{ row }"><span class="days-chip">{{ row.activeDays || '—' }}</span></template>
         </el-table-column>
         <el-table-column label="实例数" width="80" align="center">
           <template #default="{ row }">{{ row.instanceCount ?? 0 }}</template>

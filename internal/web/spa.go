@@ -5,15 +5,55 @@ package web
 import (
 	"io/fs"
 	"net/http"
+	"path"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
+var (
+	distFS    fs.FS
+	indexHTML []byte
+)
+
+func init() {
+	if sub, err := fs.Sub(Assets, "dist"); err == nil {
+		distFS = sub
+		indexHTML, _ = fs.ReadFile(sub, "index.html")
+	}
+}
+
+// SPAHTMLFallback serves index.html for browser-navigation requests so that
+// client-side routes (e.g. /tenants/:id) work on refresh/direct-load. Without
+// this, a refresh on /tenants/123 matches the API route GET /tenants/:id and
+// returns JSON. Browser navigation sends Accept: text/html; API calls (axios)
+// send Accept: application/json, so the two are distinguished. Asset requests
+// (paths with a file extension) pass through to the NoRoute asset handler.
+func SPAHTMLFallback() gin.HandlerFunc {
+	if len(indexHTML) == 0 {
+		return func(c *gin.Context) { c.Next() } // stub build: no SPA
+	}
+	return func(c *gin.Context) {
+		if c.Request.Method != http.MethodGet {
+			c.Next()
+			return
+		}
+		if !strings.Contains(c.Request.Header.Get("Accept"), "text/html") {
+			c.Next()
+			return
+		}
+		if path.Ext(c.Request.URL.Path) != "" {
+			c.Next()
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
+		c.Abort()
+	}
+}
+
 // Register wires SPA static-asset serving on the engine's NoRoute handler.
 func Register(r *gin.Engine) {
-	sub, err := fs.Sub(Assets, "dist")
-	if err != nil {
+	if distFS == nil {
 		// Stub build (no dist/): serve the placeholder at /.
 		r.NoRoute(func(c *gin.Context) {
 			if c.Request.Method == http.MethodGet && (c.Request.URL.Path == "/" || c.Request.URL.Path == "/index.html") {
@@ -30,15 +70,11 @@ func Register(r *gin.Engine) {
 		if p == "" {
 			p = "index.html"
 		}
-		if b, rerr := fs.ReadFile(sub, p); rerr == nil {
+		if b, rerr := fs.ReadFile(distFS, p); rerr == nil {
 			c.Data(http.StatusOK, contentType(p), b)
 			return
 		}
-		if idx, rerr := fs.ReadFile(sub, "index.html"); rerr == nil {
-			c.Data(http.StatusOK, "text/html; charset=utf-8", idx)
-			return
-		}
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "not found"})
+		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 	})
 }
 

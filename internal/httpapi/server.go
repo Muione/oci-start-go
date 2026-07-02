@@ -17,7 +17,8 @@ func NewServer(deps *Deps) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(Recovery(), logpkg.TraceIDMiddleware())
-	r.Use(auth.IpBan(deps.Store)) // @CheckIpBan parity: applies to all routes
+	r.Use(auth.IpBan(deps.Store))           // @CheckIpBan parity: applies to all routes
+	r.Use(web.SPAHTMLFallback())           // serve index.html for browser navigation (SPA route refresh)
 
 	// public routes (Sa-Token exclude list)
 	pub := r.Group("/")

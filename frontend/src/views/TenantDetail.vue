@@ -42,7 +42,7 @@
             </el-descriptions-item>
             <el-descriptions-item label="邮箱">{{ tenant.emailAddress || '—' }}</el-descriptions-item>
             <el-descriptions-item label="创建时间">{{ tenant.createdAt || '—' }}</el-descriptions-item>
-            <el-descriptions-item label="存活天数"><span class="days-chip">{{ tenant.activeDays || '0' }} 天</span></el-descriptions-item>
+            <el-descriptions-item label="订阅天数"><span class="days-chip">{{ tenant.activeDays || '—' }}</span></el-descriptions-item>
             <el-descriptions-item label="主区域">{{ tenant.regionName || tenant.region || '—' }}</el-descriptions-item>
             <el-descriptions-item label="API 同步"><el-tag :type="tenant.apiSynced ? 'success' : 'info'" size="small">{{ tenant.apiSynced ? '已同步' : '未同步' }}</el-tag></el-descriptions-item>
             <el-descriptions-item label="父租户 ID">{{ tenant.parenId || '无 (主租户)' }}</el-descriptions-item>

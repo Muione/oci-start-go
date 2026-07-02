@@ -12,8 +12,8 @@ import (
 
 func TestCalculateActiveDays_EmptyString(t *testing.T) {
 	got := calculateActiveDays("")
-	if got != "0" {
-		t.Errorf("calculateActiveDays(\"\") = %q, want \"0\"", got)
+	if got != "—" {
+		t.Errorf("calculateActiveDays(\"\") = %q, want \"—\"", got)
 	}
 }
 

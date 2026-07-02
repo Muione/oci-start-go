@@ -306,18 +306,18 @@ func (s *TenantService) GetFull(ctx context.Context, id int64) (TenantFullResp, 
 	}, nil
 }
 
-// calculateTenantActiveDays computes active days from register_detail.register_time,
-// falling back to tenant.created_at.
+// calculateTenantActiveDays computes subscription days from
+// register_detail.register_time (the OCI subscription timeStart). Returns "—"
+// when not synced — no fallback to created_at (avoids showing days since the
+// API key was added instead of since the subscription started).
 func (s *TenantService) calculateTenantActiveDays(ctx context.Context, t repo.FindTenantFullByIDRow) string {
 	tenantID := ns(t.TenantID)
 	if tenantID != "" {
 		if rd, err := repo.New(s.store.Read).FindRegisterDetailByTenantId(ctx, tenantID); err == nil {
-			if rt := ns(rd.RegisterTime); rt != "" {
-				return calculateActiveDays(rt)
-			}
+			return calculateActiveDays(ns(rd.RegisterTime))
 		}
 	}
-	return calculateActiveDays(ns(t.CreatedAt))
+	return calculateActiveDays("")
 }
 
 // Update modifies tenant fields (custom name, account type, email, active).
@@ -413,11 +413,9 @@ func tenantToCreds(t repo.Tenant) oci.Credentials {
 // response, deriving HasBootTask/HasChildren from BootCount/ChildCount.
 func toTenantRespFromCounts(r repo.ListTenantsWithCountsRow) TenantResp {
 	createdAt := ns(r.CreatedAt)
-	// Use register_detail.register_time (OCI subscription timeStart) for active days when available
+	// Subscription days from register_detail.register_time (OCI subscription
+	// timeStart). No created_at fallback — "—" when not synced.
 	activeDaysInput := ns(r.RegisterTime)
-	if activeDaysInput == "" {
-		activeDaysInput = createdAt
-	}
 	accountType := ns(r.AccountType)
 	return TenantResp{
 		ID:            r.ID,
@@ -444,11 +442,8 @@ func toTenantRespFromCounts(r repo.ListTenantsWithCountsRow) TenantResp {
 
 func toTenantResp(r repo.ListTenantsRow, registerTime string) TenantResp {
 	createdAt := ns(r.CreatedAt)
-	// Use register_detail.register_time (OCI subscription timeStart) for active days when available
+	// Subscription days from register_detail.register_time. No created_at fallback.
 	activeDaysInput := registerTime
-	if activeDaysInput == "" {
-		activeDaysInput = createdAt
-	}
 	return TenantResp{
 		ID:           r.ID,
 		TenantID:     ns(r.TenantID),
@@ -469,10 +464,10 @@ func toTenantResp(r repo.ListTenantsRow, registerTime string) TenantResp {
 }
 
 // calculateActiveDays returns the number of days from a timestamp string to now.
-// Uses ceiling division (partial day = 1 day), matching Java DateTimeUtils.
+// Returns "—" when there is no timestamp (not synced) — no fallback to created_at.
 func calculateActiveDays(timestamp string) string {
 	if timestamp == "" {
-		return "0"
+		return "—"
 	}
 	// Try local-time parse first (format has no timezone indicator).
 	t, err := time.ParseInLocation("2006-01-02 15:04:05", timestamp, time.Local)
