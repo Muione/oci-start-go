@@ -161,8 +161,13 @@
         <!-- Add user dialog -->
         <el-dialog v-model="addUserFormVisible" title="创建 IAM 用户" width="460px" append-to-body destroy-on-close>
           <el-form :model="addUserForm" label-width="80px">
-            <el-form-item label="用户名" required><el-input v-model="addUserForm.name" placeholder="用户名"/></el-form-item>
-            <el-form-item label="描述"><el-input v-model="addUserForm.description" placeholder="可选描述"/></el-form-item>
+            <el-form-item label="用户名" required><el-input v-model="addUserForm.username" placeholder="IAM 用户名"/></el-form-item>
+            <el-form-item label="邮箱" required><el-input v-model="addUserForm.email" placeholder="用户邮箱"/></el-form-item>
+            <el-form-item label="用户组">
+              <el-select v-model="addUserForm.groupName" placeholder="选择用户组（可选）" clearable>
+                <el-option v-for="g in groups" :key="g.ocid" :label="g.name" :value="g.name"/>
+              </el-select>
+            </el-form-item>
           </el-form>
           <el-alert v-if="createdUserPwd" title="用户创建成功！请复制以下一次性密码" type="success" :closable="true" show-icon @close="createdUserPwd=''" style="margin-top:12px">
             <template #default><code style="user-select:all">{{ createdUserPwd }}</code></template>
@@ -458,7 +463,7 @@ const userLoading = ref(false)
 const userList = ref<any[]>([])
 const addUserFormVisible = ref(false)
 const addUserSaving = ref(false)
-const addUserForm = ref({ name: '', description: '' })
+const addUserForm = ref({ username: '', email: '', groupName: '' })
 const createdUserPwd = ref('')
 const groups = ref<any[]>([])
 const groupsLoading = ref(false)
@@ -577,8 +582,10 @@ function openEditCost() { editCostValue.value = tenant.value.accountCost || ''; 
 async function saveAccountCost() {
   editSaving.value = true
   try {
-    await request.put(`/tenants/${tenantId}`, { ...tenant.value })
-    tenant.value.accountCost = editCostValue.value; editCostVisible.value = false; ElMessage.success('已更新')
+    await request.post(`/tenants/${tenantId}/account-cost`, { cost: editCostValue.value })
+    tenant.value.accountCost = editCostValue.value
+    editCostVisible.value = false
+    ElMessage.success('已更新')
   } catch (e: any) { ElMessage.error(e.message) }
   finally { editSaving.value = false }
 }
@@ -629,12 +636,18 @@ async function loadUsers() {
   finally { userLoading.value = false }
 }
 async function createUser() {
-  if (!addUserForm.value.name) { ElMessage.warning('请填写用户名'); return }
-  addUserSaving.value = true; createdUserPwd.value = ''
+  if (!addUserForm.value.username || !addUserForm.value.email) {
+    ElMessage.warning('请填写用户名和邮箱')
+    return
+  }
+  addUserSaving.value = true
+  createdUserPwd.value = ''
   try {
     const r: any = await request.post(`/tenants/${tenantId}/users`, addUserForm.value)
     createdUserPwd.value = r?.password || ''
-    ElMessage.success('用户已创建'); await loadUsers(); addUserForm.value = { name: '', description: '' }
+    ElMessage.success('用户已创建')
+    await loadUsers()
+    addUserForm.value = { username: '', email: '', groupName: '' }
   } catch (e: any) { ElMessage.error(e.message) }
   finally { addUserSaving.value = false }
 }
@@ -715,10 +728,13 @@ function editSocial(row: any) { socialEditId.value = row.id; socialForm.value = 
 async function saveSocial() {
   socialEditSaving.value = true
   try {
-    const url = socialEditId.value ? `/tenants/${tenantId}/social/${socialEditId.value}` : `/tenants/${tenantId}/social`
-    const method = socialEditId.value ? 'put' : 'post'
-    await request[method](url, socialForm.value)
-    ElMessage.success('已保存'); socialEditVisible.value = false; await loadSocial()
+    const payload = socialEditId.value
+      ? { ...socialForm.value, id: socialEditId.value }
+      : socialForm.value
+    await request.post(`/tenants/${tenantId}/social`, payload)
+    ElMessage.success('已保存')
+    socialEditVisible.value = false
+    await loadSocial()
   } catch (e: any) { ElMessage.error(e.message) }
   finally { socialEditSaving.value = false }
 }
