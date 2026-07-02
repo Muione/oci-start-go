@@ -984,35 +984,6 @@ onMounted(async () => {
   padding: 0;
 }
 
-/* ---- Toolbar ---- */
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-4);
-  flex-wrap: wrap;
-  gap: var(--space-4);
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.toolbar-left h2 {
-  margin: 0;
-  font-size: var(--text-xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  letter-spacing: var(--tracking-tight);
-}
-
-.toolbar-right {
-  display: flex;
-  gap: var(--space-2);
-}
-
 /* ---- Filter bar ---- */
 .filter-bar {
   display: flex;
@@ -1107,15 +1078,6 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
-  .toolbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .toolbar-left h2 {
-    font-size: var(--text-lg);
-  }
-
   .filter-bar {
     flex-direction: column;
   }
