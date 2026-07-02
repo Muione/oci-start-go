@@ -183,6 +183,74 @@
         </el-dialog>
       </el-tab-pane>
 
+      <!-- ======================== 凭证 ======================== -->
+      <el-tab-pane label="凭证" name="credentials">
+        <div style="margin-bottom:12px">
+          <el-select v-model="credUserOcid" filterable placeholder="选择 IAM 用户" @change="loadCredentials" style="width:300px">
+            <el-option v-for="u in userList" :key="u.ocid" :label="u.name" :value="u.ocid"/>
+          </el-select>
+        </div>
+        <template v-if="credUserOcid">
+          <!-- API Keys -->
+          <h4 style="margin:12px 0 8px">API 密钥</h4>
+          <el-table :data="apiKeys" v-loading="credLoading" border stripe size="small" max-height="200">
+            <template #empty><el-empty description="暂无 API 密钥" :image-size="40"/></template>
+            <el-table-column prop="fingerprint" label="指纹" min-width="200" show-overflow-tooltip/>
+            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteApiKey(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
+          </el-table>
+          <el-button size="small" type="primary" @click="apiKeyAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 添加 API 密钥</el-button>
+          <el-dialog v-model="apiKeyAddVisible" title="添加 API 密钥" width="560px" append-to-body destroy-on-close>
+            <el-form label-width="100px">
+              <el-form-item label="公钥 PEM" required><el-input v-model="apiKeyPem" type="textarea" :rows="6" placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----"/></el-form-item>
+            </el-form>
+            <template #footer><el-button @click="apiKeyAddVisible=false">取消</el-button><el-button type="primary" :loading="credSaving" @click="createApiKey">添加</el-button></template>
+          </el-dialog>
+
+          <!-- Auth Tokens -->
+          <h4 style="margin:12px 0 8px">Auth 令牌</h4>
+          <el-table :data="authTokens" v-loading="credLoading" border stripe size="small" max-height="200">
+            <template #empty><el-empty description="暂无 Auth 令牌" :image-size="40"/></template>
+            <el-table-column prop="description" label="描述" min-width="200"/>
+            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteAuthToken(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
+          </el-table>
+          <el-button size="small" type="primary" @click="authTokenAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 创建 Auth 令牌</el-button>
+          <el-dialog v-model="authTokenAddVisible" title="创建 Auth 令牌" width="460px" append-to-body destroy-on-close>
+            <el-form label-width="80px"><el-form-item label="描述" required><el-input v-model="authTokenDesc" placeholder="令牌用途描述"/></el-form-item></el-form>
+            <el-alert v-if="createdToken" title="令牌已创建！请立即复制（仅显示一次）" type="success" :closable="true" show-icon @close="createdToken=''" style="margin-top:12px"><template #default><code style="user-select:all">{{ createdToken }}</code></template></el-alert>
+            <template #footer><el-button @click="authTokenAddVisible=false">关闭</el-button><el-button type="primary" :loading="credSaving" @click="createAuthToken" :disabled="!!createdToken">创建</el-button></template>
+          </el-dialog>
+
+          <!-- SMTP Credentials -->
+          <h4 style="margin:12px 0 8px">SMTP 凭证</h4>
+          <el-table :data="smtpCreds" v-loading="credLoading" border stripe size="small" max-height="200">
+            <template #empty><el-empty description="暂无 SMTP 凭证" :image-size="40"/></template>
+            <el-table-column prop="description" label="描述" min-width="200"/>
+            <el-table-column prop="username" label="用户名" min-width="160" show-overflow-tooltip/>
+            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteSmtpCred(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
+          </el-table>
+          <el-button size="small" type="primary" @click="smtpAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 创建 SMTP 凭证</el-button>
+          <el-dialog v-model="smtpAddVisible" title="创建 SMTP 凭证" width="460px" append-to-body destroy-on-close>
+            <el-form label-width="80px"><el-form-item label="描述" required><el-input v-model="smtpDesc" placeholder="凭证用途描述"/></el-form-item></el-form>
+            <el-alert v-if="createdSmtpPassword" title="SMTP 密码已创建！请立即复制（仅显示一次）" type="success" :closable="true" show-icon @close="createdSmtpPassword=''" style="margin-top:12px"><template #default><code style="user-select:all">{{ createdSmtpPassword }}</code></template></el-alert>
+            <template #footer><el-button @click="smtpAddVisible=false">关闭</el-button><el-button type="primary" :loading="credSaving" @click="createSmtpCred" :disabled="!!createdSmtpPassword">创建</el-button></template>
+          </el-dialog>
+
+          <!-- Customer Secret Keys -->
+          <h4 style="margin:12px 0 8px">Customer Secret Keys</h4>
+          <el-table :data="customerSecretKeys" v-loading="credLoading" border stripe size="small" max-height="200">
+            <template #empty><el-empty description="暂无 Customer Secret Key" :image-size="40"/></template>
+            <el-table-column prop="displayName" label="显示名称" min-width="200"/>
+            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteSecretKey(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
+          </el-table>
+          <el-button size="small" type="primary" @click="secretKeyAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 创建 Customer Secret Key</el-button>
+          <el-dialog v-model="secretKeyAddVisible" title="创建 Customer Secret Key" width="460px" append-to-body destroy-on-close>
+            <el-form label-width="100px"><el-form-item label="显示名称" required><el-input v-model="secretKeyDisplay" placeholder="密钥显示名称"/></el-form-item></el-form>
+            <el-alert v-if="createdSecretKey" title="Secret Key 已创建！请立即复制（仅显示一次）" type="success" :closable="true" show-icon @close="createdSecretKey=''" style="margin-top:12px"><template #default><code style="user-select:all">{{ createdSecretKey }}</code></template></el-alert>
+            <template #footer><el-button @click="secretKeyAddVisible=false">关闭</el-button><el-button type="primary" :loading="credSaving" @click="createSecretKey" :disabled="!!createdSecretKey">创建</el-button></template>
+          </el-dialog>
+        </template>
+      </el-tab-pane>
+
       <!-- ======================== 邮件 ======================== -->
       <el-tab-pane label="邮件" name="email">
         <el-form :model="emailForm" label-width="100px" style="max-width:500px">
@@ -412,6 +480,32 @@
         </el-table>
           <el-empty v-if="!quotaServices.length && !quotaLoading" description="该租户无任何配额数据" :image-size="40"/>
 
+        <!-- Sign-on policies -->
+        <h4 style="margin:16px 0 8px">登录策略</h4>
+        <el-alert v-if="signonError" type="warning" :closable="false" show-icon style="margin-bottom:8px"><template #title>加载失败: {{ signonError }}</template><template #default><el-button size="small" text type="primary" @click="loadSignonPolicies">重试</el-button></template></el-alert>
+        <el-table v-loading="signonLoading" :data="signonPolicies" border stripe size="small" max-height="200">
+          <template #empty><el-empty description="暂无登录策略" :image-size="40"/></template>
+          <el-table-column prop="name" label="名称" min-width="160"/>
+          <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip/>
+          <el-table-column label="状态" width="80" align="center"><template #default="{ row }"><el-tag :type="row.active?'success':'info'" size="small">{{ row.active ? '启用' : '禁用' }}</el-tag></template></el-table-column>
+        </el-table>
+
+        <!-- Account recovery -->
+        <h4 style="margin:16px 0 8px">账号恢复设置</h4>
+        <el-alert v-if="recoveryError" type="warning" :closable="false" show-icon style="margin-bottom:8px"><template #title>加载失败: {{ recoveryError }}</template><template #default><el-button size="small" text type="primary" @click="loadAccountRecovery">重试</el-button></template></el-alert>
+        <el-form v-loading="recoveryLoading" :inline="true" size="small" style="margin-bottom:8px">
+          <el-form-item label="恢复方式">
+            <el-checkbox-group v-model="recoveryFactors">
+              <el-checkbox label="EMAIL">邮箱</el-checkbox>
+              <el-checkbox label="SMS">短信</el-checkbox>
+              <el-checkbox label="SECURITY_QUESTIONS">安全问题</el-checkbox>
+              <el-checkbox label="PUSH">推送</el-checkbox>
+              <el-checkbox label="TOTP">TOTP</el-checkbox>
+            </el-checkbox-group>
+          </el-form-item>
+          <el-form-item><el-button type="primary" size="small" :loading="recoverySaving" @click="updateAccountRecovery">保存</el-button></el-form-item>
+        </el-form>
+
         <!-- Audit log -->
         <el-alert v-if="auditError" type="warning" :closable="false" show-icon style="margin-bottom:8px">
           <template #title>审计日志加载失败: {{ auditError }}</template>
@@ -585,6 +679,36 @@ const notifError = ref('')
 const auditError = ref('')
 const quotaError = ref('')
 
+// credentials tab
+const credUserOcid = ref('')
+const credLoading = ref(false)
+const credSaving = ref(false)
+const apiKeys = ref<any[]>([])
+const authTokens = ref<any[]>([])
+const smtpCreds = ref<any[]>([])
+const customerSecretKeys = ref<any[]>([])
+const apiKeyAddVisible = ref(false)
+const apiKeyPem = ref('')
+const authTokenAddVisible = ref(false)
+const authTokenDesc = ref('')
+const createdToken = ref('')
+const smtpAddVisible = ref(false)
+const smtpDesc = ref('')
+const createdSmtpPassword = ref('')
+const secretKeyAddVisible = ref(false)
+const secretKeyDisplay = ref('')
+const createdSecretKey = ref('')
+const credLoaded = ref(false)
+
+// signon + recovery (settings tab)
+const signonPolicies = ref<any[]>([])
+const signonLoading = ref(false)
+const signonError = ref('')
+const recoveryFactors = ref<string[]>([])
+const recoveryLoading = ref(false)
+const recoverySaving = ref(false)
+const recoveryError = ref('')
+
 // --- lifecycle ---
 onMounted(async () => {
   loading.value = true
@@ -599,10 +723,14 @@ function onTabChange(tab: string | number) {
   if (t === 'instances' && !instLoaded.value) loadInstances()
   if (t === 'costs' && !costLoaded.value) { loadSubscription().then(() => { loadCost(); loadSubscriptionDays() }) }
   if (t === 'users' && !userLoaded.value) { loadUsers(); loadGroups(); loadPasswordPolicy() }
+  if (t === 'credentials') {
+    if (!userList.value.length) loadUsers().then(() => { if (userList.value.length) { credUserOcid.value = userList.value[0].ocid; loadCredentials() } })
+    else if (!credLoaded.value && credUserOcid.value) loadCredentials()
+  }
   if (t === 'email') loadEmail()
   if (t === 'social' && !socialLoaded.value) loadSocial()
   if (t === 'secRules' && !secRulesList.value.length) loadSecRules()
-  if (t === 'settings' && !settingsLoaded.value) { loadMfaStatus(); loadNotifRecipients(); loadQuotaServices().then(() => loadQuota()); settingsLoaded.value = true }
+  if (t === 'settings' && !settingsLoaded.value) { loadMfaStatus(); loadNotifRecipients(); loadQuotaServices().then(() => loadQuota()); loadSignonPolicies(); loadAccountRecovery(); settingsLoaded.value = true }
   if (t === 'overview' && !domainsLoaded.value) loadDomains()
   if (t === 'regions') loadRegions()
 }
@@ -982,6 +1110,131 @@ async function subscribeRegions() {
     await loadRegions()
   } catch (e: any) { ElMessage.error(e.message) }
   finally { subscribing.value = false }
+}
+
+// --- credentials ---
+async function loadCredentials() {
+  if (!credUserOcid.value) return
+  credLoading.value = true
+  const uo = encodeURIComponent(credUserOcid.value)
+  try {
+    const [keys, tokens, smtp, csks] = await Promise.all([
+      request.get(`/tenants/${tenantId}/users/${uo}/api-keys`),
+      request.get(`/tenants/${tenantId}/users/${uo}/auth-tokens`),
+      request.get(`/tenants/${tenantId}/users/${uo}/smtp-credentials`),
+      request.get(`/tenants/${tenantId}/users/${uo}/customer-secret-keys`),
+    ])
+    apiKeys.value = keys || []
+    authTokens.value = tokens || []
+    smtpCreds.value = smtp || []
+    customerSecretKeys.value = csks || []
+    credLoaded.value = true
+  } catch (e: any) { ElMessage.error('加载凭证失败: ' + e.message) }
+  finally { credLoading.value = false }
+}
+
+async function createApiKey() {
+  if (!apiKeyPem.value.trim()) { ElMessage.warning('请粘贴公钥 PEM'); return }
+  credSaving.value = true
+  const uo = encodeURIComponent(credUserOcid.value)
+  try {
+    await request.post(`/tenants/${tenantId}/users/${uo}/api-keys`, { key: apiKeyPem.value })
+    ElMessage.success('已添加'); apiKeyAddVisible.value = false; apiKeyPem.value = ''; await loadCredentials()
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { credSaving.value = false }
+}
+async function deleteApiKey(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定删除此 API 密钥（${row.fingerprint?.slice(0,16)}...）？`, '确认', { type: 'warning' })
+    const uo = encodeURIComponent(credUserOcid.value)
+    await request.delete(`/tenants/${tenantId}/users/${uo}/api-keys/${encodeURIComponent(row.id)}`)
+    ElMessage.success('已删除'); await loadCredentials()
+  } catch (e: any) { if (e !== 'cancel' && e?.message) ElMessage.error(e.message) }
+}
+
+async function createAuthToken() {
+  if (!authTokenDesc.value.trim()) { ElMessage.warning('请输入描述'); return }
+  credSaving.value = true; createdToken.value = ''
+  const uo = encodeURIComponent(credUserOcid.value)
+  try {
+    const r: any = await request.post(`/tenants/${tenantId}/users/${uo}/auth-tokens`, { description: authTokenDesc.value })
+    createdToken.value = r?.token || ''
+    ElMessage.success('已创建'); await loadCredentials()
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { credSaving.value = false }
+}
+async function deleteAuthToken(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定删除令牌「${row.description}」？`, '确认', { type: 'warning' })
+    const uo = encodeURIComponent(credUserOcid.value)
+    await request.delete(`/tenants/${tenantId}/users/${uo}/auth-tokens/${encodeURIComponent(row.id)}`)
+    ElMessage.success('已删除'); await loadCredentials()
+  } catch (e: any) { if (e !== 'cancel' && e?.message) ElMessage.error(e.message) }
+}
+
+async function createSmtpCred() {
+  if (!smtpDesc.value.trim()) { ElMessage.warning('请输入描述'); return }
+  credSaving.value = true; createdSmtpPassword.value = ''
+  const uo = encodeURIComponent(credUserOcid.value)
+  try {
+    const r: any = await request.post(`/tenants/${tenantId}/users/${uo}/smtp-credentials`, { description: smtpDesc.value })
+    createdSmtpPassword.value = r?.password || ''
+    ElMessage.success('已创建'); await loadCredentials()
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { credSaving.value = false }
+}
+async function deleteSmtpCred(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定删除 SMTP 凭证「${row.description || row.username}」？`, '确认', { type: 'warning' })
+    const uo = encodeURIComponent(credUserOcid.value)
+    await request.delete(`/tenants/${tenantId}/users/${uo}/smtp-credentials/${encodeURIComponent(row.id)}`)
+    ElMessage.success('已删除'); await loadCredentials()
+  } catch (e: any) { if (e !== 'cancel' && e?.message) ElMessage.error(e.message) }
+}
+
+async function createSecretKey() {
+  if (!secretKeyDisplay.value.trim()) { ElMessage.warning('请输入显示名称'); return }
+  credSaving.value = true; createdSecretKey.value = ''
+  const uo = encodeURIComponent(credUserOcid.value)
+  try {
+    const r: any = await request.post(`/tenants/${tenantId}/users/${uo}/customer-secret-keys`, { displayName: secretKeyDisplay.value })
+    createdSecretKey.value = r?.secretKey || ''
+    ElMessage.success('已创建'); await loadCredentials()
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { credSaving.value = false }
+}
+async function deleteSecretKey(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定删除密钥「${row.displayName}」？`, '确认', { type: 'warning' })
+    const uo = encodeURIComponent(credUserOcid.value)
+    await request.delete(`/tenants/${tenantId}/users/${uo}/customer-secret-keys/${encodeURIComponent(row.id)}`)
+    ElMessage.success('已删除'); await loadCredentials()
+  } catch (e: any) { if (e !== 'cancel' && e?.message) ElMessage.error(e.message) }
+}
+
+// --- signon + recovery ---
+async function loadSignonPolicies() {
+  signonError.value = ''; signonLoading.value = true
+  try { signonPolicies.value = await request.get(`/tenants/${tenantId}/signon-policies`) as any[] }
+  catch (e: any) { signonError.value = e.message || '加载失败'; signonPolicies.value = [] }
+  finally { signonLoading.value = false }
+}
+
+async function loadAccountRecovery() {
+  recoveryError.value = ''; recoveryLoading.value = true
+  try {
+    const r: any = await request.get(`/tenants/${tenantId}/account-recovery`)
+    recoveryFactors.value = r?.factors || []
+  } catch (e: any) { recoveryError.value = e.message || '加载失败'; recoveryFactors.value = [] }
+  finally { recoveryLoading.value = false }
+}
+async function updateAccountRecovery() {
+  recoverySaving.value = true
+  try {
+    await request.put(`/tenants/${tenantId}/account-recovery`, { factors: recoveryFactors.value })
+    ElMessage.success('已更新'); await loadAccountRecovery()
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { recoverySaving.value = false }
 }
 
 // --- export / delete ---
