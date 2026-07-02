@@ -48,8 +48,10 @@ type TenantResp struct {
 	AccountType  string `json:"accountType"`
 	TenancyName  string `json:"tenancyName"`
 	ActiveDays   string `json:"activeDays"`
-	HasBootTask  bool   `json:"hasBootTask"`
-	HasChildren  bool   `json:"hasChildren"`
+	HasBootTask   bool   `json:"hasBootTask"`
+	HasChildren   bool   `json:"hasChildren"`
+	InstanceCount int64  `json:"instanceCount"`
+	PlanType      string `json:"planType"`
 }
 
 func (s *TenantService) List(ctx context.Context) ([]TenantResp, error) {
@@ -399,24 +401,27 @@ func toTenantRespFromCounts(r repo.ListTenantsWithCountsRow) TenantResp {
 	if activeDaysInput == "" {
 		activeDaysInput = createdAt
 	}
+	accountType := ns(r.AccountType)
 	return TenantResp{
-		ID:           r.ID,
-		TenantID:     ns(r.TenantID),
-		UserName:     ns(r.UserName),
-		Fingerprint:  ns(r.Fingerprint),
-		Tenancy:      ns(r.Tenancy),
-		Region:       ns(r.Region),
-		RegionName:   region.NameByCode(region.CodeByName(ns(r.Region))),
-		CreatedAt:    createdAt,
-		ApiSynced:    ni(r.ApiSynced) == 1,
-		CloudType:    ni(r.CloudType),
-		IsActive:     isActive(r.IsActive),
-		IsHomeRegion: ni(r.IsHomeRegion) != 0,
-		AccountType:  ns(r.AccountType),
-		TenancyName:  ns(r.TenancyName),
-		ActiveDays:   calculateActiveDays(activeDaysInput),
-		HasBootTask:  r.BootCount > 0,
-		HasChildren:  r.ChildCount > 0,
+		ID:            r.ID,
+		TenantID:      ns(r.TenantID),
+		UserName:      ns(r.UserName),
+		Fingerprint:   ns(r.Fingerprint),
+		Tenancy:       ns(r.Tenancy),
+		Region:        ns(r.Region),
+		RegionName:    region.NameByCode(region.CodeByName(ns(r.Region))),
+		CreatedAt:     createdAt,
+		ApiSynced:     ni(r.ApiSynced) == 1,
+		CloudType:     ni(r.CloudType),
+		IsActive:      isActive(r.IsActive),
+		IsHomeRegion:  ni(r.IsHomeRegion) != 0,
+		AccountType:   accountType,
+		TenancyName:   ns(r.TenancyName),
+		ActiveDays:    calculateActiveDays(activeDaysInput),
+		HasBootTask:   r.BootCount > 0,
+		HasChildren:   r.ChildCount > 0,
+		InstanceCount: r.InstanceCount,
+		PlanType:      accountType,
 	}
 }
 
