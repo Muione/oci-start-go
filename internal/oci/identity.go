@@ -640,14 +640,13 @@ func GetMfaStatus(ctx context.Context, prov common.ConfigurationProvider, tenanc
 	resp, err := doIdDomainCall(ctx, prov, "GET", domainURL,
 		"/admin/v1/AuthenticationFactorSettings/"+authFactorSettingsID, nil)
 	if err != nil {
-		// If the SCIM endpoint is unavailable, return safe defaults
-		return &MfaStatus{}, nil
+		return nil, fmt.Errorf("get auth factor settings: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var settings idDomainAuthFactorSetting
 	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
-		return &MfaStatus{}, nil
+		return nil, fmt.Errorf("decode auth factor settings: %w", err)
 	}
 
 	return &MfaStatus{
@@ -743,7 +742,7 @@ func GetNotificationRecipients(ctx context.Context, prov common.ConfigurationPro
 		out = append(out, NotifRecipient{
 			ID:    i + 1,
 			Email: email,
-			State: "active",
+			State: "VERIFIED",
 		})
 	}
 	return out, nil

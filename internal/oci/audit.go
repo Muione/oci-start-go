@@ -58,6 +58,12 @@ func ListAuditEvents(
 	startTime, endTime time.Time,
 	pageToken string,
 ) (*AuditLogPage, error) {
+	log.Debug().
+		Str("compartmentID", compartmentID).
+		Time("startTime", startTime).
+		Time("endTime", endTime).
+		Msg("querying audit events")
+
 	req := audit.ListEventsRequest{
 		CompartmentId:      &compartmentID,
 		StartTime:          &common.SDKTime{Time: startTime},
@@ -123,6 +129,7 @@ func ListAuditEventsByDateRange(
 ) (*AuditLogPage, error) {
 	start, err := time.Parse(dateLayout, startDate)
 	if err != nil {
+		log.Warn().Err(err).Str("startDate", startDate).Msg("invalid audit start date")
 		return &AuditLogPage{Data: []AuditEventDTO{}}, nil
 	}
 	start = start.UTC()
@@ -131,6 +138,7 @@ func ListAuditEventsByDateRange(
 	if endDate != "" {
 		parsed, err := time.Parse(dateLayout, endDate)
 		if err != nil {
+			log.Warn().Err(err).Str("endDate", endDate).Msg("invalid audit end date")
 			return &AuditLogPage{Data: []AuditEventDTO{}}, nil
 		}
 		end = parsed.UTC()
