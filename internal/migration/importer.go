@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -13,6 +14,28 @@ import (
 
 	"github.com/rs/zerolog"
 )
+
+// identRe is the whitelist for untrusted table/column identifiers interpolated
+// into PRAGMA and INSERT SQL. Ponytail: plain regex, no quoting layer — any
+// identifier not matching ^[A-Za-z_][A-Za-z0-9_]*$ is rejected outright. This
+// also fixes the PRAGMA table_info(?) placeholder bug (SQLite rejects bound
+// params for PRAGMA arguments, so the table name must be interpolated literally;
+// the whitelist makes that safe).
+var identRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// validateIdentifiers rejects table/column names that are not bare SQL
+// identifiers, preventing SQL injection via untrusted parsed identifiers.
+func validateIdentifiers(row InsertRow) error {
+	if !identRe.MatchString(row.Table) {
+		return fmt.Errorf("invalid table identifier: %q", row.Table)
+	}
+	for _, c := range row.Cols {
+		if !identRe.MatchString(c) {
+			return fmt.Errorf("invalid column identifier: %q", c)
+		}
+	}
+	return nil
+}
 
 // Importer executes parsed INSERT statements against a SQLite database.
 type Importer struct {
@@ -83,14 +106,12 @@ func (imp *Importer) ImportSQLText(ctx context.Context, sqlText, keyBaseDir stri
 		atomic.AddInt64(&imp.s.stats.TotalLines, 1)
 		trimmed := strings.TrimSpace(raw)
 
-		// Preserve PEM private key lines (multi-line values)
-		if strings.Contains(trimmed, "PRIVATE KEY") {
-			buf.WriteString(raw)
-			buf.WriteByte('\n')
-			continue
-		}
-
-		if trimmed == "" || strings.HasPrefix(trimmed, "--") {
+		// Preserve PEM private key lines (multi-line values), but still run
+		// the completeness check below: the closing
+		// `-----END ... PRIVATE KEY-----');` line must trigger isCompleteInsert,
+		// otherwise a trailing PEM-bearing INSERT is silently dropped.
+		isPEM := strings.Contains(trimmed, "PRIVATE KEY")
+		if !isPEM && (trimmed == "" || strings.HasPrefix(trimmed, "--")) {
 			continue
 		}
 
@@ -136,12 +157,8 @@ func (imp *Importer) scanTenantIDs(sqlText string) ([]int64, error) {
 
 	for _, raw := range lines {
 		trimmed := strings.TrimSpace(raw)
-		if strings.Contains(trimmed, "PRIVATE KEY") {
-			buf.WriteString(raw)
-			buf.WriteByte('\n')
-			continue
-		}
-		if trimmed == "" || strings.HasPrefix(trimmed, "--") {
+		isPEM := strings.Contains(trimmed, "PRIVATE KEY")
+		if !isPEM && (trimmed == "" || strings.HasPrefix(trimmed, "--")) {
 			continue
 		}
 		buf.WriteString(raw)
@@ -180,6 +197,14 @@ func (imp *Importer) executeInsert(ctx context.Context, fullSQL, keyBaseDir stri
 	row, err := parseInsertSQL(fullSQL)
 	if err != nil {
 		return fmt.Errorf("parse: %w", err)
+	}
+
+	// S7: reject untrusted table/column identifiers before any interpolation
+	// into PRAGMA or INSERT SQL. Without this, a parsed name like
+	// `foo; DROP TABLE victim` would be embedded raw.
+	if err := validateIdentifiers(row); err != nil {
+		atomic.AddInt64(&imp.s.stats.Skipped, 1)
+		return err
 	}
 
 	tableUpper := strings.ToUpper(row.Table)
@@ -319,8 +344,12 @@ func (imp *Importer) executeInsert(ctx context.Context, fullSQL, keyBaseDir stri
 }
 
 // validateColumns checks that all columns in the INSERT exist in the target table.
+// row.Table is whitelist-validated by executeInsert before this runs, so it is
+// safe to interpolate into PRAGMA. SQLite rejects bound placeholders for PRAGMA
+// table_info arguments (`PRAGMA table_info(?)` is a syntax error), so the name
+// must be embedded literally.
 func (imp *Importer) validateColumns(ctx context.Context, row InsertRow) error {
-	rows, err := imp.db.QueryContext(ctx, "PRAGMA table_info(?)", row.Table)
+	rows, err := imp.db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", row.Table))
 	if err != nil {
 		return fmt.Errorf("pragma table_info(%s): %w", row.Table, err)
 	}

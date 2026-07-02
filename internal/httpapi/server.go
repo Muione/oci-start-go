@@ -131,25 +131,34 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/instances/:id/vpu", instanceUpdateVpu(deps))
 	pro.GET("/instances/:id/ssh-config", instanceGetSSHConfig(deps))
 	pro.POST("/instances/:id/ssh-config", instanceSaveSSHConfig(deps))
+	pro.GET("/instances/:id/console-connections", instanceConsoleConnectionsList(deps))
+	pro.DELETE("/instances/:id/console-connections/:connId", instanceConsoleConnectionDelete(deps))
+	pro.GET("/ssh-keys", sshKeysList(deps))
+	pro.POST("/ssh-keys", sshKeyCreate(deps))
+	pro.DELETE("/ssh-keys/:id", sshKeyDelete(deps))
 	pro.GET("/backup/list", backupList(deps))
 	pro.GET("/backup/delete", backupDelete(deps))
 	pro.GET("/traffic/alert/list", trafficAlertList(deps))
 	pro.GET("/traffic/alert/get", trafficAlertGet(deps))
 	pro.POST("/traffic/alert/save", trafficAlertSave(deps))
 
-	// Phase 6: WebSocket endpoints (no auth — WS upgrade handshake is separate).
-	r.GET("/ws/ssh", func(c *gin.Context) { deps.WsHub.SSH.HandleSSH(c.Writer, c.Request) })
-	r.GET("/log/ws", func(c *gin.Context) { deps.WsHub.Log.HandleLog(c.Writer, c.Request) })
-	r.GET("/ws/monitor", func(c *gin.Context) { deps.WsHub.Monitor.HandleMonitor(c.Writer, c.Request) })
-	r.GET("/ws/console", func(c *gin.Context) { deps.WsHub.Console.HandleConsole(c.Writer, c.Request) })
-	r.GET("/ws/vnc/:instanceId", func(c *gin.Context) {
+	// Phase 6: WebSocket endpoints. Registered under the protected group so
+	// SessionAuth runs on the upgrade handshake (previously on the root router,
+	// which bypassed auth). Handler closures are unchanged; CheckOrigin is
+	// already handled by the ws-agent.
+	pro.GET("/ws/ssh", func(c *gin.Context) { deps.WsHub.SSH.HandleSSH(c.Writer, c.Request) })
+	pro.GET("/log/ws", func(c *gin.Context) { deps.WsHub.Log.HandleLog(c.Writer, c.Request) })
+	pro.GET("/ws/monitor", func(c *gin.Context) { deps.WsHub.Monitor.HandleMonitor(c.Writer, c.Request) })
+	pro.GET("/ws/console", func(c *gin.Context) { deps.WsHub.Console.HandleConsole(c.Writer, c.Request) })
+	pro.GET("/ws/console/serial", func(c *gin.Context) { deps.WsHub.Console.HandleSerialConsole(c.Writer, c.Request) })
+	pro.GET("/ws/vnc/:instanceId", func(c *gin.Context) {
 		// Pass instanceId via query param so the handler can read it from standard request.
 		q := c.Request.URL.Query()
 		q.Set("instanceId", c.Param("instanceId"))
 		c.Request.URL.RawQuery = q.Encode()
 		deps.WsHub.Console.HandleVNCBridge(c.Writer, c.Request)
 	})
-	r.GET("/ws/rescue", func(c *gin.Context) { deps.WsHub.Rescue.HandleRescue(c.Writer, c.Request) })
+	pro.GET("/ws/rescue", func(c *gin.Context) { deps.WsHub.Rescue.HandleRescue(c.Writer, c.Request) })
 
 	// Phase 6: monitor agent endpoints (public — agent runs on remote VPS).
 	pub.GET("/api/monitor/download", monitorDownload(deps))

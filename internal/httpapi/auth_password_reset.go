@@ -14,6 +14,10 @@ import (
 	"github.com/Muione/oci-start-go/internal/response"
 )
 
+// randRead is the CSPRNG reader used to generate reset codes. Defaults to
+// crypto/rand.Read; overridable in tests. ponytail: test seam only.
+var randRead = rand.Read
+
 // sendResetCode generates a one-time password reset code for the given username
 // and stores it temporarily. In production, the code would be sent via email/SMS.
 // POST /api/send-reset-code  {username: "..."}
@@ -39,7 +43,10 @@ func sendResetCode(deps *Deps) gin.HandlerFunc {
 
 		// Generate a 6-character hex code.
 		b := make([]byte, 3)
-		rand.Read(b)
+		if _, err := randRead(b); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "failed to generate reset code")
+			return
+		}
 		code := hex.EncodeToString(b)
 
 		// Store code with 10-minute expiry.
@@ -48,16 +55,18 @@ func sendResetCode(deps *Deps) gin.HandlerFunc {
 		codeKey := fmt.Sprintf("reset.code.%s", in.Username)
 
 		q := repo.New(deps.Store.Write)
-		_ = q.UpsertConfigValue(ctx, repo.UpsertConfigValueParams{
+		if err := q.UpsertConfigValue(ctx, repo.UpsertConfigValueParams{
 			ConfigKey:    nullStr(codeKey),
 			ConfigValue:  nullStr(code + "|" + expiry),
 			ConfigEnabled: nullInt64(0),
 			LastModified: nullStr(now),
-		})
+		}); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "failed to store reset code")
+			return
+		}
 
 		response.OK(c, response.SuccessData(gin.H{
 			"message": "if the account exists, a reset code has been generated",
-			"code":    code, // In production, this is sent via email/SMS, not returned.
 		}))
 	}
 }

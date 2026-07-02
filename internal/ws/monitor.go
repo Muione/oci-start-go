@@ -30,12 +30,12 @@ type MonitorReportDTO struct {
 // MonitorHandler manages monitor dashboard WebSocket sessions.
 type MonitorHandler struct {
 	mu       sync.RWMutex
-	sessions map[*websocket.Conn]struct{}
+	sessions map[*safeConn]struct{}
 }
 
 // NewMonitorHandler creates a MonitorHandler.
 func NewMonitorHandler() *MonitorHandler {
-	return &MonitorHandler{sessions: make(map[*websocket.Conn]struct{})}
+	return &MonitorHandler{sessions: make(map[*safeConn]struct{})}
 }
 
 // HandleMonitor upgrades HTTP → WS for monitor dashboard connections.
@@ -45,12 +45,15 @@ func (h *MonitorHandler) HandleMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
-	defer h.remove(conn)
+	// ponytail: per-conn write serialization; Broadcast and this read loop both
+	// write through sc so they cannot race a gorilla write.
+	sc := &safeConn{c: conn}
+	defer h.remove(sc)
 
-	h.add(conn)
+	h.add(sc)
 
 	// Send welcome.
-	conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"system","message":"connected, waiting for data..."}`))
+	_ = sc.writeMessage(websocket.TextMessage, []byte(`{"type":"system","message":"connected, waiting for data..."}`))
 
 	// Read loop: respond to ping.
 	for {
@@ -60,35 +63,43 @@ func (h *MonitorHandler) HandleMonitor(w http.ResponseWriter, r *http.Request) {
 		}
 		// Respond to ping.
 		if string(msg) == "ping" || string(msg) == `"ping"` {
-			conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"pong","message":"pong"}`))
+			_ = sc.writeMessage(websocket.TextMessage, []byte(`{"type":"pong","message":"pong"}`))
 		}
 	}
 }
 
-func (h *MonitorHandler) add(conn *websocket.Conn) {
+func (h *MonitorHandler) add(sc *safeConn) {
 	h.mu.Lock()
-	h.sessions[conn] = struct{}{}
+	h.sessions[sc] = struct{}{}
 	h.mu.Unlock()
 }
 
-func (h *MonitorHandler) remove(conn *websocket.Conn) {
+func (h *MonitorHandler) remove(sc *safeConn) {
 	h.mu.Lock()
-	delete(h.sessions, conn)
+	delete(h.sessions, sc)
 	h.mu.Unlock()
 }
 
 // Broadcast sends a MonitorReportDTO to all connected dashboard sessions.
-// Called by the HTTP monitor report handler. Thread-safe (locks per-session
-// on write, matching Java's synchronized(session) pattern).
+// It snapshots the session set under a brief read lock, then writes each conn
+// outside the lock via safeConn (with a write deadline). A conn whose write
+// fails is dropped so a dead peer cannot block or starve others.
 func (h *MonitorHandler) Broadcast(report MonitorReportDTO) {
 	data, err := json.Marshal(report)
 	if err != nil {
 		return
 	}
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-	for conn := range h.sessions {
-		conn.WriteMessage(websocket.TextMessage, data)
+	conns := make([]*safeConn, 0, len(h.sessions))
+	for sc := range h.sessions {
+		conns = append(conns, sc)
+	}
+	h.mu.RUnlock()
+
+	for _, sc := range conns {
+		if err := sc.writeMessage(websocket.TextMessage, data); err != nil {
+			h.remove(sc) // drop dead conn so it doesn't block future broadcasts
+		}
 	}
 }
 

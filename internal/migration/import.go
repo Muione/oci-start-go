@@ -10,6 +10,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -83,17 +84,27 @@ func (c *Crypter) DecryptAndDecompress(dataBase64, keyBase64 string, iv []byte) 
 }
 
 // GenerateMasterKey creates a random 32-byte AES-256 key, base64-encoded.
+//
+// The exported signature is kept (no error return) for backward compatibility;
+// a CSPRNG failure is fatal and unrecoverable, so we panic rather than return a
+// silently-zero key. ponytail: panic because the exported sig can't carry an
+// error; if a caller needs the error, use internal/util/crypto.GenerateMasterKey.
 func GenerateMasterKey() string {
 	key := make([]byte, 32)
-	rand.Read(key)
+	if _, err := rand.Read(key); err != nil {
+		panic("migration: crypto/rand Read failed: " + err.Error())
+	}
 	return base64.StdEncoding.EncodeToString(key)
 }
 
-// GenerateIV creates a random 16-byte IV.
-func GenerateIV() []byte {
+// GenerateIV creates a random 16-byte IV. Returns an error if the CSPRNG fails
+// so callers cannot silently end up with a zero IV.
+func GenerateIV() ([]byte, error) {
 	iv := make([]byte, aes.BlockSize)
-	rand.Read(iv)
-	return iv
+	if _, err := rand.Read(iv); err != nil {
+		return nil, fmt.Errorf("generate IV: %w", err)
+	}
+	return iv, nil
 }
 
 func pkcs7Unpad(data []byte) ([]byte, error) {
@@ -155,29 +166,14 @@ func (s *SQLSplitter) Stats() ImportStats {
 }
 
 // ParseEncryptedFile extracts IV and DATA from an .enc file and decrypts it.
+//
+// Deprecated: this entrypoint has no master key and therefore cannot actually
+// decrypt. It returns a clear, actionable error directing callers to
+// ParseEncryptedFileWithKey. Previously it silently forwarded an empty key and
+// failed deep inside DecryptBytes with a misleading "master key must be 32
+// bytes" message.
 func (c *Crypter) ParseEncryptedFile(content string) (string, error) {
-	scanner := bufio.NewScanner(strings.NewReader(content))
-	var ivBase64, dataBase64 string
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "IV:") {
-			ivBase64 = strings.TrimSpace(strings.TrimPrefix(line, "IV:"))
-		} else if strings.HasPrefix(line, "DATA:") {
-			dataBase64 = strings.TrimSpace(strings.TrimPrefix(line, "DATA:"))
-		}
-	}
-
-	if ivBase64 == "" || dataBase64 == "" {
-		return "", fmt.Errorf("invalid encrypted file format: missing IV or DATA")
-	}
-
-	iv, err := base64.StdEncoding.DecodeString(ivBase64)
-	if err != nil {
-		return "", fmt.Errorf("invalid IV base64: %w", err)
-	}
-
-	return c.DecryptAndDecompress(dataBase64, "", iv)
+	return "", errors.New("masterKey required; use ParseEncryptedFileWithKey")
 }
 
 // ParseEncryptedFileWithKey is like ParseEncryptedFile but uses the provided

@@ -12,24 +12,28 @@ const (
 	cookieMax  = 2592000 // 30d, parity with sa-token.timeout
 )
 
-// SetSessionCookie sets the satoken HttpOnly cookie (30d, SameSite=Lax).
+// SetSessionCookie sets the satoken HttpOnly cookie (30d, SameSite=Lax, Secure).
+// Secure is always on so the cookie is never transmitted over cleartext HTTP;
+// behind a TLS-terminating proxy the upstream hop is already HTTPS.
 func SetSessionCookie(c *gin.Context, token string) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     CookieName,
 		Value:    token,
 		Path:     "/",
+		Secure:   true,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   cookieMax,
 	})
 }
 
-// ClearSessionCookie expires the satoken cookie.
+// ClearSessionCookie expires the satoken cookie (Secure to match the set path).
 func ClearSessionCookie(c *gin.Context) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     CookieName,
 		Value:    "",
 		Path:     "/",
+		Secure:   true,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,

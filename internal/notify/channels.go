@@ -352,7 +352,7 @@ func (f *FeishuNotifier) sendWebhook(ctx context.Context, text string) error {
 
 func (f *FeishuNotifier) sign(timestamp int64) string {
 	str := fmt.Sprintf("%d\n%s", timestamp, f.Secret)
-	h := hmac.New(sha256.New, []byte(str))
+	h := hmac.New(sha256.New, []byte(f.Secret))
 	h.Write([]byte(str))
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }

@@ -10,6 +10,8 @@ import (
 	_ "embed"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -21,12 +23,29 @@ import (
 //go:embed monitor_agent.sh
 var monitorAgentScript string
 
+// monitorTokenRe restricts the agent token to a safe charset so it cannot
+// escape its bash variable assignment. ponytail: ceiling 128 chars, no shell
+// metacharacters; widen the charset only if a real token format requires it.
+var monitorTokenRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
+
 // monitorDownload serves the monitor agent bash script with dynamic config.
 // GET /api/monitor/download?token=<token>&interval=<seconds>
 func monitorDownload(deps *Deps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.Query("token")
-		interval := c.DefaultQuery("interval", "10")
+		intervalStr := c.DefaultQuery("interval", "10")
+
+		// S1: validate inputs before template substitution. The script renders
+		// INTERVAL={{INTERVAL}} unquoted, so any non-integer could inject shell.
+		n, err := strconv.Atoi(intervalStr)
+		if err != nil || n < 1 || n > 3600 {
+			response.Fail(c, http.StatusBadRequest, "invalid interval (1-3600 seconds)")
+			return
+		}
+		if !monitorTokenRe.MatchString(token) {
+			response.Fail(c, http.StatusBadRequest, "invalid token")
+			return
+		}
 
 		// Build server URL from request context.
 		scheme := "http"
@@ -38,7 +57,7 @@ func monitorDownload(deps *Deps) gin.HandlerFunc {
 		script := monitorAgentScript
 		script = strings.ReplaceAll(script, "{{SERVER_URL}}", serverURL)
 		script = strings.ReplaceAll(script, "{{TOKEN}}", token)
-		script = strings.ReplaceAll(script, "{{INTERVAL}}", interval)
+		script = strings.ReplaceAll(script, "{{INTERVAL}}", strconv.Itoa(n))
 
 		c.Header("Content-Type", "text/plain; charset=utf-8")
 		c.Header("Content-Disposition", `attachment; filename="monitor_agent.sh"`)

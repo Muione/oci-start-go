@@ -21,28 +21,43 @@ func GetPrimaryVnic(ctx context.Context, c Clients, instanceID, compartmentID st
 	if err != nil {
 		return core.Vnic{}, fmt.Errorf("list vnic attachments: %w", err)
 	}
-	// First pass: the primary VNIC.
-	for _, a := range resp.Items {
+	return getPrimaryVnicFromAttachments(ctx, resp.Items, instanceID, func(ctx context.Context, vnicID *string) (core.Vnic, error) {
+		vr, err := c.Vcn.GetVnic(ctx, core.GetVnicRequest{VnicId: vnicID})
+		if err != nil {
+			return core.Vnic{}, err
+		}
+		return vr.Vnic, nil
+	})
+}
+
+// getPrimaryVnicFromAttachments resolves the primary VNIC from a list of VNIC
+// attachments. getVnic is injected so the helper is unit-testable without a
+// live OCI client. Parity with OciUtils.getVnicPrimary.
+//
+// Single pass: each attachment's Vnic is fetched at most once. The first
+// reachable Vnic is remembered so the fallback reuses it instead of re-calling
+// GetVnic (P-3: previously the fallback re-iterated and re-fetched every
+// attachment, making GetVnic O(2N) when no Vnic is marked primary).
+func getPrimaryVnicFromAttachments(ctx context.Context, attachments []core.VnicAttachment, instanceID string, getVnic func(ctx context.Context, vnicID *string) (core.Vnic, error)) (core.Vnic, error) {
+	var firstReachable *core.Vnic
+	for _, a := range attachments {
 		if a.VnicId == nil {
 			continue
 		}
-		vr, err := c.Vcn.GetVnic(ctx, core.GetVnicRequest{VnicId: a.VnicId})
+		vr, err := getVnic(ctx, a.VnicId)
 		if err != nil {
 			continue
 		}
-		if vr.Vnic.IsPrimary != nil && *vr.Vnic.IsPrimary {
-			return vr.Vnic, nil
+		if firstReachable == nil {
+			v := vr
+			firstReachable = &v
+		}
+		if vr.IsPrimary != nil && *vr.IsPrimary {
+			return vr, nil
 		}
 	}
-	// Fallback: first attachment with a reachable Vnic.
-	for _, a := range resp.Items {
-		if a.VnicId == nil {
-			continue
-		}
-		vr, err := c.Vcn.GetVnic(ctx, core.GetVnicRequest{VnicId: a.VnicId})
-		if err == nil {
-			return vr.Vnic, nil
-		}
+	if firstReachable != nil {
+		return *firstReachable, nil
 	}
 	return core.Vnic{}, fmt.Errorf("no vnic for instance %s", instanceID)
 }

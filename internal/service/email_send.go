@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -97,10 +98,13 @@ func (s *EmailService) Send(ctx context.Context, in SendEmailInput) (*EmailBodyR
 		return nil, fmt.Errorf("insert email body: %w", err)
 	}
 
-	// 7. Create email_send_record rows (one per recipient, state=0).
+	// 7. Create email_send_record rows (one per recipient, state=0). Accumulate
+	// per-recipient insert failures and surface them: the caller must be able to
+	// tell a fully-persisted send from one whose records never landed.
+	var persistErrs []error
 	for _, rec := range receives {
 		recordID := generateEmailID()
-		_ = q.InsertEmailSendRecord(ctx, repo.InsertEmailSendRecordParams{
+		if err := q.InsertEmailSendRecord(ctx, repo.InsertEmailSendRecordParams{
 			EmailSendRecordID:   nullStr(recordID),
 			EmailBodyID:         nullStr(emailBodyID),
 			EmailSendAddress:    cfg.SenderEmail,
@@ -110,28 +114,30 @@ func (s *EmailService) Send(ctx context.Context, in SendEmailInput) (*EmailBodyR
 			ReceiveEmailAddress: nullStr(rec.Email),
 			SendState:           nullInt64(0),
 			CreateTime:          nullStr(now),
-		})
+		}); err != nil {
+			persistErrs = append(persistErrs, fmt.Errorf("insert send record for %s: %w", rec.Email, err))
+		}
 	}
 
 	// 8. Build send records for parallel sending.
 	sendRecords := make([]sendRecord, len(receives))
 	for i, rec := range receives {
 		sendRecords[i] = sendRecord{
-			RecordID:       generateEmailID(),
-			ReceiveID:      rec.ID,
-			ReceiveEmail:   rec.Email,
-			ReceiveName:    rec.Name,
-			SenderEmail:    ns(cfg.SenderEmail),
-			SmtpHost:       ns(cfg.SmtpHost),
-			SmtpPort:       toInt64(ns(cfg.SmtpPort)),
-			SmtpUsername:   ns(cfg.SmtpUsername),
-			SmtpPassword:   ns(cfg.SmtpPassword),
-			Title:          in.Title,
-			Content:        in.Content,
-			TenantID:       tenantID,
-			TenantName:     tenantName,
-			EmailBodyID:    emailBodyID,
-			ConfigID:       in.TenantEmailConfigID,
+			RecordID:     generateEmailID(),
+			ReceiveID:    rec.ID,
+			ReceiveEmail: rec.Email,
+			ReceiveName:  rec.Name,
+			SenderEmail:  ns(cfg.SenderEmail),
+			SmtpHost:     ns(cfg.SmtpHost),
+			SmtpPort:     toInt64(ns(cfg.SmtpPort)),
+			SmtpUsername: ns(cfg.SmtpUsername),
+			SmtpPassword: ns(cfg.SmtpPassword),
+			Title:        in.Title,
+			Content:      in.Content,
+			TenantID:     tenantID,
+			TenantName:   tenantName,
+			EmailBodyID:  emailBodyID,
+			ConfigID:     in.TenantEmailConfigID,
 		}
 	}
 
@@ -149,37 +155,54 @@ func (s *EmailService) Send(ctx context.Context, in SendEmailInput) (*EmailBodyR
 			failCount++
 		}
 		// Update the send record state.
-		_ = q.UpdateEmailSendRecordState(ctx, repo.UpdateEmailSendRecordStateParams{
+		if err := q.UpdateEmailSendRecordState(ctx, repo.UpdateEmailSendRecordStateParams{
 			SendState:         nullInt64(state),
 			EmailSendRecordID: nullStr(result.EmailSendRecordID),
-		})
+		}); err != nil {
+			persistErrs = append(persistErrs, fmt.Errorf("update send record state %s: %w", result.EmailSendRecordID, err))
+		}
 	}
 
-	// 11. Update email_body totals.
-	_ = q.UpdateEmailBodyTotals(ctx, repo.UpdateEmailBodyTotalsParams{
+	// 11. Update email_body totals. A failure here means the stored success/fail
+	// counts diverge from what was actually sent — surface it.
+	if err := q.UpdateEmailBodyTotals(ctx, repo.UpdateEmailBodyTotalsParams{
 		ReceiveSuccessTotal: nullInt64(successCount),
 		ReceiveFailTotal:    nullInt64(failCount),
 		EmailBodyID:         emailBodyID,
-	})
+	}); err != nil {
+		persistErrs = append(persistErrs, fmt.Errorf("update email body totals: %w", err))
+	}
 
-	// 12. Update tenant_email_config today_sent_count.
-	_ = s.IncrementSentCount(ctx, in.TenantEmailConfigID, successCount)
+	// 12. Update tenant_email_config today_sent_count. A failure here means the
+	// daily-limit counter is stale — surface it.
+	if err := s.IncrementSentCount(ctx, in.TenantEmailConfigID, successCount); err != nil {
+		persistErrs = append(persistErrs, fmt.Errorf("increment sent count: %w", err))
+	}
 
-	// Return the email body info.
-	body, _ := q.FindEmailBodyById(ctx, emailBodyID)
-	return &EmailBodyResp{
+	// Return the email body info. Build from locals so a failed re-read does not
+	// zero out the response; surface the read failure separately so the caller
+	// knows the persisted row may be inconsistent.
+	body, bodyErr := q.FindEmailBodyById(ctx, emailBodyID)
+	if bodyErr != nil {
+		persistErrs = append(persistErrs, fmt.Errorf("re-read email body: %w", bodyErr))
+	}
+	resp := &EmailBodyResp{
 		ID:                  body.ID,
-		EmailBodyID:         body.EmailBodyID,
-		TenantName:          ns(body.TenantName),
-		TenantEmailConfigID: ni(body.TenantEmailConfigID),
-		SenderEmail:         ns(body.SenderEmail),
-		Title:               ns(body.Title),
-		Content:             ns(body.Content),
-		ReceiveTotal:        ni(body.ReceiveTotal),
+		EmailBodyID:         emailBodyID,
+		TenantName:          tenantName,
+		TenantEmailConfigID: in.TenantEmailConfigID,
+		SenderEmail:         ns(cfg.SenderEmail),
+		Title:               in.Title,
+		Content:             in.Content,
+		ReceiveTotal:        int64(len(receives)),
 		ReceiveSuccessTotal: successCount,
 		ReceiveFailTotal:    failCount,
-		CreateTime:          ns(body.CreateTime),
-	}, nil
+		CreateTime:          now,
+	}
+	if err := errors.Join(persistErrs...); err != nil {
+		return resp, fmt.Errorf("email send persistence: %w", err)
+	}
+	return resp, nil
 }
 
 // sendRecord holds the data needed to send one email.

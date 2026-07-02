@@ -81,8 +81,12 @@ func proxySave(deps *Deps) gin.HandlerFunc {
 		}
 		// Existing record? Update instead.
 		if idStr := c.PostForm("id"); idStr != "" {
-			id, _ := strconv.ParseInt(idStr, 10, 64)
-			_ = repo.New(deps.Store.Write).UpdateVpnProxyRecord(c.Request.Context(), repo.UpdateVpnProxyRecordParams{
+			id, err := strconv.ParseInt(idStr, 10, 64)
+			if err != nil {
+				response.Fail(c, http.StatusBadRequest, "参数 id 无效")
+				return
+			}
+			if err := repo.New(deps.Store.Write).UpdateVpnProxyRecord(c.Request.Context(), repo.UpdateVpnProxyRecordParams{
 				ID:              id,
 				ProxyType:       params.ProxyType,
 				ProxyHost:       params.ProxyHost,
@@ -91,7 +95,10 @@ func proxySave(deps *Deps) gin.HandlerFunc {
 				ProxyPassword:   params.ProxyPassword,
 				AvailableStatus: params.AvailableStatus,
 				UpdateTime:      params.UpdateTime,
-			})
+			}); err != nil {
+				response.Fail(c, http.StatusInternalServerError, "更新代理失败: "+err.Error())
+				return
+			}
 			response.OK(c, response.Success())
 			return
 		}

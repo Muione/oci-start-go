@@ -12,7 +12,7 @@ err()  { printf "${RED}[ERR]${NC} %s\n" "$1"; exit 1; }
 info() { printf "${CYAN}[..]${NC} %s\n" "$1"; }
 
 # --------------- config ---------------
-GO_MIN="1.22"
+GO_MIN="1.25"
 NODE_MIN="18"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"

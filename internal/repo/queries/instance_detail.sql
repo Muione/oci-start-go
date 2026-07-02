@@ -25,3 +25,25 @@ SELECT
 FROM instance_detail
 WHERE tenant_id = ?
 ORDER BY id;
+
+-- name: FindConsoleInstanceInfo :one
+-- Replaces the inline SELECT in cmd/oci-start/main.go wsHub.Console.SetDeps.
+-- Returns the columns the console closure scans: instance_id, display_name,
+-- public_ips, private_ips, shape, username, port, password, tenant_id,
+-- compartment_id, availability_domain.
+SELECT instance_id, display_name, public_ips, private_ips, shape,
+       username, port, password, tenant_id, compartment_id, availability_domain
+FROM instance_detail WHERE instance_id = ? LIMIT 1;
+
+-- name: FindRescueInstanceInfo :one
+-- Replaces the inline SELECT in cmd/oci-start/main.go wsHub.Rescue.SetDeps.
+-- Returns: instance_id, display_name, state, boot_volume_id, shape,
+-- availability_domain, compartment_id, public_ips, username, password.
+SELECT instance_id, display_name, state, boot_volume_id, shape,
+       availability_domain, compartment_id, public_ips, username, password
+FROM instance_detail WHERE instance_id = ? LIMIT 1;
+
+-- name: FindCompartmentID :one
+-- Replaces the inline compartment_id lookup in wsHub.Console.SetDeps
+-- GetCompartmentID.
+SELECT compartment_id FROM instance_detail WHERE instance_id = ? LIMIT 1;

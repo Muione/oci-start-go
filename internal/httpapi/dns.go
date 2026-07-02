@@ -5,11 +5,13 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Muione/oci-start-go/internal/acme"
 	"github.com/Muione/oci-start-go/internal/dns"
 	"github.com/Muione/oci-start-go/internal/response"
 )
@@ -39,6 +41,32 @@ func sslList(deps *Deps) gin.HandlerFunc {
 			"staging":    staging,
 		}))
 	}
+}
+
+// certObtain is the seam for ACME certificate issuance; defaults to
+// deps.CertManager.ObtainCertificate. Overridable in tests to avoid network.
+// ponytail: test seam only.
+var certObtain = func(deps *Deps, ctx context.Context, domain, email, cfToken string, staging bool) (*acme.CertResult, error) {
+	return deps.CertManager.ObtainCertificate(ctx, domain, email, cfToken, staging)
+}
+
+// persistCert stores the issued cert material in system_config. Returns the
+// first persistence error so the caller can surface a 500 after a successful
+// issuance (otherwise a restart would silently lose HTTPS).
+func persistCert(deps *Deps, ctx context.Context, domain, email string, result *acme.CertResult) error {
+	sets := []struct{ key, val string }{
+		{"ssl.domain", domain},
+		{"ssl.email", email},
+		{"ssl.certificate", result.Certificate},
+		{"ssl.privateKey", result.PrivateKey},
+		{"ssl.notAfter", result.NotAfter},
+	}
+	for _, s := range sets {
+		if err := deps.SysConf.SetString(ctx, s.key, s.val); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // sslIssue obtains a new SSL certificate via Let's Encrypt.
@@ -72,19 +100,19 @@ func sslIssue(deps *Deps) gin.HandlerFunc {
 			return
 		}
 
-		result, err := deps.CertManager.ObtainCertificate(ctx,
-			in.Domain, in.Email, cfToken, staging)
+		result, err := certObtain(deps, ctx, in.Domain, in.Email, cfToken, staging)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "SSL certificate issuance failed: "+err.Error())
 			return
 		}
 
-		// Store the certificate and key in system config.
-		_ = deps.SysConf.SetString(ctx, "ssl.domain", in.Domain)
-		_ = deps.SysConf.SetString(ctx, "ssl.email", in.Email)
-		_ = deps.SysConf.SetString(ctx, "ssl.certificate", result.Certificate)
-		_ = deps.SysConf.SetString(ctx, "ssl.privateKey", result.PrivateKey)
-		_ = deps.SysConf.SetString(ctx, "ssl.notAfter", result.NotAfter)
+		// E5: persist cert material; a failure here means a restart would lose
+		// HTTPS even though issuance succeeded — surface as 500, not success.
+		if err := persistCert(deps, ctx, in.Domain, in.Email, result); err != nil {
+			deps.Logger.Error().Err(err).Str("domain", in.Domain).Msg("ssl: persist cert failed")
+			response.Fail(c, http.StatusInternalServerError, "cert issued but persistence failed")
+			return
+		}
 
 		response.OK(c, response.SuccessData(gin.H{
 			"domain":   result.Domain,

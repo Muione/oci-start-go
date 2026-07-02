@@ -18,7 +18,7 @@ import (
 // LogHandler tails the application log file and streams to WS clients.
 type LogHandler struct {
 	mu       sync.Mutex
-	sessions map[*websocket.Conn]struct{}
+	sessions map[*safeConn]struct{}
 	running  bool
 	stopCh   chan struct{}
 	logPath  string
@@ -40,29 +40,31 @@ func (h *LogHandler) HandleLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
-	defer h.removeSession(conn)
+	// ponytail: per-conn write serialization; broadcast (tailLoop) and this
+	// goroutine (sendRecentLogs) both write through sc.
+	sc := &safeConn{c: conn}
+	defer h.removeSession(sc)
 
-	h.addSession(conn)
+	h.addSession(sc)
 
 	// Send last 100 lines.
-	h.sendRecentLogs(conn)
+	h.sendRecentLogs(sc)
 
 	// Read loop (client may send ping, but mostly we just push).
 	for {
-		_, _, err := conn.ReadMessage()
-		if err != nil {
+		if _, _, err := conn.ReadMessage(); err != nil {
 			break
 		}
 	}
 }
 
-func (h *LogHandler) addSession(conn *websocket.Conn) {
+func (h *LogHandler) addSession(sc *safeConn) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.sessions == nil {
-		h.sessions = make(map[*websocket.Conn]struct{})
+		h.sessions = make(map[*safeConn]struct{})
 	}
-	h.sessions[conn] = struct{}{}
+	h.sessions[sc] = struct{}{}
 	if len(h.sessions) == 1 && !h.running {
 		h.running = true
 		h.stopCh = make(chan struct{})
@@ -70,10 +72,10 @@ func (h *LogHandler) addSession(conn *websocket.Conn) {
 	}
 }
 
-func (h *LogHandler) removeSession(conn *websocket.Conn) {
+func (h *LogHandler) removeSession(sc *safeConn) {
 	h.mu.Lock()
 	if h.sessions != nil {
-		delete(h.sessions, conn)
+		delete(h.sessions, sc)
 	}
 	remaining := len(h.sessions)
 	h.mu.Unlock()
@@ -87,7 +89,7 @@ func (h *LogHandler) removeSession(conn *websocket.Conn) {
 	}
 }
 
-func (h *LogHandler) sendRecentLogs(conn *websocket.Conn) {
+func (h *LogHandler) sendRecentLogs(sc *safeConn) {
 	cmd := exec.Command("tail", "-n", "100", h.logPath)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -98,7 +100,7 @@ func (h *LogHandler) sendRecentLogs(conn *websocket.Conn) {
 	}
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
-		conn.WriteMessage(websocket.TextMessage, scanner.Bytes())
+		_ = sc.writeMessage(websocket.TextMessage, scanner.Bytes())
 	}
 	cmd.Wait()
 }
@@ -145,11 +147,22 @@ func (h *LogHandler) tailLoop() {
 	}
 }
 
+// broadcast sends a log line to all connected sessions. It snapshots the
+// session set under a brief lock, then writes each conn outside the lock via
+// safeConn (with a write deadline). A conn whose write fails is dropped so a
+// dead/slow peer cannot block or starve others.
 func (h *LogHandler) broadcast(data []byte) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	for conn := range h.sessions {
-		conn.WriteMessage(websocket.TextMessage, data)
+	conns := make([]*safeConn, 0, len(h.sessions))
+	for sc := range h.sessions {
+		conns = append(conns, sc)
+	}
+	h.mu.Unlock()
+
+	for _, sc := range conns {
+		if err := sc.writeMessage(websocket.TextMessage, data); err != nil {
+			h.removeSession(sc) // drop dead conn so it doesn't block future broadcasts
+		}
 	}
 }
 
@@ -160,8 +173,8 @@ func (h *LogHandler) Shutdown() {
 		h.running = false
 		close(h.stopCh)
 	}
-	for conn := range h.sessions {
-		conn.Close()
+	for sc := range h.sessions {
+		_ = sc.c.Close()
 	}
 	h.sessions = nil
 	h.mu.Unlock()

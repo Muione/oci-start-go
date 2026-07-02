@@ -84,7 +84,7 @@ func New(engine *grabber.Engine, store *db.Store, logger zerolog.Logger, svcs *S
 func (s *Scheduler) registerJobs() {
 	// CreateInstanceJob: every 6 seconds.
 	if s.engine != nil {
-		_, _ = s.cron.AddFunc("*/6 * * * * *", func() {
+		s.addFunc("CreateInstanceJob", "*/6 * * * * *", func() {
 			ctx := context.Background()
 			s.engine.CheckAndExecuteTasksOnce(ctx)
 		})
@@ -92,59 +92,59 @@ func (s *Scheduler) registerJobs() {
 
 	// InstanceTrafficJob: every 30 minutes (Phase 5).
 	if s.trafficSvc != nil {
-		_, _ = s.cron.AddFunc("0 */30 * * * *", func() {
+		s.addFunc("InstanceTrafficJob", "0 */30 * * * *", func() {
 			s.trafficSvc.CheckAllTenantsTraffic(context.Background())
 		})
 	} else {
-		_, _ = s.cron.AddFunc("0 */5 * * * *", func() {
+		s.addFunc("InstanceTrafficJob", "0 */5 * * * *", func() {
 			s.logger.Debug().Msg("scheduler: InstanceTrafficJob tick (stub)")
 		})
 	}
 
 	// CheckLiveJob: every hour at :00 (Phase 5).
 	if s.checkLiveSvc != nil {
-		_, _ = s.cron.AddFunc("0 0 * * * *", func() {
+		s.addFunc("CheckLiveJob", "0 0 * * * *", func() {
 			s.checkLiveSvc.CheckAccountLive(context.Background())
 		})
 	} else {
-		_, _ = s.cron.AddFunc("0 0 * * * *", func() {
+		s.addFunc("CheckLiveJob", "0 0 * * * *", func() {
 			s.logger.Debug().Msg("scheduler: CheckLiveJob tick (stub)")
 		})
 	}
 
 	// PingConnTimeJob: every 5 minutes (Phase 5).
 	if s.pingSvc != nil {
-		_, _ = s.cron.AddFunc("0 */5 * * * *", func() {
+		s.addFunc("PingConnTimeJob", "0 */5 * * * *", func() {
 			s.pingSvc.CheckPingConn(context.Background())
 		})
 	} else {
-		_, _ = s.cron.AddFunc("0 */5 * * * *", func() {
+		s.addFunc("PingConnTimeJob", "0 */5 * * * *", func() {
 			s.logger.Debug().Msg("scheduler: PingConnTimeJob tick (stub)")
 		})
 	}
 
 	// SslCertJob: daily at 04:00 (Phase 8 — real ACME renewal).
-	_, _ = s.cron.AddFunc("0 0 4 * * *", func() {
+	s.addFunc("SslCertJob", "0 0 4 * * *", func() {
 		s.sslCertJob()
 	})
 
 	// BootInstanceRefreshJob: daily at 00:00 — reset daily attempt counters.
-	_, _ = s.cron.AddFunc("0 0 0 * * *", func() {
+	s.addFunc("BootInstanceRefreshJob", "0 0 0 * * *", func() {
 		s.bootInstanceRefreshJob()
 	})
 
 	// MonitorFlashHeartbeatJob: every 15 seconds (Phase 8).
-	_, _ = s.cron.AddFunc("*/15 * * * * *", func() {
+	s.addFunc("MonitorFlashHeartbeatJob", "*/15 * * * * *", func() {
 		s.monitorHeartbeatJob()
 	})
 
 	// CheckOfflineInstanceJob: every 1 minute (Phase 5).
 	if s.offlineSvc != nil {
-		_, _ = s.cron.AddFunc("0 */1 * * * *", func() {
+		s.addFunc("CheckOfflineInstanceJob", "0 */1 * * * *", func() {
 			s.offlineSvc.CheckOfflineInstances(context.Background())
 		})
 	} else {
-		_, _ = s.cron.AddFunc("0 */1 * * * *", func() {
+		s.addFunc("CheckOfflineInstanceJob", "0 */1 * * * *", func() {
 			s.logger.Debug().Msg("scheduler: CheckOfflineInstanceJob tick (stub)")
 		})
 	}
@@ -152,11 +152,22 @@ func (s *Scheduler) registerJobs() {
 	// MultipartUploadCleanupJob: daily at 02:00 (Phase 8 — OCI object storage
 	// multipart upload cleanup. In the SQLite-based Go version, this is a no-op
 	// unless OCI object storage is configured).
-	_, _ = s.cron.AddFunc("0 0 2 * * *", func() {
+	s.addFunc("MultipartUploadCleanupJob", "0 0 2 * * *", func() {
 		s.multipartCleanupJob()
 	})
 
 	s.logger.Info().Int("jobs", len(s.cron.Entries())).Msg("scheduler: jobs registered")
+}
+
+// addFunc registers a cron job, surfacing spec parse errors via the logger
+// instead of silently discarding them. A bad cron spec would otherwise leave a
+// job (cert renewal / traffic / cleanup) quietly never running. ponytail: one
+// guard here covers every registration site in registerJobs; if a job ever
+// bypasses this helper, re-add a dedicated test.
+func (s *Scheduler) addFunc(name, spec string, fn func()) {
+	if _, err := s.cron.AddFunc(spec, fn); err != nil {
+		s.logger.Error().Err(err).Str("job", name).Msg("register cron job failed")
+	}
 }
 
 func (s *Scheduler) bootInstanceRefreshJob() {

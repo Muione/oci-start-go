@@ -85,7 +85,14 @@
 
       <!-- Content -->
       <main class="content">
-        <router-view />
+        <!-- Keep the Console + Terminal views alive so an active VNC/serial/SSH
+             session survives page switches (onBeforeUnmount doesn't fire under
+             keep-alive, so the WS + terminal stay open; onActivated refits). -->
+        <router-view v-slot="{ Component }">
+          <keep-alive :include="['console', 'terminal']">
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
       </main>
     </div>
   </div>

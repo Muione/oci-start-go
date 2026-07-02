@@ -4,6 +4,7 @@ package httpapi
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -15,6 +16,8 @@ import (
 	"github.com/Muione/oci-start-go/internal/oci"
 	"github.com/Muione/oci-start-go/internal/repo"
 	"github.com/Muione/oci-start-go/internal/response"
+	"github.com/Muione/oci-start-go/internal/service"
+	"github.com/Muione/oci-start-go/internal/util/crypto"
 )
 
 // instanceList returns paginated instance details.
@@ -216,27 +219,10 @@ func instanceModify(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusBadRequest, "shape or displayName required")
 			return
 		}
-		// Get the instance to find its tenant
-		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		// Q1: shared instance→tenant→OCI-clients resolution.
+		clients, inst, err := ociClientsForInstance(c, deps, id)
 		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "find instance: "+err.Error())
-			return
-		}
-		// Get tenant credentials
-		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
-		if err != nil {
-			response.Fail(c, http.StatusNotFound, "tenant not found")
-			return
-		}
-		creds := tenantToCreds(t)
-		prov, err := oci.NewProvider(creds, deps.MasterKey)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
-			return
-		}
-		clients, err := oci.NewClients(prov)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			respondOciClientsErr(c, err)
 			return
 		}
 		updated, err := oci.UpdateInstanceShape(c.Request.Context(), clients, inst.InstanceID, body.Shape, body.Ocpus, body.MemoryInGbs, body.DisplayName)
@@ -264,25 +250,9 @@ func instanceStart(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusBadRequest, "invalid id")
 			return
 		}
-		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		clients, inst, err := ociClientsForInstance(c, deps, id)
 		if err != nil {
-			response.Fail(c, http.StatusNotFound, "instance not found")
-			return
-		}
-		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
-		if err != nil {
-			response.Fail(c, http.StatusNotFound, "tenant not found")
-			return
-		}
-		creds := tenantToCreds(t)
-		prov, err := oci.NewProvider(creds, deps.MasterKey)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
-			return
-		}
-		clients, err := oci.NewClients(prov)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			respondOciClientsErr(c, err)
 			return
 		}
 		if err := oci.StartInstance(c.Request.Context(), clients, inst.InstanceID); err != nil {
@@ -302,25 +272,9 @@ func instanceStop(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusBadRequest, "invalid id")
 			return
 		}
-		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		clients, inst, err := ociClientsForInstance(c, deps, id)
 		if err != nil {
-			response.Fail(c, http.StatusNotFound, "instance not found")
-			return
-		}
-		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
-		if err != nil {
-			response.Fail(c, http.StatusNotFound, "tenant not found")
-			return
-		}
-		creds := tenantToCreds(t)
-		prov, err := oci.NewProvider(creds, deps.MasterKey)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
-			return
-		}
-		clients, err := oci.NewClients(prov)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			respondOciClientsErr(c, err)
 			return
 		}
 		if err := oci.StopInstance(c.Request.Context(), clients, inst.InstanceID); err != nil {
@@ -345,34 +299,21 @@ func instanceTerminate(deps *Deps) gin.HandlerFunc {
 		}
 		_ = c.ShouldBindJSON(&body) // optional
 
-		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		clients, inst, err := ociClientsForInstance(c, deps, id)
 		if err != nil {
-			response.Fail(c, http.StatusNotFound, "instance not found")
-			return
-		}
-		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
-		if err != nil {
-			response.Fail(c, http.StatusNotFound, "tenant not found")
-			return
-		}
-		creds := tenantToCreds(t)
-		prov, err := oci.NewProvider(creds, deps.MasterKey)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
-			return
-		}
-		clients, err := oci.NewClients(prov)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			respondOciClientsErr(c, err)
 			return
 		}
 		// Terminate via OCI API (preserveBootVolume=false by default)
-		if err := oci.TerminateInstance(c.Request.Context(), clients, inst.InstanceID, body.PreserveBootVolume); err != nil {
+		if err := ociTerminateInstance(c.Request.Context(), clients, inst.InstanceID, body.PreserveBootVolume); err != nil {
 			response.Fail(c, http.StatusInternalServerError, "terminate instance: "+err.Error())
 			return
 		}
 		// Delete local record
-		_ = repo.New(deps.Store.Write).DeleteInstanceDetail(c.Request.Context(), id)
+		if err := repo.New(deps.Store.Write).DeleteInstanceDetail(c.Request.Context(), id); err != nil {
+			respondLocalSyncFailed(c, deps, "delete instance detail", err)
+			return
+		}
 		response.OK(c, response.SuccessMsg("instance termination request sent"))
 	}
 }
@@ -403,38 +344,25 @@ func instanceChangeIP(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusBadRequest, "invalid id")
 			return
 		}
-		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		clients, inst, err := ociClientsForInstance(c, deps, id)
 		if err != nil {
-			response.Fail(c, http.StatusNotFound, "instance not found")
-			return
-		}
-		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
-		if err != nil {
-			response.Fail(c, http.StatusNotFound, "tenant not found")
-			return
-		}
-		creds := tenantToCreds(t)
-		prov, err := oci.NewProvider(creds, deps.MasterKey)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
-			return
-		}
-		clients, err := oci.NewClients(prov)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			respondOciClientsErr(c, err)
 			return
 		}
 		oldIP := inst.PublicIps
-		newIP, err := oci.ReassignPublicIP(c.Request.Context(), clients, ns(t.Tenancy), inst.InstanceID)
+		newIP, err := ociReassignPublicIP(c.Request.Context(), clients, inst.CompartmentID, inst.InstanceID)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "change ip: "+err.Error())
 			return
 		}
 		// Update local DB with new IP
-		_ = repo.New(deps.Store.Write).UpdateInstanceDetailPublicIp(c.Request.Context(), repo.UpdateInstanceDetailPublicIpParams{
+		if err := repo.New(deps.Store.Write).UpdateInstanceDetailPublicIp(c.Request.Context(), repo.UpdateInstanceDetailPublicIpParams{
 			PublicIps: sql.NullString{String: newIP, Valid: true},
 			ID:        id,
-		})
+		}); err != nil {
+			respondLocalSyncFailed(c, deps, "update instance public ip", err)
+			return
+		}
 		response.OK(c, response.SuccessData(gin.H{
 			"oldIp": oldIP,
 			"newIp": newIP,
@@ -456,29 +384,13 @@ func instanceEnableIPv6(deps *Deps) gin.HandlerFunc {
 		}
 		_ = c.ShouldBindJSON(&body)
 
-		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		clients, inst, err := ociClientsForInstance(c, deps, id)
 		if err != nil {
-			response.Fail(c, http.StatusNotFound, "instance not found")
-			return
-		}
-		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
-		if err != nil {
-			response.Fail(c, http.StatusNotFound, "tenant not found")
-			return
-		}
-		creds := tenantToCreds(t)
-		prov, err := oci.NewProvider(creds, deps.MasterKey)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
-			return
-		}
-		clients, err := oci.NewClients(prov)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			respondOciClientsErr(c, err)
 			return
 		}
 		// Get the primary VNIC
-		vnic, err := oci.GetPrimaryVnic(c.Request.Context(), clients, inst.InstanceID, ns(t.Tenancy))
+		vnic, err := ociGetPrimaryVnic(c.Request.Context(), clients, inst.InstanceID, inst.CompartmentID)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "get vnic: "+err.Error())
 			return
@@ -487,16 +399,19 @@ func instanceEnableIPv6(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusInternalServerError, "vnic has no id")
 			return
 		}
-		ipv6, err := oci.AssignIpv6ToVnic(c.Request.Context(), clients.Vcn, *vnic.Id, body.ForceNew)
+		ipv6, err := ociAssignIpv6ToVnic(c.Request.Context(), clients.Vcn, *vnic.Id, body.ForceNew)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "enable ipv6: "+err.Error())
 			return
 		}
 		// Update local DB with new IPv6
-		_ = repo.New(deps.Store.Write).UpdateInstanceDetailIpv6(c.Request.Context(), repo.UpdateInstanceDetailIpv6Params{
+		if err := repo.New(deps.Store.Write).UpdateInstanceDetailIpv6(c.Request.Context(), repo.UpdateInstanceDetailIpv6Params{
 			Ipv6Addresses: sql.NullString{String: ipv6, Valid: true},
 			ID:            id,
-		})
+		}); err != nil {
+			respondLocalSyncFailed(c, deps, "update instance ipv6", err)
+			return
+		}
 		response.OK(c, response.SuccessData(gin.H{
 			"ipv6Address": ipv6,
 		}))
@@ -646,7 +561,7 @@ func instanceExport(deps *Deps) gin.HandlerFunc {
 					port = 22
 				}
 				sb.WriteString(fmt.Sprintf("  SSH Port:   %d\n", port))
-				sb.WriteString(fmt.Sprintf("  Root Pass:  %s\n", dash(ns(inst.Password))))
+				sb.WriteString(fmt.Sprintf("  Root Pass:  %s\n", redactPassword(inst.Password)))
 				if ns(inst.CreateTime) != "" {
 					sb.WriteString(fmt.Sprintf("  Created:    %s\n", ns(inst.CreateTime)))
 				}
@@ -691,7 +606,7 @@ func instanceSaveSSHConfig(deps *Deps) gin.HandlerFunc {
 		if err := repo.New(deps.Store.Write).UpdateInstanceSSHConfig(c.Request.Context(), repo.UpdateInstanceSSHConfigParams{
 			Username: sql.NullString{String: body.Username, Valid: true},
 			Port:     sql.NullInt64{Int64: body.Port, Valid: true},
-			Password: sql.NullString{String: body.Password, Valid: true},
+			Password: encryptPasswordField(body.Password, deps.MasterKey),
 			ID:       id,
 		}); err != nil {
 			response.Fail(c, http.StatusInternalServerError, "save ssh config: "+err.Error())
@@ -750,10 +665,97 @@ func tenantToCreds(t repo.Tenant) oci.Credentials {
 	}
 }
 
+// ociClientsForInstance loads an instance detail by id, resolves its tenant,
+// and builds OCI clients from the tenant credentials. It deduplicates the
+// GetByID→FindTenantByID→NewProvider→NewClients preamble shared by the
+// instance action handlers. ponytail: package var so tests can swap it out
+// (avoids real OCI client construction / network in unit tests); production
+// uses the default implementation.
+var ociClientsForInstance = func(c *gin.Context, deps *Deps, id int64) (oci.Clients, *service.InstanceDetailResp, error) {
+	inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+	if err != nil {
+		return oci.Clients{}, nil, fmt.Errorf("find instance %d: %w", id, err)
+	}
+	t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
+	if err != nil {
+		return oci.Clients{}, nil, fmt.Errorf("find tenant for instance %d: %w", id, err)
+	}
+	creds := tenantToCreds(t)
+	prov, err := oci.NewProvider(creds, deps.MasterKey)
+	if err != nil {
+		return oci.Clients{}, nil, fmt.Errorf("oci provider: %w", err)
+	}
+	clients, err := oci.NewClients(prov)
+	if err != nil {
+		return oci.Clients{}, nil, fmt.Errorf("oci clients: %w", err)
+	}
+	return clients, inst, nil
+}
+
+// respondOciClientsErr maps an ociClientsForInstance failure to an HTTP
+// response: 404 when the instance or tenant is absent, 500 otherwise.
+func respondOciClientsErr(c *gin.Context, err error) {
+	if errors.Is(err, sql.ErrNoRows) {
+		response.Fail(c, http.StatusNotFound, "instance or tenant not found")
+		return
+	}
+	response.Fail(c, http.StatusInternalServerError, err.Error())
+}
+
+// OCI operation seams. ponytail: package vars defaulting to the real oci
+// functions; overridable in tests so the "cloud op succeeded" path can be
+// exercised without network or real credentials.
+var (
+	ociTerminateInstance = oci.TerminateInstance
+	ociReassignPublicIP  = oci.ReassignPublicIP
+	ociGetPrimaryVnic    = oci.GetPrimaryVnic
+	ociAssignIpv6ToVnic  = oci.AssignIpv6ToVnic
+)
+
+// respondLocalSyncFailed logs and returns a 200 carrying a syncFailed marker:
+// the cloud operation already succeeded, so a 500 would misrepresent state,
+// but the operator must know the local DB is now stale.
+func respondLocalSyncFailed(c *gin.Context, deps *Deps, op string, err error) {
+	deps.Logger.Error().Err(err).Str("op", op).Msg("instance local sync failed")
+	response.OK(c, response.SuccessData(gin.H{
+		"message":    "cloud operation succeeded but local sync failed: " + err.Error(),
+		"syncFailed": true,
+	}))
+}
+
 // dash returns s if non-blank, otherwise "-".
 func dash(s string) string {
 	if s == "" {
 		return "-"
 	}
 	return s
+}
+
+// redactPassword masks the root password in exports (S4): "-" when no password
+// is stored, "[redacted]" when one is. Never emits the stored value — which may
+// now be ciphertext, but plaintext must not leak regardless.
+func redactPassword(p sql.NullString) string {
+	if !p.Valid || p.String == "" {
+		return "-"
+	}
+	return "[redacted]"
+}
+
+// encryptPasswordField AES-256-GCM encrypts a plaintext password for at-rest
+// storage in instance_detail (S4). With no master key wired the plaintext is
+// stored verbatim (bootstrap path); DecryptStringWithFallback on read returns
+// it verbatim, so the round-trip stays correct. Encryption failure falls back
+// to plaintext rather than failing the save — the row stays usable.
+func encryptPasswordField(plain string, masterKey []byte) sql.NullString {
+	if plain == "" {
+		return sql.NullString{}
+	}
+	if len(masterKey) == 0 {
+		return sql.NullString{String: plain, Valid: true}
+	}
+	enc, err := crypto.EncryptString(plain, masterKey)
+	if err != nil {
+		return sql.NullString{String: plain, Valid: true}
+	}
+	return sql.NullString{String: enc, Valid: true}
 }

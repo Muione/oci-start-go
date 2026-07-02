@@ -53,27 +53,17 @@ type TenantResp struct {
 }
 
 func (s *TenantService) List(ctx context.Context) ([]TenantResp, error) {
-	rows, err := repo.New(s.store.Read).ListTenants(ctx)
+	// Single round-trip: ListTenantsWithCounts joins register_time, active boot
+	// count and child count as correlated subqueries, replacing the per-tenant
+	// fan-out (FindRegisterDetailByTenantId + CountBootInstancesByTenantId +
+	// CountTenantChildren) that scaled 1 + 3*N queries with N tenants.
+	rows, err := repo.New(s.store.Read).ListTenantsWithCounts(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list tenants: %w", err)
 	}
 	out := make([]TenantResp, 0, len(rows))
 	for _, r := range rows {
-		// Look up register_detail for active days (register_time = OCI subscription start)
-		registerTime := ""
-		if rd, e := repo.New(s.store.Read).FindRegisterDetailByTenantId(ctx, ns(r.TenantID)); e == nil {
-			registerTime = ns(rd.RegisterTime)
-		}
-		resp := toTenantResp(r, registerTime)
-		// Enrich: has boot tasks?
-		if n, e := repo.New(s.store.Read).CountBootInstancesByTenantId(ctx, nullInt64(r.ID)); e == nil && n > 0 {
-			resp.HasBootTask = true
-		}
-		// Enrich: has children?
-		if n, e := repo.New(s.store.Read).CountTenantChildren(ctx, nullInt64(r.ID)); e == nil && n > 0 {
-			resp.HasChildren = true
-		}
-		out = append(out, resp)
+		out = append(out, toTenantRespFromCounts(r))
 	}
 	return out, nil
 }
@@ -386,6 +376,36 @@ func tenantToCreds(t repo.Tenant) oci.Credentials {
 	}
 }
 
+// toTenantRespFromCounts maps the single-round-trip aggregate row to the API
+// response, deriving HasBootTask/HasChildren from BootCount/ChildCount.
+func toTenantRespFromCounts(r repo.ListTenantsWithCountsRow) TenantResp {
+	createdAt := ns(r.CreatedAt)
+	// Use register_detail.register_time (OCI subscription timeStart) for active days when available
+	activeDaysInput := ns(r.RegisterTime)
+	if activeDaysInput == "" {
+		activeDaysInput = createdAt
+	}
+	return TenantResp{
+		ID:           r.ID,
+		TenantID:     ns(r.TenantID),
+		UserName:     ns(r.UserName),
+		Fingerprint:  ns(r.Fingerprint),
+		Tenancy:      ns(r.Tenancy),
+		Region:       ns(r.Region),
+		RegionName:   region.NameByCode(region.CodeByName(ns(r.Region))),
+		CreatedAt:    createdAt,
+		ApiSynced:    ni(r.ApiSynced) == 1,
+		CloudType:    ni(r.CloudType),
+		IsActive:     isActive(r.IsActive),
+		IsHomeRegion: ni(r.IsHomeRegion) != 0,
+		AccountType:  ns(r.AccountType),
+		TenancyName:  ns(r.TenancyName),
+		ActiveDays:   calculateActiveDays(activeDaysInput),
+		HasBootTask:  r.BootCount > 0,
+		HasChildren:  r.ChildCount > 0,
+	}
+}
+
 func toTenantResp(r repo.ListTenantsRow, registerTime string) TenantResp {
 	createdAt := ns(r.CreatedAt)
 	// Use register_detail.register_time (OCI subscription timeStart) for active days when available
@@ -461,9 +481,14 @@ func isActive(v sql.NullInt64) bool {
 	return v.Int64 != 0
 }
 
-func nullStr(s string) sql.NullString  { return sql.NullString{String: s, Valid: s != ""} }
-func nullInt64(v int64) sql.NullInt64  { return sql.NullInt64{Int64: v, Valid: true} }
-func boolToInt(b bool) int64           { if b { return 1 }; return 0 }
+func nullStr(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }
+func nullInt64(v int64) sql.NullInt64 { return sql.NullInt64{Int64: v, Valid: true} }
+func boolToInt(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
+}
 
 const randChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 

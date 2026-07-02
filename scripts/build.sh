@@ -64,7 +64,7 @@ main() {
 
   info "[4/4] Go build (-tags dist) ..."
   START=$(date +%s)
-  CGO_ENABLED=1 $GO_BIN build -tags dist -o "$OUTPUT" ./cmd/oci-start/ 2>&1
+  CGO_ENABLED=0 $GO_BIN build -tags dist -o "$OUTPUT" ./cmd/oci-start/ 2>&1
   ELAPSED=$(($(date +%s) - START))
 
   if [ ! -f "$OUTPUT" ]; then

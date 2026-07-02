@@ -8,10 +8,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/Muione/oci-start-go/internal/db"
 	"github.com/Muione/oci-start-go/internal/repo"
+	"github.com/rs/zerolog"
 )
 
 // ProxyConfig represents the application-level outbound proxy configuration.
@@ -27,24 +29,39 @@ type ProxyConfig struct {
 const timeFmt = "2006-01-02 15:04:05"
 
 type Service struct {
-	store *db.Store
+	store  *db.Store
+	logger zerolog.Logger
 }
 
-func New(store *db.Store) *Service { return &Service{store: store} }
+func New(store *db.Store) *Service { return &Service{store: store, logger: zerolog.Nop()} }
 
-// GetString returns config_value for key ("" if absent).
+// SetLogger injects a logger for surfacing DB read failures. Default is a nop
+// logger so callers that never set one see no behavior change.
+func (s *Service) SetLogger(l zerolog.Logger) { s.logger = l }
+
+// GetString returns config_value for key ("" if absent). A DB read failure
+// (anything other than sql.ErrNoRows) is logged at warn: a transient error
+// would otherwise make turnstile/mfa read as "off" — a silent security
+// downgrade. Absent key stays silent (documented "not configured" case).
 func (s *Service) GetString(ctx context.Context, key string) string {
 	cfg, err := repo.New(s.store.Read).FindConfigByKey(ctx, sql.NullString{String: key, Valid: true})
 	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			s.logger.Warn().Err(err).Str("key", key).Msg("sysconf GetString: config read failed, returning empty")
+		}
 		return ""
 	}
 	return cfg.ConfigValue.String
 }
 
-// GetBool returns the config_enabled flag for key (false if absent).
+// GetBool returns the config_enabled flag for key (false if absent). Same
+// warn-on-DB-error policy as GetString.
 func (s *Service) GetBool(ctx context.Context, key string) bool {
 	cfg, err := repo.New(s.store.Read).FindConfigByKey(ctx, sql.NullString{String: key, Valid: true})
 	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			s.logger.Warn().Err(err).Str("key", key).Msg("sysconf GetBool: config read failed, returning false")
+		}
 		return false
 	}
 	return cfg.ConfigEnabled.Valid && cfg.ConfigEnabled.Int64 != 0

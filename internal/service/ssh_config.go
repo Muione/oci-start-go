@@ -7,16 +7,20 @@ package service
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net"
+	"strings"
 	"time"
 
+	"github.com/Muione/oci-start-go/internal/util/crypto"
 	"github.com/rs/zerolog"
 	"golang.org/x/crypto/ssh"
 )
 
 // SSHConfigurator enables root password login on remote instances.
 type SSHConfigurator struct {
-	logger zerolog.Logger
+	logger    zerolog.Logger
+	masterKey []byte // S4: decrypt instance_detail.password (encrypted at rest)
 }
 
 // NewSSHConfigurator constructs an SSHConfigurator.
@@ -24,29 +28,59 @@ func NewSSHConfigurator(logger zerolog.Logger) *SSHConfigurator {
 	return &SSHConfigurator{logger: logger}
 }
 
+// SetMasterKey arms the configurator to decrypt instance passwords stored as
+// AES-256-GCM ciphertext (S4). Unset → passwords treated as plaintext (legacy).
+func (s *SSHConfigurator) SetMasterKey(key []byte) { s.masterKey = key }
+
+// decryptIfSet decrypts a password when masterKey is armed; otherwise returns
+// the value as-is. Ciphertext that fails GCM auth also falls back to raw
+// (legacy plaintext rows), via DecryptStringWithFallback.
+func (s *SSHConfigurator) decryptIfSet(pw string) string {
+	if s.masterKey == nil {
+		return pw
+	}
+	return crypto.DecryptStringWithFallback(pw, s.masterKey)
+}
+
 // EnableRootLogin SSHs into the instance and configures root password login.
 // Returns nil on success, error on failure.
 // Parity with Java JschUtils.enableRootLogin.
 func (s *SSHConfigurator) EnableRootLogin(host, username, password, rootPassword string, port int) error {
-	// 1. Set root password (separate step, as in Java).
+	// S4: instance_detail.password is AES-encrypted for new rows; decrypt
+	// before SSH dial. nil masterKey → passthrough (legacy/unwired).
+	password = s.decryptIfSet(password)
+	rootPassword = s.decryptIfSet(rootPassword)
+	// 1. Set root password. The password is piped to chpasswd over SSH stdin,
+	// never interpolated into the shell command, so shell metacharacters in the
+	// password cannot break out into command execution (S8).
 	if rootPassword != "" {
-		passwdScript := fmt.Sprintf(`echo "root:%s" | chpasswd`, rootPassword)
-		if err := s.execScript(host, username, password, port, passwdScript); err != nil {
+		script, stdin := buildRootPasswordInput(rootPassword)
+		if err := s.execScript(host, username, password, port, script, strings.NewReader(stdin)); err != nil {
 			return fmt.Errorf("set root password: %w", err)
 		}
 	}
 
 	// 2. Main sshd_config modification script.
 	script := buildEnableRootLoginScript()
-	if err := s.execScript(host, username, password, port, script); err != nil {
+	if err := s.execScript(host, username, password, port, script, nil); err != nil {
 		return fmt.Errorf("configure sshd: %w", err)
 	}
 
 	return nil
 }
 
-// execScript connects via SSH and executes a shell script.
-func (s *SSHConfigurator) execScript(host, username, password string, port int, script string) error {
+// buildRootPasswordInput returns the chpasswd command and the stdin payload that
+// sets the root password. The password travels in stdin (read by chpasswd), not
+// in the command string, eliminating shell-injection risk from a password
+// containing ;, $, backticks, quotes, etc.
+func buildRootPasswordInput(rootPassword string) (script, stdin string) {
+	return "chpasswd", "root:" + rootPassword + "\n"
+}
+
+// execScript connects via SSH and executes a shell script. When stdin is
+// non-nil it is piped to the remote command (used to feed chpasswd the password
+// without interpolating it into the command string).
+func (s *SSHConfigurator) execScript(host, username, password string, port int, script string, stdin io.Reader) error {
 	config := &ssh.ClientConfig{
 		User: username,
 		Auth: []ssh.AuthMethod{
@@ -71,6 +105,9 @@ func (s *SSHConfigurator) execScript(host, username, password string, port int, 
 
 	var stderr bytes.Buffer
 	session.Stderr = &stderr
+	if stdin != nil {
+		session.Stdin = stdin
+	}
 
 	if err := session.Run(script); err != nil {
 		if stderr.Len() > 0 {

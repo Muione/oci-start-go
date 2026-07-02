@@ -65,6 +65,9 @@ type rescueFlow struct {
 	OriginalBootID string
 	RescueBootID   string
 	Cancel         chan struct{}
+	done           chan struct{}  // closed when runRescueFlow returns; lets Shutdown await exit
+	sc             *safeConn      // shared write-serialized conn for this flow
+	tenantID       int64          // tenant whose instance is being rescued (E7: was hardcoded 0 in CompleteRescue)
 	Status         RescueStatus
 }
 
@@ -87,6 +90,31 @@ func (h *RescueHandler) SetDeps(deps *RescueDeps) {
 	h.deps = deps
 }
 
+// Shutdown cancels every active rescue flow and best-effort waits for each
+// flow's goroutine to exit. Called by Hub.Shutdown. A flow's Cancel may be
+// closed already by handleCancel/handleInit (they delete from active first),
+// so only flows still in the map are touched here.
+func (h *RescueHandler) Shutdown() {
+	h.mu.Lock()
+	flows := make([]*rescueFlow, 0, len(h.active))
+	for _, f := range h.active {
+		flows = append(flows, f)
+	}
+	h.active = make(map[string]*rescueFlow)
+	h.mu.Unlock()
+	for _, f := range flows {
+		close(f.Cancel)
+		if f.done != nil {
+			select {
+			case <-f.done:
+			case <-time.After(2 * time.Second):
+				// ponytail: best-effort wait; a flow mid-OCI-poll may take a
+				// poll cycle to notice cancel. Don't block graceful shutdown.
+			}
+		}
+	}
+}
+
 // HandleRescue upgrades HTTP → WS for rescue operations.
 func (h *RescueHandler) HandleRescue(w http.ResponseWriter, r *http.Request) {
 	conn, err := Upgrader.Upgrade(w, r, nil)
@@ -94,6 +122,9 @@ func (h *RescueHandler) HandleRescue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+	// ponytail: all writes go through sc so the runRescueFlow goroutine and
+	// this read loop (handleStatus/handleCancel) cannot race a gorilla write.
+	sc := &safeConn{c: conn}
 
 	for {
 		_, msg, err := conn.ReadMessage()
@@ -109,20 +140,20 @@ func (h *RescueHandler) HandleRescue(w http.ResponseWriter, r *http.Request) {
 		}
 		switch req.Type {
 		case "init":
-			h.handleInit(conn, req.Data)
+			h.handleInit(sc, req.Data)
 		case "status":
-			h.handleStatus(conn, req.Data)
+			h.handleStatus(sc, req.Data)
 		case "cancel":
-			h.handleCancel(conn, req.Data)
+			h.handleCancel(sc, req.Data)
 		case "complete":
-			h.handleComplete(conn, req.Data)
+			h.handleComplete(sc, req.Data)
 		default:
-			conn.WriteJSON(map[string]string{"type": "error", "message": "unknown command: " + req.Type})
+			sc.writeJSON(map[string]string{"type": "error", "message": "unknown command: " + req.Type})
 		}
 	}
 }
 
-func (h *RescueHandler) handleInit(conn *websocket.Conn, data json.RawMessage) {
+func (h *RescueHandler) handleInit(sc *safeConn, data json.RawMessage) {
 	var d struct {
 		InstanceID    string `json:"instanceId"`
 		RescueType    int    `json:"rescueType"`    // 0=DD, 1=netboot
@@ -130,7 +161,7 @@ func (h *RescueHandler) handleInit(conn *websocket.Conn, data json.RawMessage) {
 		TenantID      int64  `json:"tenantId"`
 	}
 	if err := json.Unmarshal(data, &d); err != nil || d.InstanceID == "" {
-		conn.WriteJSON(map[string]string{"type": "error", "message": "instanceId required"})
+		sc.writeJSON(map[string]string{"type": "error", "message": "instanceId required"})
 		return
 	}
 
@@ -139,7 +170,7 @@ func (h *RescueHandler) handleInit(conn *websocket.Conn, data json.RawMessage) {
 	h.mu.Unlock()
 
 	if deps == nil || deps.StopInstance == nil {
-		conn.WriteJSON(map[string]string{
+		sc.writeJSON(map[string]string{
 			"type":    "info",
 			"message": "rescue handler running in stub mode — OCI deps not wired",
 		})
@@ -150,17 +181,27 @@ func (h *RescueHandler) handleInit(conn *websocket.Conn, data json.RawMessage) {
 		InstanceID: d.InstanceID,
 		Step:       "init",
 		Cancel:     make(chan struct{}),
+		done:       make(chan struct{}),
+		sc:         sc,
+		tenantID:   d.TenantID,
 	}
 
 	h.mu.Lock()
+	// C5: close any previous flow for this instance so its goroutine stops
+	// calling OCI and doesn't leak; mirrors console.go's old-session cleanup.
+	if old, ok := h.active[d.InstanceID]; ok {
+		close(old.Cancel)
+		delete(h.active, d.InstanceID)
+	}
 	h.active[d.InstanceID] = flow
 	h.mu.Unlock()
 
-	// Run the rescue flow in a goroutine, sending updates over WS.
-	go h.runRescueFlow(conn, flow, d.TenantID, d.RescueType, d.RescueImageID)
+	// Run the rescue flow in a goroutine, sending updates over WS. deps is
+	// captured by value here so concurrent SetDeps cannot race the read.
+	go h.runRescueFlow(sc, flow, deps, d.TenantID, d.RescueType, d.RescueImageID)
 }
 
-func (h *RescueHandler) handleStatus(conn *websocket.Conn, data json.RawMessage) {
+func (h *RescueHandler) handleStatus(sc *safeConn, data json.RawMessage) {
 	var d struct {
 		InstanceID string `json:"instanceId"`
 	}
@@ -171,11 +212,11 @@ func (h *RescueHandler) handleStatus(conn *websocket.Conn, data json.RawMessage)
 	h.mu.Unlock()
 
 	if flow == nil {
-		conn.WriteJSON(map[string]string{"type": "error", "message": "no active rescue for " + d.InstanceID})
+		sc.writeJSON(map[string]string{"type": "error", "message": "no active rescue for " + d.InstanceID})
 		return
 	}
 
-	conn.WriteJSON(RescueStatus{
+	sc.writeJSON(RescueStatus{
 		Step:       flow.Step,
 		Message:    flow.Status.Message,
 		Progress:   flow.Status.Progress,
@@ -183,7 +224,7 @@ func (h *RescueHandler) handleStatus(conn *websocket.Conn, data json.RawMessage)
 	})
 }
 
-func (h *RescueHandler) handleCancel(conn *websocket.Conn, data json.RawMessage) {
+func (h *RescueHandler) handleCancel(sc *safeConn, data json.RawMessage) {
 	var d struct {
 		InstanceID string `json:"instanceId"`
 	}
@@ -197,14 +238,14 @@ func (h *RescueHandler) handleCancel(conn *websocket.Conn, data json.RawMessage)
 	}
 	h.mu.Unlock()
 
-	conn.WriteJSON(map[string]string{
+	sc.writeJSON(map[string]string{
 		"type":       "cancelled",
 		"instanceId": d.InstanceID,
 	})
 }
 
 // handleComplete resumes the rescue flow after the user finishes repair work.
-func (h *RescueHandler) handleComplete(conn *websocket.Conn, data json.RawMessage) {
+func (h *RescueHandler) handleComplete(sc *safeConn, data json.RawMessage) {
 	var d struct {
 		InstanceID string `json:"instanceId"`
 	}
@@ -215,16 +256,16 @@ func (h *RescueHandler) handleComplete(conn *websocket.Conn, data json.RawMessag
 	h.mu.Unlock()
 
 	if flow == nil {
-		conn.WriteJSON(map[string]string{"type": "error", "message": "no active rescue for " + d.InstanceID})
+		sc.writeJSON(map[string]string{"type": "error", "message": "no active rescue for " + d.InstanceID})
 		return
 	}
 
 	// Continue the rescue flow from step 7 onwards (restore original boot volume).
-	go h.CompleteRescue(conn, d.InstanceID)
+	go h.CompleteRescue(sc.c, d.InstanceID)
 }
 
-func (h *RescueHandler) runRescueFlow(conn *websocket.Conn, flow *rescueFlow, tenantID int64, rescueType int, rescueImageID string) {
-	deps := h.deps
+func (h *RescueHandler) runRescueFlow(sc *safeConn, flow *rescueFlow, deps *RescueDeps, tenantID int64, rescueType int, rescueImageID string) {
+	defer close(flow.done) // signal exit so Shutdown can await cancellation
 	if deps == nil {
 		return
 	}
@@ -232,7 +273,7 @@ func (h *RescueHandler) runRescueFlow(conn *websocket.Conn, flow *rescueFlow, te
 	send := func(s RescueStatus) {
 		flow.Status = s
 		s.InstanceID = flow.InstanceID
-		conn.WriteJSON(s)
+		_ = sc.writeJSON(s)
 	}
 
 	isCancelled := func() bool {
@@ -355,31 +396,37 @@ func (h *RescueHandler) runRescueFlow(conn *websocket.Conn, flow *rescueFlow, te
 func (h *RescueHandler) CompleteRescue(conn *websocket.Conn, instanceID string) {
 	h.mu.Lock()
 	flow := h.active[instanceID]
+	deps := h.deps
 	h.mu.Unlock()
 
-	if flow == nil {
+	if flow == nil || deps == nil {
 		return
 	}
 
-	deps := h.deps
-	if deps == nil {
-		return
+	// Use the flow's shared safeConn so writes here cannot race the main
+	// read loop (handleStatus/handleCancel). Fallback wraps conn if absent.
+	sc := flow.sc
+	if sc == nil {
+		sc = &safeConn{c: conn}
 	}
 
 	send := func(s RescueStatus) {
 		flow.Status = s
 		s.InstanceID = flow.InstanceID
-		conn.WriteJSON(s)
+		_ = sc.writeJSON(s)
 	}
 
 	// Step 7: Stop instance.
 	send(RescueStatus{Step: "stop_rescue", Message: "停止急救系统...", Progress: 82})
-	_ = deps.StopInstance(flow.InstanceID, 0)
+	if err := deps.StopInstance(flow.InstanceID, flow.tenantID); err != nil {
+		send(RescueStatus{Step: "error", Message: "停止急救系统失败", Error: err.Error(), Progress: 82})
+		return
+	}
 	time.Sleep(5 * time.Second)
 
 	// Wait for stopped (max 5 min).
 	for i := 0; i < 60; i++ {
-		inst, err := deps.GetInstance(flow.InstanceID, 0)
+		inst, err := deps.GetInstance(flow.InstanceID, flow.tenantID)
 		if err != nil || inst.State == "STOPPED" {
 			break
 		}
@@ -390,27 +437,36 @@ func (h *RescueHandler) CompleteRescue(conn *websocket.Conn, instanceID string) 
 	// Step 8: Detach rescue boot volume.
 	send(RescueStatus{Step: "detach_rescue", Message: "卸载急救引导卷...", Progress: 88})
 	if flow.RescueBootID != "" {
-		_, _ = deps.DetachBootVolume(flow.InstanceID, 0)
+		if _, err := deps.DetachBootVolume(flow.InstanceID, flow.tenantID); err != nil {
+			send(RescueStatus{Step: "error", Message: "卸载急救引导卷失败", Error: err.Error(), Progress: 88})
+			return
+		}
 	}
 	send(RescueStatus{Step: "detach_rescue", Message: "急救引导卷已卸载", Progress: 92})
 
 	// Step 9: Reattach original boot volume.
 	send(RescueStatus{Step: "reattach_original", Message: "重新挂载原始引导卷...", Progress: 95})
 	if flow.OriginalBootID != "" {
-		_ = deps.AttachBootVolume(flow.InstanceID, 0, flow.OriginalBootID)
+		if err := deps.AttachBootVolume(flow.InstanceID, flow.tenantID, flow.OriginalBootID); err != nil {
+			send(RescueStatus{Step: "error", Message: "重新挂载原始引导卷失败", Error: err.Error(), Progress: 95})
+			return
+		}
 	}
 	send(RescueStatus{Step: "reattach_original", Message: "原始引导卷已挂载", Progress: 98})
 
 	// Step 10: Start instance.
 	send(RescueStatus{Step: "start_final", Message: "启动实例...", Progress: 99})
-	_ = deps.StartInstance(flow.InstanceID, 0)
+	if err := deps.StartInstance(flow.InstanceID, flow.tenantID); err != nil {
+		send(RescueStatus{Step: "error", Message: "启动实例失败", Error: err.Error(), Progress: 99})
+		return
+	}
 
 	// Step 10.5: Wait for instance to be reachable, then enable root login (Phase 12.3).
 	if deps.EnableRootLogin != nil {
 		send(RescueStatus{Step: "enable_root", Message: "等待实例启动并配置SSH...", Progress: 99})
 		time.Sleep(30 * time.Second) // Give sshd time to start.
 
-		info, err := deps.GetInstance(flow.InstanceID, 0)
+		info, err := deps.GetInstance(flow.InstanceID, flow.tenantID)
 		if err == nil && info.PublicIP != "" {
 			if err := deps.EnableRootLogin(info.PublicIP, "root", info.SSHPassword, info.SSHPassword, 22); err != nil {
 				send(RescueStatus{Step: "warning", Message: "SSH配置失败（实例可能需要手动配置）",

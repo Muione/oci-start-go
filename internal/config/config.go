@@ -5,6 +5,7 @@ package config
 import (
 	_ "embed"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +22,7 @@ type Config struct {
 	BaseFile   BaseFileCfg   `mapstructure:"base_file"`
 	ThirdApi   ThirdApiCfg   `mapstructure:"third_api"`
 	Oci        OciCfg        `mapstructure:"oci"`
+	SSH        SSHCfg        `mapstructure:"ssh"`
 	Ssl        SslCfg        `mapstructure:"ssl"`
 	Turnstile  TurnstileCfg  `mapstructure:"turnstile"`
 	SaToken    SaTokenCfg    `mapstructure:"sa_token"`
@@ -55,6 +57,13 @@ type ThirdApiCfg struct {
 type OciCfg struct {
 	Version    string `mapstructure:"version"`
 	SshVersion string `mapstructure:"ssh_version"`
+}
+
+// SSHCfg configures SSH-over-WS host-key verification (S10). HostKeyVerify
+// defaults to true (secure, known_hosts); set false for legacy deployments
+// without a known_hosts file (accepts any host key — insecure).
+type SSHCfg struct {
+	HostKeyVerify bool `mapstructure:"host_key_verify"`
 }
 
 type SslCfg struct {
@@ -130,6 +139,7 @@ func Load() (*Config, error) {
 	v.SetDefault("server.port", 9856)
 	v.SetDefault("server.max_header_bytes", 81920)
 	v.SetDefault("migrate.auto_on_boot", true)
+	v.SetDefault("ssh.host_key_verify", true) // S10: secure default; configs without an `ssh:` section stay secure.
 
 	if err := v.ReadInConfig(); err != nil {
 		// If config file not found, write the embedded default.
@@ -137,7 +147,7 @@ func Load() (*Config, error) {
 			if werr := os.WriteFile("config.yaml", defaultConfig, 0644); werr != nil {
 				return nil, fmt.Errorf("config not found and failed to write default: %w", werr)
 			}
-			fmt.Println("📝 首次运行 — 已生成默认配置文件 config.yaml，请按需修改后重新启动")
+			stderrf("首次运行 — 已生成默认配置文件 config.yaml，请按需修改后重新启动")
 			// Re-read the newly written config.
 			if rerr := v.ReadInConfig(); rerr != nil {
 				return nil, fmt.Errorf("read newly generated config: %w", rerr)
@@ -155,6 +165,29 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
+// stderrOut is the sink for config-stage messages written before the logger is
+// initialized (config.Load runs before logpkg.Init). Defaults to os.Stderr;
+// tests swap it to capture output.
+var stderrOut io.Writer = os.Stderr
+
+// stderrf prints a config-stage message with a clear prefix. Used for the
+// first-run config notice and DATA_PATH misconfiguration warnings.
+func stderrf(format string, args ...any) {
+	fmt.Fprintf(stderrOut, "oci-start/config: "+format+"\n", args...)
+}
+
+// remapPrefix replaces oldPrefix with newPrefix at the start of v. Returns the
+// (possibly updated) value and whether the prefix matched. When DATA_PATH is
+// set but a field does not carry the ./data prefix, the user almost certainly
+// expects a remap; a no-op there is a silent misconfiguration, so the caller
+// warns on miss.
+func remapPrefix(v, oldPrefix, newPrefix string) (string, bool) {
+	if strings.HasPrefix(v, oldPrefix) {
+		return newPrefix + strings.TrimPrefix(v, oldPrefix), true
+	}
+	return v, false
+}
+
 // applyDataPath remaps the "./data" prefix across datasource.url, base_file.path
 // when DATA_PATH is set, and records the resolved data dir for master-key placement.
 func (c *Config) applyDataPath() {
@@ -164,8 +197,17 @@ func (c *Config) applyDataPath() {
 		return
 	}
 	c.dataDir = dp
-	c.Datasource.URL = strings.Replace(c.Datasource.URL, "./data", dp, 1)
-	c.BaseFile.Path = strings.Replace(c.BaseFile.Path, "./data", dp, 1)
+	// Known schema prefixes: datasource.url is "file:./data/..." by default,
+	// base_file.path is "./data/...". Remap only an exact leading prefix so an
+	// absolute or already-resolved value is left untouched (and warned about)
+	// rather than silently no-op'd.
+	var ok bool
+	if c.Datasource.URL, ok = remapPrefix(c.Datasource.URL, "file:./data", "file:"+dp); !ok {
+		stderrf("DATA_PATH=%q set but datasource.url does not start with %q; left as %q", dp, "file:./data", c.Datasource.URL)
+	}
+	if c.BaseFile.Path, ok = remapPrefix(c.BaseFile.Path, "./data", dp); !ok {
+		stderrf("DATA_PATH=%q set but base_file.path does not start with %q; left as %q", dp, "./data", c.BaseFile.Path)
+	}
 }
 
 // DataDir returns the resolved data directory (./data or DATA_PATH override).

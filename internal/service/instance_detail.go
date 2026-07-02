@@ -6,19 +6,62 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/Muione/oci-start-go/internal/db"
 	"github.com/Muione/oci-start-go/internal/repo"
+	"github.com/Muione/oci-start-go/internal/util/crypto"
 )
 
 // InstanceDetailSvc manages instance_detail records.
 type InstanceDetailSvc struct {
 	store *db.Store
+	// masterKey decrypts the at-rest root password (S4). nil before SetMasterKey
+	// is wired; DecryptStringWithFallback then returns the raw value verbatim,
+	// keeping reads correct for legacy plaintext rows and during bootstrap.
+	// ponytail: not in NewInstanceDetailSvc to avoid changing its signature.
+	masterKey []byte
+	// tenantCache holds a tenantID -> userName map built from ListTenants, used
+	// by List (which spans many tenants). Cached to avoid re-scanning the whole
+	// tenant table on every List call.
+	// ponytail: TTL-based invalidation; InstanceDetailSvc is not notified of
+	// tenant save/delete, so a renamed tenant reflects in List after at most
+	// tenantCacheTTL. GetByID/ListByTenant use FindTenantByID (always fresh).
+	tenantCache atomic.Pointer[tenantNameCache]
 }
+
+// tenantNameCache is the cached id->name map plus its build time.
+type tenantNameCache struct {
+	m  map[int64]string
+	at time.Time
+}
+
+// tenantCacheTTL is the max age of the List tenant-name cache before rebuild.
+var tenantCacheTTL = 5 * time.Minute
 
 func NewInstanceDetailSvc(store *db.Store) *InstanceDetailSvc {
 	return &InstanceDetailSvc{store: store}
+}
+
+// SetMasterKey wires the AES-256-GCM master key used to decrypt the at-rest
+// root password (S4). New exported setter — NewInstanceDetailSvc's signature is
+// unchanged. nil/empty key leaves DecryptStringWithFallback returning the raw
+// stored value, so callers stay correct before wiring and for legacy rows.
+func (s *InstanceDetailSvc) SetMasterKey(key []byte) {
+	s.masterKey = key
+}
+
+// GetRootPassword returns the decrypted root password for an instance detail.
+// Reads the stored (encrypted) value and runs it through DecryptStringWithFallback:
+// encrypted rows decrypt to plaintext; legacy plaintext rows (or a nil master key)
+// return verbatim. This is the read-time downgrade path required by S4.
+func (s *InstanceDetailSvc) GetRootPassword(ctx context.Context, id int64) (string, error) {
+	r, err := repo.New(s.store.Read).FindInstanceDetailByID(ctx, id)
+	if err != nil {
+		return "", fmt.Errorf("find instance detail %d: %w", id, err)
+	}
+	return crypto.DecryptStringWithFallback(ns(r.Password), s.masterKey), nil
 }
 
 // InstanceDetailResp is the API-facing representation.
@@ -50,8 +93,13 @@ type InstanceDetailResp struct {
 	CreateTime          string `json:"createTime"`
 }
 
-// tenantNameMap builds a tenantID → userName lookup.
+// tenantNameMap builds (and caches) the full tenantID -> userName map. Used by
+// List, which needs names for arbitrary tenants across the result page. The
+// cache avoids a full-table scan on every List call.
 func (s *InstanceDetailSvc) tenantNameMap(ctx context.Context) (map[int64]string, error) {
+	if c := s.tenantCache.Load(); c != nil && time.Since(c.at) < tenantCacheTTL {
+		return c.m, nil
+	}
 	tenants, err := repo.New(s.store.Read).ListTenants(ctx)
 	if err != nil {
 		return nil, err
@@ -60,7 +108,22 @@ func (s *InstanceDetailSvc) tenantNameMap(ctx context.Context) (map[int64]string
 	for _, t := range tenants {
 		m[t.ID] = ns(t.UserName)
 	}
+	s.tenantCache.Store(&tenantNameCache{m: m, at: time.Now()})
 	return m, nil
+}
+
+// tenantNameByID resolves a single tenant's name via FindTenantByID (one row),
+// used by GetByID/ListByTenant where only one tenant is relevant. Always fresh,
+// so a renamed tenant is visible immediately on these hot paths.
+func (s *InstanceDetailSvc) tenantNameByID(ctx context.Context, tid int64) map[int64]string {
+	if tid == 0 {
+		return map[int64]string{}
+	}
+	t, err := repo.New(s.store.Read).FindTenantByID(ctx, tid)
+	if err != nil {
+		return map[int64]string{} // name resolution is best-effort
+	}
+	return map[int64]string{tid: ns(t.UserName)}
 }
 
 // GetByID returns a single instance detail by primary key.
@@ -69,7 +132,7 @@ func (s *InstanceDetailSvc) GetByID(ctx context.Context, id int64) (*InstanceDet
 	if err != nil {
 		return nil, fmt.Errorf("find instance detail %d: %w", id, err)
 	}
-	tNames, _ := s.tenantNameMap(ctx)
+	tNames := s.tenantNameByID(ctx, ni(r.TenantID))
 	resp := toDetailResp(r, tNames)
 	return &resp, nil
 }
@@ -102,7 +165,7 @@ func (s *InstanceDetailSvc) ListByTenant(ctx context.Context, tenantID int64) ([
 	if err != nil {
 		return nil, fmt.Errorf("find instances by tenant %d: %w", tenantID, err)
 	}
-	tNames, _ := s.tenantNameMap(ctx)
+	tNames := s.tenantNameByID(ctx, tenantID)
 	out := make([]InstanceDetailResp, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, toFindByTenantResp(r, tNames))

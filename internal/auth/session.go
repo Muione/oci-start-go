@@ -30,7 +30,7 @@ func NewSessionService(store *db.Store) *SessionService { return &SessionService
 // a new row, atomically. Returns the new token (UUID).
 func (s *SessionService) Create(ctx context.Context, username, ip, ua string) (string, error) {
 	token := uuid.NewString()
-	now := time.Now()
+	now := time.Now().UTC()
 	nowStr := now.Format(timeFmt)
 	expStr := now.Add(absTimeout).Format(timeFmt)
 	err := s.store.WithTx(ctx, func(tx *sql.Tx) error {
@@ -56,17 +56,21 @@ func (s *SessionService) Create(ctx context.Context, username, ip, ua string) (s
 
 // Validate loads the session by token; valid iff expires_at>now AND
 // last_active_at > now-2h. Returns the username + lastActive (for touch decision).
+// Times are parsed as UTC: the stored strings carry no zone, so interpreting
+// them in time.Local would make session validity depend on the server TZ
+// (a TZ flip or cross-process TZ mismatch would misjudge expiry). UTC pins
+// the interpretation to a single fixed zone regardless of process locale.
 func (s *SessionService) Validate(ctx context.Context, token string) (string, time.Time, bool) {
 	sess, err := repo.New(s.store.Read).FindSessionByToken(ctx, token)
 	if err != nil {
 		return "", time.Time{}, false
 	}
 	now := time.Now()
-	expires, err := time.ParseInLocation(timeFmt, sess.ExpiresAt, time.Local)
+	expires, err := time.ParseInLocation(timeFmt, sess.ExpiresAt, time.UTC)
 	if err != nil || !now.Before(expires) {
 		return "", time.Time{}, false
 	}
-	last, err := time.ParseInLocation(timeFmt, sess.LastActiveAt, time.Local)
+	last, err := time.ParseInLocation(timeFmt, sess.LastActiveAt, time.UTC)
 	if err != nil {
 		return "", time.Time{}, false
 	}
@@ -79,7 +83,7 @@ func (s *SessionService) Validate(ctx context.Context, token string) (string, ti
 // Touch updates last_active_at=now (caller gates on now-lastActive>touchInterval).
 func (s *SessionService) Touch(ctx context.Context, token string) error {
 	return repo.New(s.store.Write).TouchSessionActive(ctx, repo.TouchSessionActiveParams{
-		LastActiveAt: time.Now().Format(timeFmt),
+		LastActiveAt: time.Now().UTC().Format(timeFmt),
 		Token:        token,
 	})
 }

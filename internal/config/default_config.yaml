@@ -22,6 +22,9 @@ oci:
   version: 0.1.0
   ssh_version: v-0.1.0
 
+ssh:
+  host_key_verify: true   # S10: verify SSH server host keys via known_hosts (secure, fail-closed); false = accept any (insecure, legacy compat)
+
 ssl:
   staging: false
 

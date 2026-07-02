@@ -170,25 +170,9 @@ func instanceRestart(deps *Deps) gin.HandlerFunc {
 			response.Fail(c, http.StatusBadRequest, "invalid id")
 			return
 		}
-		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		clients, inst, err := ociClientsForInstance(c, deps, id)
 		if err != nil {
-			response.Fail(c, http.StatusNotFound, "instance not found")
-			return
-		}
-		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
-		if err != nil {
-			response.Fail(c, http.StatusNotFound, "tenant not found")
-			return
-		}
-		creds := tenantToCreds(t)
-		prov, err := oci.NewProvider(creds, deps.MasterKey)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
-			return
-		}
-		clients, err := oci.NewClients(prov)
-		if err != nil {
-			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			respondOciClientsErr(c, err)
 			return
 		}
 		if err := oci.ResetInstance(c.Request.Context(), clients, inst.InstanceID); err != nil {

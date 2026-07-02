@@ -93,6 +93,14 @@ type Deps struct {
 	// Phase 12.3: SSH root login configurator.
 	SSHConfig *service.SSHConfigurator
 
+	// VNC console connection management (list/delete via REST; resume/create
+	// via the /ws/console WebSocket). Interface so handlers test without OCI.
+	ConsoleConnSvc service.ConsoleConnectionLister
+
+	// SSH terminal stored private keys (encrypted at rest; content never sent
+	// back). Interface so handlers test without the service.
+	SSHKeySvc service.SSHKeyLister
+
 	// Phase 12.2: Email Delivery service.
 	EmailSvc *service.EmailService
 

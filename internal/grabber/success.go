@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Muione/oci-start-go/internal/repo"
+	"github.com/Muione/oci-start-go/internal/util/crypto"
 )
 
 // onGrabSuccess runs after a successful OCI instance launch. It updates the
@@ -120,10 +121,27 @@ func (e *Engine) saveTemInstance(ctx context.Context, task repo.BootInstance, re
 		PublicIp:           sql.NullString{String: result.PublicIP, Valid: result.PublicIP != ""},
 		Region:             nsStr(tenant.Region),
 		Architecture:       task.Architecture,
-		RootPassword:       task.RootPassword,
+		RootPassword:       encryptRootPassword(task.RootPassword, e.deps.MasterKey),
 		CloneBootVolumeID:  sql.NullString{}, // filled after backup
 		CloudType:          task.CloudType,
 	})
+}
+
+// encryptRootPassword AES-256-GCM encrypts the root password for at-rest storage
+// (S4). With no master key wired, the value is stored verbatim (bootstrap /
+// unwired path); DecryptStringWithFallback on read returns plaintext verbatim
+// for those rows, so the round-trip stays correct. Encryption failure falls back
+// to plaintext rather than dropping the grab — the password is recoverable from
+// the boot task and the row is still readable.
+func encryptRootPassword(raw sql.NullString, masterKey []byte) sql.NullString {
+	if !raw.Valid || len(masterKey) == 0 {
+		return raw
+	}
+	enc, err := crypto.EncryptString(raw.String, masterKey)
+	if err != nil {
+		return raw
+	}
+	return sql.NullString{String: enc, Valid: true}
 }
 
 func nsStr(v sql.NullString) sql.NullString { return v }

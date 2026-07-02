@@ -13,18 +13,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/rs/zerolog"
-
+	"github.com/Muione/oci-start-go/internal/acme"
 	"github.com/Muione/oci-start-go/internal/auth"
 	"github.com/Muione/oci-start-go/internal/bootstrap"
 	"github.com/Muione/oci-start-go/internal/config"
 	"github.com/Muione/oci-start-go/internal/db"
 	"github.com/Muione/oci-start-go/internal/dns"
-	"github.com/Muione/oci-start-go/internal/acme"
 	"github.com/Muione/oci-start-go/internal/grabber"
+	"github.com/Muione/oci-start-go/internal/httpapi"
 	"github.com/Muione/oci-start-go/internal/migration"
 	"github.com/Muione/oci-start-go/internal/notify"
-	"github.com/Muione/oci-start-go/internal/httpapi"
 	"github.com/Muione/oci-start-go/internal/oci"
 	"github.com/Muione/oci-start-go/internal/repo"
 	"github.com/Muione/oci-start-go/internal/scheduler"
@@ -140,6 +138,7 @@ func main() {
 	// Phase 5 wiring: instance detail, traffic, check-live, ping, offline
 	// (backupSvc created earlier for OnGrabSuccess callback).
 	instanceDetailSvc := service.NewInstanceDetailSvc(store)
+	instanceDetailSvc.SetMasterKey(masterKey) // S4: decrypt at-rest root password on read
 	trafficSvc := service.NewTrafficSvc(store, masterKey, logger, tgNotifier)
 	checkLiveSvc := service.NewCheckLiveSvc(store, masterKey, logger, tgNotifier)
 	pingSvc := service.NewPingSvc(store, logger)
@@ -151,62 +150,84 @@ func main() {
 
 	// Phase 12.3 wiring: SSH root login configurator.
 	sshConfig := service.NewSSHConfigurator(logger)
+	sshConfig.SetMasterKey(masterKey) // S4: decrypt instance passwords for rescue auto root-login
+
+	// SSH terminal stored private keys (AES-256-GCM at rest, master key).
+	sshKeySvc := service.NewSSHKeyService(store, masterKey)
 
 	// Inject security rules and SSH config into backup and ping services.
 	backupSvc.SetSecurityRules(securityRuleSvc)
 	backupSvc.SetSSHConfig(sshConfig)
 	pingSvc.SetSecurityRules(securityRuleSvc)
 
+	// S10: wire SSH host-key verification config. Default true (secure,
+	// fail-closed against MITM); set ssh.host_key_verify=false in config.yaml
+	// for legacy deployments without a known_hosts file. Must run before the
+	// HTTP server starts accepting SSH-WS connections.
+	ws.SetHostKeyVerify(cfg.SSH.HostKeyVerify)
+	if cfg.SSH.HostKeyVerify {
+		logger.Info().Msg("SSH host key verification enabled (known_hosts)")
+	} else {
+		logger.Warn().Msg("SSH host key verification DISABLED (insecure, legacy compat — all host keys accepted)")
+	}
+
+	// buildClients constructs OCI clients for a tenant. Shared by the ws
+	// ConsoleHandler and the ConsoleConnectionService so resume/list/delete
+	// resolve credentials identically.
+	buildClients := func(ctx context.Context, tenantID int64) (oci.Clients, error) {
+		creds, err := lookupTenantCreds(store, tenantID)
+		if err != nil {
+			return oci.Clients{}, err
+		}
+		prov, err := oci.NewProvider(creds, masterKey)
+		if err != nil {
+			return oci.Clients{}, fmt.Errorf("oci provider: %w", err)
+		}
+		return oci.NewClients(prov)
+	}
+	// VNC console connection service: persists app-created connections
+	// (encrypted private key) for resume, lists/deletes via OCI. nil
+	// buildClients paths are not used here.
+	consoleConnSvc := service.NewConsoleConnectionService(store, masterKey, buildClients)
+
 	// Phase 6 wiring: WebSocket hub.
 	wsHub := ws.NewHub()
+
+	// Wire SSH handler with stored-key resolution (DB-encrypted, master key).
+	wsHub.SSH.SetDeps(&ws.SSHDeps{
+		Logger:         logger,
+		ResolveSSHKey: sshKeySvc.Resolve,
+	})
 
 	// Wire console handler with instance lookup from DB.
 	wsHub.Console.SetDeps(&ws.ConsoleDeps{
 		Logger:    logger,
 		MasterKey: masterKey,
 		InstanceLookup: func(instanceID string) (*ws.ConsoleInstanceInfo, error) {
-			var (
-				username, port, password, compID, ad sql.NullString
-				tenantID                             sql.NullInt64
-				info                                 ws.ConsoleInstanceInfo
-			)
-			err := store.Read.QueryRowContext(context.Background(),
-				`SELECT instance_id, display_name, public_ips, private_ips, shape,
-				        username, port, password, tenant_id, compartment_id,
-				        availability_domain
-				 FROM instance_detail WHERE instance_id = ? LIMIT 1`,
-				instanceID).Scan(
-				&info.InstanceID, &info.DisplayName, &info.PublicIPs, &info.PrivateIPs,
-				&info.Shape, &username, &port, &password,
-				&tenantID, &compID, &ad)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			row, err := repo.New(store.Read).FindConsoleInstanceInfo(ctx, instanceID)
 			if err != nil {
 				return nil, fmt.Errorf("instance %s not found: %w", instanceID, err)
 			}
-			info.Username = username.String
-			info.Port = port.String
-			info.Password = password.String
-			info.TenantID = tenantID.Int64
-			info.CompartmentID = compID.String
-			info.AvailabilityDomain = ad.String
-			return &info, nil
+			return &ws.ConsoleInstanceInfo{
+				InstanceID:         row.InstanceID.String,
+				DisplayName:        row.DisplayName.String,
+				PublicIPs:          row.PublicIps.String,
+				PrivateIPs:         row.PrivateIps.String,
+				Shape:              row.Shape.String,
+				Username:           row.Username.String,
+				Port:               nis(row.Port),
+				Password:           row.Password.String,
+				TenantID:           row.TenantID.Int64,
+				CompartmentID:      row.CompartmentID.String,
+				AvailabilityDomain: row.AvailabilityDomain.String,
+			}, nil
 		},
-		BuildClients: func(ctx context.Context, tenantID int64) (oci.Clients, error) {
-			creds, err := lookupTenantCreds(store, tenantID)
-			if err != nil {
-				return oci.Clients{}, err
-			}
-			prov, err := oci.NewProvider(creds, masterKey)
-			if err != nil {
-				return oci.Clients{}, fmt.Errorf("oci provider: %w", err)
-			}
-			return oci.NewClients(prov)
-		},
+		BuildClients: buildClients,
 		GetCompartmentID: func(ctx context.Context, tenantID int64, instanceID string) (string, error) {
 			// Get the instance's compartment from DB, falling back to tenancy OCID.
-			var compID sql.NullString
-			err := store.Read.QueryRowContext(ctx,
-				`SELECT compartment_id FROM instance_detail WHERE instance_id = ? LIMIT 1`,
-				instanceID).Scan(&compID)
+			compID, err := repo.New(store.Read).FindCompartmentID(ctx, instanceID)
 			if err == nil && compID.Valid && compID.String != "" {
 				return compID.String, nil
 			}
@@ -217,6 +238,10 @@ func main() {
 			}
 			return ns(tenant.Tenancy), nil
 		},
+		// Persist + Load back the app-created connection's connID + encrypted
+		// private key so a VNC session can be resumed across restarts.
+		PersistConsoleConnection: consoleConnSvc.Persist,
+		LoadConsoleConnection:    consoleConnSvc.LoadForResume,
 	})
 
 	// Wire rescue handler with OCI operations (full multi-step flow).
@@ -224,19 +249,24 @@ func main() {
 		Logger:    logger,
 		MasterKey: masterKey,
 		GetInstance: func(instanceID string, tenantID int64) (*ws.RescueInstanceInfo, error) {
-			var info ws.RescueInstanceInfo
-			err := store.Read.QueryRowContext(context.Background(),
-				`SELECT instance_id, display_name, state, boot_volume_id, shape,
-				        availability_domain, compartment_id, public_ips, username, password
-				 FROM instance_detail WHERE instance_id = ? LIMIT 1`,
-				instanceID).Scan(
-				&info.ID, &info.DisplayName, &info.State, &info.BootVolumeID,
-				&info.Shape, &info.AvailabilityDomain, &info.CompartmentID,
-				&info.PublicIP, &info.SSHUsername, &info.SSHPassword)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			row, err := repo.New(store.Read).FindRescueInstanceInfo(ctx, instanceID)
 			if err != nil {
 				return nil, fmt.Errorf("instance %s not found: %w", instanceID, err)
 			}
-			return &info, nil
+			return &ws.RescueInstanceInfo{
+				ID:                 row.InstanceID.String,
+				DisplayName:        row.DisplayName.String,
+				State:              row.State.String,
+				BootVolumeID:       row.BootVolumeID.String,
+				Shape:              row.Shape.String,
+				AvailabilityDomain: row.AvailabilityDomain.String,
+				CompartmentID:      row.CompartmentID.String,
+				PublicIP:           row.PublicIps.String,
+				SSHUsername:        row.Username.String,
+				SSHPassword:        row.Password.String,
+			}, nil
 		},
 		StopInstance: func(instanceID string, tenantID int64) error {
 			return ociOpFromTenant(store, proxyPool, masterKey, tenantID, instanceID,
@@ -311,54 +341,56 @@ func main() {
 	billingSvc := service.NewBillingService(store, masterKey, proxyPool)
 
 	sched := scheduler.New(engine, store, logger, &scheduler.SvcSet{
-		Traffic:        trafficSvc,
-		CheckLive:      checkLiveSvc,
-		Ping:           pingSvc,
-		Offline:        offlineSvc,
-		CertManager:    certManager,
-		WsHub:          wsHub,
-		ObjectStorage:  objectStorageSvc,
+		Traffic:       trafficSvc,
+		CheckLive:     checkLiveSvc,
+		Ping:          pingSvc,
+		Offline:       offlineSvc,
+		CertManager:   certManager,
+		WsHub:         wsHub,
+		ObjectStorage: objectStorageSvc,
 	})
 
 	deps := &httpapi.Deps{
-		Store:        store,
-		Cfg:          cfg,
-		Logger:       logger,
-		Keypair:      kpStore,
-		Session:      sessionSvc,
-		SysConf:      sc,
-		Bypass:       bypass,
-		OAuthState:   oauthState,
-		Tenant:       tenantSvc,
-		ProxyPool:    proxyPool,
-		MasterKey:    masterKey,
-		Engine:       engine,
-		Scheduler:    sched,
-		Boot:         bootSvc,
-		InstanceSvc:  instanceDetailSvc,
-		TrafficSvc:   trafficSvc,
-		BackupSvc:    backupSvc,
-		CheckLiveSvc: checkLiveSvc,
-		PingSvc:      pingSvc,
-		OfflineSvc:   offlineSvc,
-		WsHub:        wsHub,
-		Notifier:     tgNotifier,
-		DnsSvc:       dnsSvc,
-		CertManager:  certManager,
-		Migration:    migHandler,
-		TenantEmail:  tenantEmailSvc,
-		TenantSocial: tenantSocialSvc,
-		TenantUser:   tenantUserSvc,
-		SecurityRule: securityRuleSvc,
-		Quota:        quotaSvc,
-		RegionSub:    regionSubSvc,
-		Audit:        auditSvc,
+		Store:            store,
+		Cfg:              cfg,
+		Logger:           logger,
+		Keypair:          kpStore,
+		Session:          sessionSvc,
+		SysConf:          sc,
+		Bypass:           bypass,
+		OAuthState:       oauthState,
+		Tenant:           tenantSvc,
+		ProxyPool:        proxyPool,
+		MasterKey:        masterKey,
+		Engine:           engine,
+		Scheduler:        sched,
+		Boot:             bootSvc,
+		InstanceSvc:      instanceDetailSvc,
+		TrafficSvc:       trafficSvc,
+		BackupSvc:        backupSvc,
+		CheckLiveSvc:     checkLiveSvc,
+		PingSvc:          pingSvc,
+		OfflineSvc:       offlineSvc,
+		WsHub:            wsHub,
+		Notifier:         tgNotifier,
+		DnsSvc:           dnsSvc,
+		CertManager:      certManager,
+		Migration:        migHandler,
+		TenantEmail:      tenantEmailSvc,
+		TenantSocial:     tenantSocialSvc,
+		TenantUser:       tenantUserSvc,
+		SecurityRule:     securityRuleSvc,
+		Quota:            quotaSvc,
+		RegionSub:        regionSubSvc,
+		Audit:            auditSvc,
 		ObjectStorageSvc: objectStorageSvc,
-		VnicMgmtSvc:     vnicMgmtSvc,
-		SSHConfig:       sshConfig,
-		EmailSvc:        emailSvc,
-		BillingSvc:      billingSvc,
-		TotpSetup:       httpapi.NewTotpSetupCache(),
+		VnicMgmtSvc:      vnicMgmtSvc,
+		SSHConfig:        sshConfig,
+		ConsoleConnSvc:   consoleConnSvc,
+		SSHKeySvc:        sshKeySvc,
+		EmailSvc:         emailSvc,
+		BillingSvc:       billingSvc,
+		TotpSetup:        httpapi.NewTotpSetupCache(),
 	}
 	router := httpapi.NewServer(deps)
 
@@ -520,4 +552,10 @@ func ns(v sql.NullString) string {
 	return ""
 }
 
-var _ = zerolog.Logger{} // keep zerolog import meaningful for future log calls
+// nis unwraps a sql.NullInt64 to its decimal string, "" when invalid.
+func nis(v sql.NullInt64) string {
+	if !v.Valid {
+		return ""
+	}
+	return fmt.Sprintf("%d", v.Int64)
+}
