@@ -246,6 +246,26 @@ func getResourceAvailability(ctx context.Context, c Clients, compartmentID, serv
 	return used, available, nil
 }
 
+// ServiceHasLimits returns true if the service has any non-zero limit value.
+// Single ListLimitValues call (first page only) — cheap probe for filtering
+// services-with-quota, vs the full two-pass GetServiceQuotasPaged.
+func ServiceHasLimits(ctx context.Context, c Clients, compartmentID, serviceName string) (bool, error) {
+	resp, err := c.Limits.ListLimitValues(ctx, limits.ListLimitValuesRequest{
+		CompartmentId: common.String(compartmentID),
+		ServiceName:   common.String(serviceName),
+		Limit:         common.Int(100),
+	})
+	if err != nil {
+		return false, fmt.Errorf("list limit values for %s: %w", serviceName, err)
+	}
+	for _, lv := range resp.Items {
+		if lv.Value != nil && *lv.Value > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // ListLimitServices returns all services that support limits management.
 func ListLimitServices(ctx context.Context, c Clients, compartmentID string) ([]limits.ServiceSummary, error) {
 	resp, err := c.Limits.ListServices(ctx, limits.ListServicesRequest{
