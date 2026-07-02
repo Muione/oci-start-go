@@ -45,6 +45,9 @@
         <el-table-column label="存活天数" width="90" align="center">
           <template #default="{ row }"><span class="days-chip">{{ row.activeDays || '0' }}</span></template>
         </el-table-column>
+        <el-table-column label="实例数" width="80" align="center">
+          <template #default="{ row }">{{ row.instanceCount ?? 0 }}</template>
+        </el-table-column>
         <el-table-column label="开机任务" width="100" align="center">
           <template #default="{ row }">
             <span class="status-badge" :class="row.hasBootTask ? 'status-running' : 'status-idle'">
@@ -63,7 +66,7 @@
         </el-table-column>
         <el-table-column label="账号类型" width="110">
           <template #default="{ row }">
-            <el-tag size="small" :type="accountTypeTag(row.accountType)">{{ accountTypeLabel(row.accountType) }}</el-tag>
+            <el-tag size="small" :type="accountTypeTag(row.planType || row.accountType)">{{ accountTypeLabel(row.planType || row.accountType) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="创建时间" width="150">
@@ -180,7 +183,7 @@ interface Tenant {
   enableIcmp?: boolean; enableAllProtocol?: boolean
   parenId?: number; regionEn?: string; idStr?: string
   transferStatus?: number; transferAmount?: string
-  instanceCount?: number; accountCost?: string
+  instanceCount?: number; planType?: string; accountCost?: string
   hasBootTask?: boolean; hasChildren?: boolean; activeDays?: string
 }
 interface RegionItem { code: string; name: string }
@@ -289,14 +292,7 @@ function handleAction(cmd: string, row: Tenant) {
 async function load() {
   loading.value = true
   try {
-    const tenants = await request.get('/tenants/listAll') as Tenant[]
-    const countResults = await Promise.allSettled(
-      tenants.map(t => request.get(`/tenants/${t.id}/instances`) as Promise<any[]>)
-    )
-    countResults.forEach((r, i) => {
-      tenants[i].instanceCount = r.status === 'fulfilled' ? (r.value?.length ?? 0) : 0
-    })
-    rows.value = tenants
+    rows.value = await request.get('/tenants/listAll') as Tenant[]
   } catch (e: any) { ElMessage.error(e.message) }
   finally { loading.value = false }
 }
@@ -402,12 +398,9 @@ async function startBatchCheck() {
   batchCheckVisible.value = true; batchChecking.value = true; batchProgress.value = 0; batchResults.value = []
   try {
     const ids = rows.value.map(r => r.id)
-    const results: any[] = []
-    for (let i = 0; i < ids.length; i++) {
-      try { results.push(await request.get(`/tenants/${ids[i]}/check`)) }
-      catch { results.push({ tenantId: ids[i], userName: rows.value[i]?.userName || '', alive: false, error: '请求失败' }) }
-      batchProgress.value = Math.min(100, Math.round((i + 1) / ids.length * 100))
-    }
+    batchProgress.value = 10
+    const results = await request.post('/tenants/check-batch', ids) as any[]
+    batchProgress.value = 100
     batchResults.value = results
   } catch (e: any) { ElMessage.error(e.message) }
   finally { batchChecking.value = false }
