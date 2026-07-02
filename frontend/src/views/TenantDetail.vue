@@ -228,49 +228,6 @@
             <el-input-number v-model="pwPolicy.passwordExpiryDays" :min="1" :max="365" @change="savePasswordPolicy"/>
           </el-form-item>
         </el-form>
-        <!-- Credentials -->
-        <el-divider/>
-        <h4 style="margin:0 0 8px">凭证管理</h4>
-        <div style="margin-bottom:12px">
-          <el-select v-model="credUserOcid" filterable placeholder="选择 IAM 用户" @change="loadCredentials" style="width:300px">
-            <el-option v-for="u in userList" :key="u.ocid" :label="u.name" :value="u.ocid"/>
-          </el-select>
-        </div>
-        <template v-if="credUserOcid">
-          <!-- API Keys -->
-          <h4 style="margin:12px 0 8px">API 密钥</h4>
-          <el-table :data="apiKeys" v-loading="credLoading" border stripe size="small" max-height="200">
-            <template #empty><el-empty description="暂无 API 密钥" :image-size="40"/></template>
-            <el-table-column prop="fingerprint" label="指纹" min-width="200" show-overflow-tooltip/>
-            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteApiKey(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
-          </el-table>
-          <el-button size="small" type="primary" @click="apiKeyAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 添加 API 密钥</el-button>
-          <!-- Auth Tokens -->
-          <h4 style="margin:12px 0 8px">Auth 令牌</h4>
-          <el-table :data="authTokens" v-loading="credLoading" border stripe size="small" max-height="200">
-            <template #empty><el-empty description="暂无 Auth 令牌" :image-size="40"/></template>
-            <el-table-column prop="description" label="描述" min-width="200"/>
-            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteAuthToken(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
-          </el-table>
-          <el-button size="small" type="primary" @click="authTokenAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 创建 Auth 令牌</el-button>
-          <!-- SMTP Credentials -->
-          <h4 style="margin:12px 0 8px">SMTP 凭证</h4>
-          <el-table :data="smtpCreds" v-loading="credLoading" border stripe size="small" max-height="200">
-            <template #empty><el-empty description="暂无 SMTP 凭证" :image-size="40"/></template>
-            <el-table-column prop="description" label="描述" min-width="200"/>
-            <el-table-column prop="username" label="用户名" min-width="160" show-overflow-tooltip/>
-            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteSmtpCred(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
-          </el-table>
-          <el-button size="small" type="primary" @click="smtpAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 创建 SMTP 凭证</el-button>
-          <!-- Customer Secret Keys -->
-          <h4 style="margin:12px 0 8px">Customer Secret Keys</h4>
-          <el-table :data="customerSecretKeys" v-loading="credLoading" border stripe size="small" max-height="200">
-            <template #empty><el-empty description="暂无 Customer Secret Key" :image-size="40"/></template>
-            <el-table-column prop="displayName" label="显示名称" min-width="200"/>
-            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteSecretKey(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
-          </el-table>
-          <el-button size="small" type="primary" @click="secretKeyAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 创建 Customer Secret Key</el-button>
-        </template>
         <!-- Add user dialog -->
         <el-dialog v-model="addUserFormVisible" title="创建 IAM 用户" width="460px" append-to-body destroy-on-close>
           <el-form :model="addUserForm" label-width="80px">
@@ -322,8 +279,91 @@
         <template #title>
           <span class="panel-title">安全与合规</span>
         </template>
+
+        <!-- 凭证管理 -->
+        <div class="section-block">
+          <h4 class="section-title">凭证管理</h4>
+          <div class="credential-user-select">
+            <span class="select-label">选择 IAM 用户:</span>
+            <el-select v-model="credUserOcid" filterable placeholder="选择用户" @change="loadCredentials" style="width: 300px" size="small">
+              <el-option v-for="u in userList" :key="u.ocid" :label="u.name" :value="u.ocid"/>
+            </el-select>
+          </div>
+
+          <template v-if="credUserOcid">
+            <!-- API Keys -->
+            <h5 class="subsection-title">API 密钥</h5>
+            <el-table :data="apiKeys" v-loading="credLoading" border stripe size="small" max-height="200">
+              <template #empty><el-empty description="暂无 API 密钥" :image-size="40"/></template>
+              <el-table-column prop="fingerprint" label="指纹" min-width="200" show-overflow-tooltip/>
+              <el-table-column label="操作" width="80" align="center">
+                <template #default="{ row }">
+                  <el-button size="small" type="danger" text @click="deleteApiKey(row)">
+                    <el-icon><Delete/></el-icon>
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-button size="small" type="primary" @click="apiKeyAddVisible=true" style="margin-top:8px">
+              <el-icon><Plus/></el-icon> 添加 API 密钥
+            </el-button>
+
+            <!-- Auth Tokens -->
+            <h5 class="subsection-title">Auth 令牌</h5>
+            <el-table :data="authTokens" v-loading="credLoading" border stripe size="small" max-height="200">
+              <template #empty><el-empty description="暂无 Auth 令牌" :image-size="40"/></template>
+              <el-table-column prop="description" label="描述" min-width="200"/>
+              <el-table-column label="操作" width="80" align="center">
+                <template #default="{ row }">
+                  <el-button size="small" type="danger" text @click="deleteAuthToken(row)">
+                    <el-icon><Delete/></el-icon>
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-button size="small" type="primary" @click="authTokenAddVisible=true" style="margin-top:8px">
+              <el-icon><Plus/></el-icon> 创建 Auth 令牌
+            </el-button>
+
+            <!-- SMTP Credentials -->
+            <h5 class="subsection-title">SMTP 凭证</h5>
+            <el-table :data="smtpCreds" v-loading="credLoading" border stripe size="small" max-height="200">
+              <template #empty><el-empty description="暂无 SMTP 凭证" :image-size="40"/></template>
+              <el-table-column prop="description" label="描述" min-width="200"/>
+              <el-table-column prop="username" label="用户名" min-width="160" show-overflow-tooltip/>
+              <el-table-column label="操作" width="80" align="center">
+                <template #default="{ row }">
+                  <el-button size="small" type="danger" text @click="deleteSmtpCred(row)">
+                    <el-icon><Delete/></el-icon>
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-button size="small" type="primary" @click="smtpAddVisible=true" style="margin-top:8px">
+              <el-icon><Plus/></el-icon> 创建 SMTP 凭证
+            </el-button>
+
+            <!-- Customer Secret Keys -->
+            <h5 class="subsection-title">Customer Secret Keys</h5>
+            <el-table :data="customerSecretKeys" v-loading="credLoading" border stripe size="small" max-height="200">
+              <template #empty><el-empty description="暂无 Customer Secret Key" :image-size="40"/></template>
+              <el-table-column prop="displayName" label="显示名称" min-width="200"/>
+              <el-table-column label="操作" width="80" align="center">
+                <template #default="{ row }">
+                  <el-button size="small" type="danger" text @click="deleteSecretKey(row)">
+                    <el-icon><Delete/></el-icon>
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-button size="small" type="primary" @click="secretKeyAddVisible=true" style="margin-top:8px">
+              <el-icon><Plus/></el-icon> 创建 Customer Secret Key
+            </el-button>
+          </template>
+        </div>
+
         <!-- Security Rules -->
-        <h4 style="margin:0 0 8px">安全规则</h4>
+        <h4 class="section-title">安全规则</h4>
         <el-tabs v-model="secRulesTab" @tab-change="loadSecRules">
           <el-tab-pane label="入站规则" name="ingress"/>
           <el-tab-pane label="出站规则" name="egress"/>
@@ -347,7 +387,7 @@
         </el-table>
         <!-- Social Login -->
         <el-divider/>
-        <h4 style="margin:0 0 8px">社交登录</h4>
+        <h4 class="section-title">社交登录</h4>
         <div style="margin-bottom:12px"><el-button type="primary" size="small" @click="openAddSocial"><el-icon><Plus /></el-icon> 添加配置</el-button></div>
         <el-table :data="socialList" border size="small" v-loading="socialLoading">
           <template #empty><el-empty description="暂无社媒配置" :image-size="40"/></template>
@@ -364,7 +404,7 @@
         </el-table>
         <!-- Email Config -->
         <el-divider/>
-        <h4 style="margin:0 0 8px">邮件服务</h4>
+        <h4 class="section-title">邮件服务</h4>
         <el-form :model="emailForm" label-width="100px" style="max-width:500px">
           <el-form-item label="域名"><el-input v-model="emailForm.domainName" placeholder="example.com"/></el-form-item>
           <el-form-item label="SMTP 主机"><el-input v-model="emailForm.smtpHost" placeholder="smtp.example.com"/></el-form-item>
@@ -391,7 +431,7 @@
           <template #title>MFA 状态加载失败: {{ mfaError }}</template>
           <template #default><el-button size="small" text type="primary" @click="loadMfaStatus">重试</el-button></template>
         </el-alert>
-        <h4 style="margin:0 0 8px">MFA 多因素认证</h4>
+        <h4 class="section-title">MFA 多因素认证</h4>
         <el-descriptions :column="2" border size="small" style="margin-bottom:12px">
           <el-descriptions-item label="TOTP"><el-tag :type="mfaStatus.totpEnabled?'success':'info'" size="small">{{ mfaStatus.totpEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
           <el-descriptions-item label="邮箱"><el-tag :type="mfaStatus.emailEnabled?'success':'info'" size="small">{{ mfaStatus.emailEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
@@ -405,7 +445,7 @@
         </div>
         <!-- Sign-on Policies -->
         <el-divider/>
-        <h4 style="margin:0 0 8px">登录策略</h4>
+        <h4 class="section-title">登录策略</h4>
         <el-alert v-if="signonError" type="warning" :closable="false" show-icon style="margin-bottom:8px"><template #title>加载失败: {{ signonError }}</template><template #default><el-button size="small" text type="primary" @click="loadSignonPolicies">重试</el-button></template></el-alert>
         <el-table v-loading="signonLoading" :data="signonPolicies" border stripe size="small" max-height="200">
           <template #empty><el-empty description="暂无登录策略" :image-size="40"/></template>
@@ -415,7 +455,7 @@
         </el-table>
         <!-- Account Recovery -->
         <el-divider/>
-        <h4 style="margin:0 0 8px">账号恢复设置</h4>
+        <h4 class="section-title">账号恢复设置</h4>
         <el-alert v-if="recoveryError" type="warning" :closable="false" show-icon style="margin-bottom:8px"><template #title>加载失败: {{ recoveryError }}</template><template #default><el-button size="small" text type="primary" @click="loadAccountRecovery">重试</el-button></template></el-alert>
         <el-form v-loading="recoveryLoading" :inline="true" size="small" style="margin-bottom:8px">
           <el-form-item label="恢复方式">
@@ -435,7 +475,7 @@
           <template #title>通知接收人加载失败: {{ notifError }}</template>
           <template #default><el-button size="small" text type="primary" @click="loadNotifRecipients">重试</el-button></template>
         </el-alert>
-        <h4 style="margin:0 0 8px">通知接收人</h4>
+        <h4 class="section-title">通知接收人</h4>
         <el-table :data="notifRecipients" border size="small" style="margin-bottom:8px" max-height="200">
           <template #empty><el-empty description="暂无通知接收人" :image-size="40"/></template>
           <el-table-column prop="email" label="邮箱" min-width="200"/>
@@ -454,7 +494,7 @@
           <template #title>审计日志加载失败: {{ auditError }}</template>
           <template #default><el-button size="small" text type="primary" @click="loadAudit(auditDays || 1)">重试</el-button></template>
         </el-alert>
-        <h4 style="margin:0 0 8px">审计日志</h4>
+        <h4 class="section-title">审计日志</h4>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
           <el-button size="small" :type="auditDays===1?'primary':''" @click="loadAudit(1)">今日</el-button>
           <el-button size="small" :type="auditDays===7?'primary':''" @click="loadAudit(7)">7 天</el-button>
@@ -745,19 +785,9 @@ function onPanelChange(name: string | number | (string | number)[]) {
   }
   if (panel === 'users') {
     if (!userLoaded.value) {
-      loadUsers().then(() => {
-        if (userList.value.length) {
-          credUserOcid.value = userList.value[0].ocid
-          loadCredentials()
-        }
-      })
+      loadUsers()
       loadGroups()
       loadPasswordPolicy()
-    } else {
-      if (userList.value.length && !credLoaded.value) {
-        if (!credUserOcid.value) credUserOcid.value = userList.value[0].ocid
-        loadCredentials()
-      }
     }
   }
   if (panel === 'security') {
@@ -770,6 +800,20 @@ function onPanelChange(name: string | number | (string | number)[]) {
       loadSignonPolicies()
       loadAccountRecovery()
       settingsLoaded.value = true
+    }
+    // Load credentials when security panel opens (user selector lives here now)
+    if (!userLoaded.value) {
+      loadUsers().then(() => {
+        if (userList.value.length) {
+          credUserOcid.value = userList.value[0].ocid
+          loadCredentials()
+        }
+      })
+    } else {
+      if (userList.value.length && !credLoaded.value) {
+        if (!credUserOcid.value) credUserOcid.value = userList.value[0].ocid
+        loadCredentials()
+      }
     }
   }
   if (panel === 'regions') loadRegions()
@@ -1318,4 +1362,9 @@ async function remove() {
 .panel-title { font-size: var(--text-md); font-weight: var(--font-semibold); color: var(--text-primary); }
 :deep(.el-collapse-item__header) { font-size: var(--text-md); font-weight: var(--font-semibold); }
 :deep(.el-collapse-item__content) { padding-bottom: var(--space-4); }
+.section-block { margin-bottom: var(--space-6); }
+.section-title { font-size: var(--text-md); font-weight: var(--font-semibold); color: var(--text-primary); margin: 0 0 var(--space-4) 0; padding-bottom: var(--space-2); border-bottom: 1px solid var(--border-subtle); }
+.subsection-title { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--text-secondary); margin: var(--space-4) 0 var(--space-2) 0; }
+.credential-user-select { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
+.select-label { font-size: var(--text-sm); color: var(--text-secondary); font-weight: var(--font-medium); }
 </style>
