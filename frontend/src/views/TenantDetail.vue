@@ -365,6 +365,11 @@
           <template #empty><el-empty description="暂无通知接收人" :image-size="40"/></template>
           <el-table-column prop="email" label="邮箱" min-width="200"/>
           <el-table-column prop="state" label="状态" width="100"><template #default="{ row }"><el-tag :type="row.state==='VERIFIED'?'success':'warning'" size="small">{{ row.state || '—' }}</el-tag></template></el-table-column>
+          <el-table-column label="操作" width="80" align="center">
+            <template #default="{ row }">
+              <el-button size="small" type="danger" text @click="deleteRecipient(row.email)"><el-icon><Delete /></el-icon></el-button>
+            </template>
+          </el-table-column>
         </el-table>
         <el-input v-model="notifEmailInput" placeholder="输入邮箱地址，多个用逗号分隔" size="small" style="max-width:400px;margin-right:8px"/>
         <el-button size="small" type="primary" @click="updateNotifRecipients" :loading="notifSaving">更新接收人</el-button>
@@ -878,6 +883,19 @@ async function updateNotifRecipients() {
     await request.post(`/tenants/${tenantId}/notification-recipients/update`, { emails })
     ElMessage.success('已更新'); await loadNotifRecipients(); notifEmailInput.value = ''
   } catch (e: any) { ElMessage.error(e.message) }
+  finally { notifSaving.value = false }
+}
+async function deleteRecipient(email: string) {
+  try {
+    await ElMessageBox.confirm(`确定删除接收人「${email}」？`, '确认', { type: 'warning' })
+    const remaining = notifRecipients.value
+      .map(r => r.email)
+      .filter(e => e !== email)
+    notifSaving.value = true
+    await request.post(`/tenants/${tenantId}/notification-recipients/update`, { emails: remaining })
+    ElMessage.success('已删除')
+    await loadNotifRecipients()
+  } catch (e: any) { if (e !== 'cancel' && e?.message) ElMessage.error(e.message) }
   finally { notifSaving.value = false }
 }
 
