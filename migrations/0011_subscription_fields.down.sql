@@ -1,0 +1,2 @@
+-- SQLite does not support DROP COLUMN before 3.35; rebuild is overkill for a down migration.
+-- No-op: the columns are nullable and harmless if left in place.

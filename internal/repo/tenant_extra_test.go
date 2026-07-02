@@ -69,6 +69,8 @@ CREATE TABLE register_detail (
     postal_code TEXT,
     subscription_plan_number TEXT,
     upgrade_state TEXT,
+    currency_code TEXT,
+    is_intent_to_pay INTEGER,
     created_time TEXT,
     updated_time TEXT,
     cloud_type INTEGER DEFAULT 1

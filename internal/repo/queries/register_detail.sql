@@ -5,7 +5,8 @@
 -- name: FindRegisterDetailByTenantId :one
 SELECT id, tenant_prv_id, tenant_id, account_type, plan_type, register_time,
        city, country, email_address, first_name, last_name, line1, postal_code,
-       subscription_plan_number, upgrade_state, created_time, updated_time, cloud_type
+       subscription_plan_number, upgrade_state, currency_code, is_intent_to_pay,
+       created_time, updated_time, cloud_type
 FROM register_detail
 WHERE tenant_id = ?;
 
@@ -13,5 +14,6 @@ WHERE tenant_id = ?;
 INSERT OR REPLACE INTO register_detail (
     tenant_prv_id, tenant_id, account_type, plan_type, register_time,
     city, country, email_address, first_name, last_name, line1, postal_code,
-    subscription_plan_number, upgrade_state, created_time, updated_time, cloud_type
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    subscription_plan_number, upgrade_state, currency_code, is_intent_to_pay,
+    created_time, updated_time, cloud_type
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

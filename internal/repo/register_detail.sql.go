@@ -13,7 +13,8 @@ import (
 const findRegisterDetailByTenantId = `-- name: FindRegisterDetailByTenantId :one
 SELECT id, tenant_prv_id, tenant_id, account_type, plan_type, register_time,
        city, country, email_address, first_name, last_name, line1, postal_code,
-       subscription_plan_number, upgrade_state, created_time, updated_time, cloud_type
+       subscription_plan_number, upgrade_state, currency_code, is_intent_to_pay,
+       created_time, updated_time, cloud_type
 FROM register_detail
 WHERE tenant_id = ?
 `
@@ -37,6 +38,8 @@ func (q *Queries) FindRegisterDetailByTenantId(ctx context.Context, tenantID str
 		&i.PostalCode,
 		&i.SubscriptionPlanNumber,
 		&i.UpgradeState,
+		&i.CurrencyCode,
+		&i.IsIntentToPay,
 		&i.CreatedTime,
 		&i.UpdatedTime,
 		&i.CloudType,
@@ -48,28 +51,31 @@ const upsertRegisterDetail = `-- name: UpsertRegisterDetail :exec
 INSERT OR REPLACE INTO register_detail (
     tenant_prv_id, tenant_id, account_type, plan_type, register_time,
     city, country, email_address, first_name, last_name, line1, postal_code,
-    subscription_plan_number, upgrade_state, created_time, updated_time, cloud_type
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    subscription_plan_number, upgrade_state, currency_code, is_intent_to_pay,
+    created_time, updated_time, cloud_type
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type UpsertRegisterDetailParams struct {
-	TenantPrvID             sql.NullInt64  `json:"tenant_prv_id"`
-	TenantID                string         `json:"tenant_id"`
-	AccountType             sql.NullInt64  `json:"account_type"`
-	PlanType                sql.NullInt64  `json:"plan_type"`
-	RegisterTime            sql.NullString `json:"register_time"`
-	City                    sql.NullString `json:"city"`
-	Country                 sql.NullString `json:"country"`
-	EmailAddress            sql.NullString `json:"email_address"`
-	FirstName               sql.NullString `json:"first_name"`
-	LastName                sql.NullString `json:"last_name"`
-	Line1                   sql.NullString `json:"line1"`
-	PostalCode              sql.NullString `json:"postal_code"`
-	SubscriptionPlanNumber  sql.NullString `json:"subscription_plan_number"`
-	UpgradeState            sql.NullString `json:"upgrade_state"`
-	CreatedTime             sql.NullString `json:"created_time"`
-	UpdatedTime             sql.NullString `json:"updated_time"`
-	CloudType               sql.NullInt64  `json:"cloud_type"`
+	TenantPrvID            sql.NullInt64  `json:"tenant_prv_id"`
+	TenantID               string         `json:"tenant_id"`
+	AccountType            sql.NullInt64  `json:"account_type"`
+	PlanType               sql.NullInt64  `json:"plan_type"`
+	RegisterTime           sql.NullString `json:"register_time"`
+	City                   sql.NullString `json:"city"`
+	Country                sql.NullString `json:"country"`
+	EmailAddress           sql.NullString `json:"email_address"`
+	FirstName              sql.NullString `json:"first_name"`
+	LastName               sql.NullString `json:"last_name"`
+	Line1                  sql.NullString `json:"line1"`
+	PostalCode             sql.NullString `json:"postal_code"`
+	SubscriptionPlanNumber sql.NullString `json:"subscription_plan_number"`
+	UpgradeState           sql.NullString `json:"upgrade_state"`
+	CurrencyCode           sql.NullString `json:"currency_code"`
+	IsIntentToPay          sql.NullInt64  `json:"is_intent_to_pay"`
+	CreatedTime            sql.NullString `json:"created_time"`
+	UpdatedTime            sql.NullString `json:"updated_time"`
+	CloudType              sql.NullInt64  `json:"cloud_type"`
 }
 
 func (q *Queries) UpsertRegisterDetail(ctx context.Context, arg UpsertRegisterDetailParams) error {
@@ -88,6 +94,8 @@ func (q *Queries) UpsertRegisterDetail(ctx context.Context, arg UpsertRegisterDe
 		arg.PostalCode,
 		arg.SubscriptionPlanNumber,
 		arg.UpgradeState,
+		arg.CurrencyCode,
+		arg.IsIntentToPay,
 		arg.CreatedTime,
 		arg.UpdatedTime,
 		arg.CloudType,

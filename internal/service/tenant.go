@@ -249,6 +249,7 @@ type TenantFullResp struct {
 	TransferStatus    int64  `json:"transferStatus"`
 	TransferAmount    string `json:"transferAmount"`
 	IsActive          bool   `json:"isActive"`
+	ActiveDays        string `json:"activeDays"`
 }
 
 // UpdateInput carries the tenant update payload.
@@ -300,7 +301,22 @@ func (s *TenantService) GetFull(ctx context.Context, id int64) (TenantFullResp, 
 		TransferStatus:    ni(t.TransferStatus),
 		TransferAmount:    ns(t.TransferAmount),
 		IsActive:          isActive(t.IsActive),
+		ActiveDays:        s.calculateTenantActiveDays(ctx, t),
 	}, nil
+}
+
+// calculateTenantActiveDays computes active days from register_detail.register_time,
+// falling back to tenant.created_at.
+func (s *TenantService) calculateTenantActiveDays(ctx context.Context, t repo.FindTenantFullByIDRow) string {
+	tenantID := ns(t.TenantID)
+	if tenantID != "" {
+		if rd, err := repo.New(s.store.Read).FindRegisterDetailByTenantId(ctx, tenantID); err == nil {
+			if rt := ns(rd.RegisterTime); rt != "" {
+				return calculateActiveDays(rt)
+			}
+		}
+	}
+	return calculateActiveDays(ns(t.CreatedAt))
 }
 
 // Update modifies tenant fields (custom name, account type, email, active).

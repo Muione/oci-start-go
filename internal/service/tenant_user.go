@@ -11,6 +11,7 @@ import (
 	"github.com/Muione/oci-start-go/internal/db"
 	"github.com/Muione/oci-start-go/internal/oci"
 	"github.com/Muione/oci-start-go/internal/repo"
+	"github.com/rs/zerolog/log"
 )
 
 // TenantUserService manages OCI IAM users within a tenant.
@@ -218,9 +219,12 @@ func (s *TenantUserService) UpdateAccountDetail(ctx context.Context, tenantID in
 	// Fetch subscription info to get real planType (FREE_TIER/PAYG) and timeStart.
 	accountType := detail.AccountType
 	registerTime := time.Now().Format("2006-01-02 15:04:05") // fallback
+	var subInfo *oci.SubscriptionInfo
 	_ = oci.WithProxy(ctx, s.pool, creds, s.masterKey, func(clients oci.Clients) error {
-		subInfo, subErr := oci.GetSubscriptionInfo(ctx, clients, creds.Tenancy)
+		var subErr error
+		subInfo, subErr = oci.GetSubscriptionInfo(ctx, clients, creds.Tenancy)
 		if subErr != nil {
+			log.Warn().Err(subErr).Int64("tenantID", tenantID).Msg("get subscription info failed, account type may be stale")
 			return nil // non-fatal
 		}
 		if subInfo.PlanType != "" {
@@ -243,14 +247,22 @@ func (s *TenantUserService) UpdateAccountDetail(ctx context.Context, tenantID in
 		return nil, fmt.Errorf("update tenant fields: %w", err)
 	}
 
-	// Update register_detail with subscription timeStart for active-days calculation.
+	// Persist full subscription data to register_detail.
 	now := time.Now().Format("2006-01-02 15:04:05")
-	_ = repo.New(s.store.Write).UpsertRegisterDetail(ctx, repo.UpsertRegisterDetailParams{
+	regParams := repo.UpsertRegisterDetailParams{
 		TenantID:     creds.UserID,
 		RegisterTime: nullStr(registerTime),
 		CreatedTime:  nullStr(now),
 		UpdatedTime:  nullStr(now),
-	})
+	}
+	if subInfo != nil {
+		regParams.EmailAddress = nullStr(subInfo.EmailAddress)
+		regParams.SubscriptionPlanNumber = nullStr(subInfo.SubscriptionPlanNumber)
+		regParams.UpgradeState = nullStr(subInfo.UpgradeState)
+		regParams.CurrencyCode = nullStr(subInfo.CurrencyCode)
+		regParams.IsIntentToPay = nullInt64(boolToInt(subInfo.IsIntentToPay))
+	}
+	_ = repo.New(s.store.Write).UpsertRegisterDetail(ctx, regParams)
 	return detail, nil
 }
 

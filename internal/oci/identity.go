@@ -689,17 +689,9 @@ func GetTenancyDetail(ctx context.Context, prov common.ConfigurationProvider, te
 
 	// Account type is inferred from the tenancy metadata or subscription.
 	// The Java reference uses OciGateWayUtils.getAccountTypeInfo which calls
-	// the OSP Gateway API for subscription details. For the Go port, we infer
-	// from the tenancy description as a reasonable approximation.
-	detail.AccountType = "paid"
-	descLower := strings.ToLower(detail.Description)
-	if strings.Contains(descLower, "trial") || strings.Contains(descLower, "试用") {
-		detail.AccountType = "trial"
-	} else if strings.Contains(descLower, "free") || strings.Contains(descLower, "免费") {
-		detail.AccountType = "free"
-	} else if strings.Contains(descLower, "enterprise") || strings.Contains(descLower, "企业") {
-		detail.AccountType = "enterprise"
-	}
+	// the OSP Gateway API for subscription details. The real planType
+	// (FREE_TIER/PAYG) is set by UpdateAccountDetail from the subscription API.
+	detail.AccountType = ""
 
 	// Email address is not directly available from GetTenancy.
 	// The Java reference gets it from subscription details via OSP Gateway.

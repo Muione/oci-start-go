@@ -471,6 +471,8 @@ type RegisterDetail struct {
 	PostalCode             sql.NullString `json:"postal_code"`
 	SubscriptionPlanNumber sql.NullString `json:"subscription_plan_number"`
 	UpgradeState           sql.NullString `json:"upgrade_state"`
+	CurrencyCode           sql.NullString `json:"currency_code"`
+	IsIntentToPay          sql.NullInt64  `json:"is_intent_to_pay"`
 	CreatedTime            sql.NullString `json:"created_time"`
 	UpdatedTime            sql.NullString `json:"updated_time"`
 	CloudType              sql.NullInt64  `json:"cloud_type"`
