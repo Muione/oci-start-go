@@ -1,12 +1,11 @@
 <template>
   <div class="instances-page">
     <!-- Toolbar -->
-    <div class="toolbar">
-      <div class="toolbar-left">
-        <h2>实例管理</h2>
+    <PageHeader title="实例管理">
+      <template #extra>
         <el-tag type="info" size="small">{{ total }} 个实例</el-tag>
-      </div>
-      <div class="toolbar-right">
+      </template>
+      <template #actions>
         <el-button @click="load" :loading="loading">
           <el-icon><Refresh /></el-icon> 刷新
         </el-button>
@@ -21,8 +20,8 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- Filter bar -->
     <div class="filter-bar">
@@ -81,12 +80,13 @@
           <el-empty description="暂无实例数据" :image-size="80" />
         </template>
         <el-table-column type="selection" width="40" />
-        <el-table-column label="状态" width="90">
+        <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <div class="state-cell">
-              <span class="status-dot" :class="stateDotClass(row.state)"></span>
-              <span class="state-text">{{ row.state || '-' }}</span>
-            </div>
+            <StatusBadge
+              :status="getStateStatus(row.state)"
+              :label="row.state || '-'"
+              :pulse="row.state === 'Running'"
+            />
           </template>
         </el-table-column>
         <el-table-column prop="displayName" label="名称" min-width="160" sortable>
@@ -97,82 +97,21 @@
           </template>
         </el-table-column>
         <el-table-column prop="tenantName" label="租户" min-width="120" />
-        <el-table-column prop="instanceId" label="实例ID" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="shape" label="Shape" min-width="140" show-overflow-tooltip />
         <el-table-column prop="publicIps" label="公网IP" width="140">
           <template #default="{ row }">
-            <span class="data-mono" style="font-size:var(--text-xs)">{{ row.publicIps || '-' }}</span>
+            <MonoText>{{ row.publicIps || '-' }}</MonoText>
           </template>
         </el-table-column>
-        <el-table-column label="规格" width="140">
+        <el-table-column label="规格" width="120">
           <template #default="{ row }">
-            <span class="data-mono">{{ row.ocpus }}C / {{ row.memoryInGbs }}G</span>
+            <MonoText>{{ row.ocpus }}C / {{ row.memoryInGbs }}G</MonoText>
           </template>
         </el-table-column>
-        <el-table-column prop="architecture" label="架构" width="70" align="center">
+        <el-table-column label="操作" width="80" fixed="right">
           <template #default="{ row }">
-            <el-tag :type="row.architecture?.startsWith('ARM') ? '' : 'warning'" size="small" effect="dark">
-              {{ row.architecture || '-' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="在线" width="70" align="center">
-          <template #default="{ row }">
-            <span class="status-dot" :class="row.onLineEnable ? 'status-dot--up' : 'status-dot--idle'"></span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
-          <template #default="{ row }">
-            <el-button-group>
-              <el-button size="small" @click="showDetail(row)" title="详情">
-                <el-icon><InfoFilled /></el-icon>
-              </el-button>
-              <el-dropdown trigger="click" @command="(cmd: string) => handleAction(cmd, row)">
-                <el-button size="small">
-                  操作 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="start" :disabled="row.state === 'Running'">
-                      <el-icon><VideoPlay /></el-icon> 启动
-                    </el-dropdown-item>
-                    <el-dropdown-item command="stop" :disabled="row.state === 'Stopped'">
-                      <el-icon><VideoPause /></el-icon> 停止
-                    </el-dropdown-item>
-                    <el-dropdown-item command="restart" :disabled="row.state !== 'Running'">
-                      <el-icon><RefreshRight /></el-icon> 重启
-                    </el-dropdown-item>
-                    <el-dropdown-item command="modify">
-                      <el-icon><Edit /></el-icon> 修改配置
-                    </el-dropdown-item>
-                    <el-dropdown-item command="change-ip">
-                      <el-icon><Connection /></el-icon> 更换IP
-                    </el-dropdown-item>
-                    <el-dropdown-item command="enable-ipv6" :disabled="!!row.ipv6Addresses">
-                      <el-icon><Link /></el-icon> 启用 IPv6
-                    </el-dropdown-item>
-                    <el-dropdown-item command="ssh-config">
-                      <el-icon><Key /></el-icon> SSH 配置
-                    </el-dropdown-item>
-                    <el-dropdown-item command="rescue">
-                      <el-icon><Warning /></el-icon> 救援模式
-                    </el-dropdown-item>
-                    <el-dropdown-item command="console">
-                      <el-icon><Monitor /></el-icon> VNC 控制台
-                    </el-dropdown-item>
-                    <el-dropdown-item command="terminal">
-                      <el-icon><Operation /></el-icon> SSH 终端
-                    </el-dropdown-item>
-                    <el-divider style="margin:4px 0" />
-                    <el-dropdown-item command="terminate" divided>
-                      <span style="color:var(--status-down)">
-                        <el-icon><Delete /></el-icon> 终止实例
-                      </span>
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </el-button-group>
+            <el-button size="small" @click="showDetail(row)" title="详情">
+              <el-icon><InfoFilled /></el-icon>
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -548,6 +487,9 @@ import {
 } from '@element-plus/icons-vue'
 import request from '../utils/request'
 import ShapeSelect from '../components/ShapeSelect.vue'
+import PageHeader from '../components/common/PageHeader.vue'
+import StatusBadge from '../components/common/StatusBadge.vue'
+import MonoText from '../components/common/MonoText.vue'
 
 // ---- Types ----
 interface Instance {
@@ -619,6 +561,14 @@ const diskForm = ref({ vpusPerGb: 10 })
 const vpuSaving = ref(false)
 
 // ---- Computed ----
+function getStateStatus(state: string): 'up' | 'down' | 'warn' | 'idle' {
+  const s = (state || '').toLowerCase()
+  if (s === 'running') return 'up'
+  if (s === 'stopped' || s === 'terminated') return 'down'
+  if (s === 'starting' || s === 'stopping') return 'warn'
+  return 'idle'
+}
+
 function stateDotClass(state: string): string {
   const s = (state || '').toLowerCase()
   if (s === 'running') return 'status-dot--up status-dot--pulse'
@@ -1077,19 +1027,6 @@ onMounted(async () => {
   gap: var(--space-3);
   margin-bottom: var(--space-4);
   flex-wrap: wrap;
-}
-
-/* ---- State cell ---- */
-.state-cell {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.state-text {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  font-weight: var(--font-medium);
 }
 
 .instance-name:hover {
