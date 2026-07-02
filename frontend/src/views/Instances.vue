@@ -539,7 +539,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Refresh, Download, ArrowDown, Search, InfoFilled,
@@ -562,6 +562,7 @@ interface Instance {
 
 // ---- State ----
 const router = useRouter()
+const route = useRoute()
 const rows = ref<Instance[]>([])
 const allInstances = ref<Instance[]>([])
 const loading = ref(false)
@@ -1025,7 +1026,15 @@ async function batchStop() {
   } catch { /* cancel */ }
 }
 
-onMounted(load)
+onMounted(async () => {
+  await load()
+  // Auto-select instance from query param (navigated from TenantDetail)
+  const targetId = route.query.instanceId as string
+  if (targetId) {
+    const inst = allInstances.value.find(i => i.instanceId === targetId)
+    if (inst) showDetail(inst)
+  }
+})
 </script>
 
 <style scoped>
