@@ -50,8 +50,8 @@
       </el-table-column>
       <el-table-column label="账号类型" width="90" align="center">
         <template #default="{ row }">
-          <el-tag size="small" :type="row.planType === 'PAYG' ? '' : 'info'">
-            {{ row.planType || '—' }}
+          <el-tag size="small" :type="accountTypeTag(row.planType)">
+            {{ accountTypeLabel(row.planType) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -152,7 +152,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import request from '../utils/request'
-import { maskedName } from '../utils/tenant-utils'
+import { maskedName, accountTypeTag, accountTypeLabel } from '../utils/tenant-utils'
 import PageHeader from '../components/common/PageHeader.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import MonoText from '../components/common/MonoText.vue'
