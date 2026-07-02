@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Muione/oci-start-go/internal/response"
 	"github.com/Muione/oci-start-go/internal/service"
 )
 
@@ -14,10 +15,7 @@ func tenantAuditLog(deps *Deps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"success": false,
-				"message": "Tenant not found",
-			})
+			response.Fail(c, http.StatusBadRequest, "参数 id 无效")
 			return
 		}
 
@@ -34,16 +32,9 @@ func tenantAuditLog(deps *Deps) gin.HandlerFunc {
 
 		result, err := deps.Audit.Query(c.Request.Context(), id, req)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+			response.Fail(c, http.StatusInternalServerError, "查询审计日志失败: "+err.Error())
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"success":        true,
-			"data":           result.Data,
-			"nextPageToken":  result.NextPageToken,
-		})
+		response.OK(c, response.SuccessData(result))
 	}
 }
