@@ -247,21 +247,30 @@ func getResourceAvailability(ctx context.Context, c Clients, compartmentID, serv
 }
 
 // ServiceHasLimits returns true if the service has any non-zero limit value.
-// Single ListLimitValues call (first page only) — cheap probe for filtering
-// services-with-quota, vs the full two-pass GetServiceQuotasPaged.
+// Paginates ListLimitValues with early termination on the first non-zero value
+// (cap 10 pages). Cheap probe for filtering services-with-quota, vs the full
+// two-pass GetServiceQuotasPaged.
 func ServiceHasLimits(ctx context.Context, c Clients, compartmentID, serviceName string) (bool, error) {
-	resp, err := c.Limits.ListLimitValues(ctx, limits.ListLimitValuesRequest{
-		CompartmentId: common.String(compartmentID),
-		ServiceName:   common.String(serviceName),
-		Limit:         common.Int(100),
-	})
-	if err != nil {
-		return false, fmt.Errorf("list limit values for %s: %w", serviceName, err)
-	}
-	for _, lv := range resp.Items {
-		if lv.Value != nil && *lv.Value > 0 {
-			return true, nil
+	var page *string
+	for i := 0; i < 10; i++ {
+		resp, err := c.Limits.ListLimitValues(ctx, limits.ListLimitValuesRequest{
+			CompartmentId: common.String(compartmentID),
+			ServiceName:   common.String(serviceName),
+			Limit:         common.Int(200),
+			Page:          page,
+		})
+		if err != nil {
+			return false, fmt.Errorf("list limit values for %s: %w", serviceName, err)
 		}
+		for _, lv := range resp.Items {
+			if lv.Value != nil && *lv.Value > 0 {
+				return true, nil
+			}
+		}
+		if resp.OpcNextPage == nil {
+			break
+		}
+		page = resp.OpcNextPage
 	}
 	return false, nil
 }

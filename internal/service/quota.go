@@ -155,9 +155,9 @@ func (s *QuotaService) ListServicesWithQuota(ctx context.Context, tenantID int64
 
 	// Concurrent probe (semaphore = 5). stdlib only.
 	type probeResult struct {
-		idx int
-		has bool
-		ok  bool
+		idx    int
+		has    bool
+		err    bool // true if the probe errored
 	}
 	results := make([]probeResult, len(allServices))
 	sem := make(chan struct{}, 5)
@@ -177,17 +177,33 @@ func (s *QuotaService) ListServicesWithQuota(ctx context.Context, tenantID int64
 				has, qErr = oci.ServiceHasLimits(ctx, clients, creds.Tenancy, name)
 				return qErr
 			})
-			results[i] = probeResult{idx: i, has: has, ok: pErr == nil && has}
+			results[i] = probeResult{idx: i, has: has, err: pErr != nil}
 		}(i, *svc.Name)
 	}
 	wg.Wait()
 
 	out := make([]oci.ServiceInfo, 0, len(allServices))
+	anyError := false
 	for i, svc := range allServices {
 		if svc.Name == nil {
 			continue
 		}
-		if i < len(results) && results[i].ok {
+		if i >= len(results) {
+			continue
+		}
+		r := results[i]
+		if r.err {
+			anyError = true
+			// On error, include the service optimistically (better to show it
+			// and let the user see its quota than to hide it due to a transient failure).
+			desc := ""
+			if svc.Description != nil {
+				desc = *svc.Description
+			}
+			out = append(out, oci.ServiceInfo{Name: *svc.Name, Description: desc})
+			continue
+		}
+		if r.has {
 			desc := ""
 			if svc.Description != nil {
 				desc = *svc.Description
@@ -196,8 +212,11 @@ func (s *QuotaService) ListServicesWithQuota(ctx context.Context, tenantID int64
 		}
 	}
 
-	s.mu.Lock()
-	s.svcCache[tenantID] = &svcCacheEntry{services: out, fetched: time.Now()}
-	s.mu.Unlock()
+	// Only cache if all probes succeeded (no transient errors).
+	if !anyError {
+		s.mu.Lock()
+		s.svcCache[tenantID] = &svcCacheEntry{services: out, fetched: time.Now()}
+		s.mu.Unlock()
+	}
 	return out, nil
 }
