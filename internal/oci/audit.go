@@ -58,12 +58,6 @@ func ListAuditEvents(
 	startTime, endTime time.Time,
 	pageToken string,
 ) (*AuditLogPage, error) {
-	log.Debug().
-		Str("compartmentID", compartmentID).
-		Time("startTime", startTime).
-		Time("endTime", endTime).
-		Msg("querying audit events")
-
 	req := audit.ListEventsRequest{
 		CompartmentId:      &compartmentID,
 		StartTime:          &common.SDKTime{Time: startTime},
