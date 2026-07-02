@@ -1,14 +1,13 @@
 <template>
   <div class="dashboard">
     <!-- Page header -->
-    <div class="toolbar">
-      <div class="toolbar-left">
-        <h2>仪表盘</h2>
-      </div>
-      <el-button @click="loadAll" :loading="loading" size="small">
-        <el-icon><Refresh /></el-icon> 刷新
-      </el-button>
-    </div>
+    <PageHeader title="仪表盘">
+      <template #actions>
+        <el-button @click="loadAll" :loading="loading" size="small">
+          <el-icon><Refresh /></el-icon> 刷新
+        </el-button>
+      </template>
+    </PageHeader>
 
     <!-- Error alert -->
     <el-alert
@@ -163,6 +162,7 @@ import {
   ChatDotRound, Message, Notification,
   Platform, Share, Setting, Promotion, VideoCamera, Warning
 } from '@element-plus/icons-vue'
+import PageHeader from '../components/common/PageHeader.vue'
 import request from '../utils/request'
 import type { DashboardStats, EngineStatus, MessageChannels, SystemConfig } from '../types/api'
 
