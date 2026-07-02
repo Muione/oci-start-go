@@ -463,4 +463,13 @@ onMounted(load)
 :deep(.el-collapse-item:last-child) { border-bottom: none; }
 :deep(.el-collapse-item__header) { font-size: var(--text-base); font-weight: var(--font-semibold); color: var(--accent); }
 :deep(.el-collapse-item__header:hover) { color: var(--accent-hover); }
+
+@media (max-width: 768px) {
+  .tenants-page { padding: 12px; }
+
+  :deep(.el-table) { font-size: var(--text-xs); }
+  :deep(.el-table .el-table__body-wrapper) { overflow-x: auto; }
+
+  :deep(.el-dialog) { width: 95vw !important; margin: 0 auto; }
+}
 </style>
