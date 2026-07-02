@@ -1,417 +1,400 @@
 <template>
   <div class="settings-page">
-    <div class="toolbar">
-      <div class="toolbar-left">
-        <h2>系统设置</h2>
-        <el-tag type="info" size="small">{{ config.appVersion ? 'v' + config.appVersion : '' }}</el-tag>
-      </div>
-      <el-button type="primary" @click="loadConfig" :loading="loading">
-        <el-icon><Refresh /></el-icon> 刷新
-      </el-button>
-    </div>
-
-    <!-- User Management -->
-    <el-card shadow="hover" class="section-card">
-      <template #header>
-        <div class="card-header">
-          <span>👤 用户管理</span>
-        </div>
+    <PageHeader title="系统设置">
+      <template #extra>
+        <el-tag v-if="config.appVersion" type="info" size="small">v{{ config.appVersion }}</el-tag>
       </template>
-      <el-descriptions :column="2" border size="small">
-        <el-descriptions-item label="当前用户">
-          <el-tag type="primary" size="small">{{ user.username }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="用户角色">
-          <el-tag type="danger" size="small">ADMIN</el-tag>
-        </el-descriptions-item>
-      </el-descriptions>
-      <div style="margin-top: 16px;">
-        <el-button type="warning" @click="openChangePassword">
-          <el-icon><Lock /></el-icon> 修改密码
+      <template #actions>
+        <el-button type="primary" @click="loadConfig" :loading="loading">
+          <el-icon><Refresh /></el-icon> 刷新
         </el-button>
-      </div>
-    </el-card>
-
-    <!-- Notification Channels -->
-    <el-card shadow="hover" class="section-card">
-      <template #header>
-        <div class="card-header">
-          <span>📢 通知渠道</span>
-        </div>
       </template>
-      <el-row :gutter="16">
-        <!-- Telegram -->
-        <el-col :md="12" :sm="24" style="margin-bottom:16px">
-          <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('telegram.bot.token') }">
-            <template #header>
-              <div class="channel-header">
-                <span>📨 Telegram</span>
-                <el-tag :type="cfgStr('telegram.bot.token') ? 'success' : 'info'" size="small">
-                  {{ cfgStr('telegram.bot.token') ? '已配置' : '未配置' }}
-                </el-tag>
-              </div>
-            </template>
-            <el-descriptions :column="1" size="small" border>
-              <el-descriptions-item label="Bot Token">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['telegram.bot.token']" type="password" show-password placeholder="输入 Bot Token" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['telegram.bot.token']" @click="saveField('telegram.bot.token')">保存</el-button>
-                </div>
+    </PageHeader>
+
+    <div class="settings-layout">
+      <el-tabs v-model="activeTab" tab-position="left" class="settings-tabs">
+        <!-- 用户管理 -->
+        <el-tab-pane label="👤 用户" name="user">
+          <div class="tab-content">
+            <el-descriptions :column="2" border size="small">
+              <el-descriptions-item label="当前用户">
+                <el-tag type="primary" size="small">{{ user.username }}</el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="Chat ID">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['telegram.chat.id']" placeholder="输入 Chat ID" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['telegram.chat.id']" @click="saveField('telegram.chat.id')">保存</el-button>
-                </div>
+              <el-descriptions-item label="用户角色">
+                <el-tag type="danger" size="small">ADMIN</el-tag>
               </el-descriptions-item>
             </el-descriptions>
-          </el-card>
-        </el-col>
-
-        <!-- DingTalk -->
-        <el-col :md="12" :sm="24" style="margin-bottom:16px">
-          <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('dingtalk.webhook') }">
-            <template #header>
-              <div class="channel-header">
-                <span>🔔 钉钉</span>
-                <el-tag :type="cfgStr('dingtalk.webhook') ? 'success' : 'info'" size="small">
-                  {{ cfgStr('dingtalk.webhook') ? '已配置' : '未配置' }}
-                </el-tag>
-              </div>
-            </template>
-            <el-descriptions :column="1" size="small" border>
-              <el-descriptions-item label="Webhook URL">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['dingtalk.webhook']" placeholder="输入 Webhook URL" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['dingtalk.webhook']" @click="saveField('dingtalk.webhook')">保存</el-button>
-                </div>
-              </el-descriptions-item>
-              <el-descriptions-item label="签名密钥">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['dingtalk.secret']" type="password" show-password placeholder="输入签名密钥（可选）" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['dingtalk.secret']" @click="saveField('dingtalk.secret')">保存</el-button>
-                </div>
-              </el-descriptions-item>
-            </el-descriptions>
-          </el-card>
-        </el-col>
-
-        <!-- Bark -->
-        <el-col :md="12" :sm="24" style="margin-bottom:16px">
-          <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('bark.key') }">
-            <template #header>
-              <div class="channel-header">
-                <span>📱 Bark (iOS)</span>
-                <el-tag :type="cfgStr('bark.key') ? 'success' : 'info'" size="small">
-                  {{ cfgStr('bark.key') ? '已配置' : '未配置' }}
-                </el-tag>
-              </div>
-            </template>
-            <el-descriptions :column="1" size="small" border>
-              <el-descriptions-item label="Device Key">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['bark.key']" placeholder="输入 Device Key" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['bark.key']" @click="saveField('bark.key')">保存</el-button>
-                </div>
-              </el-descriptions-item>
-              <el-descriptions-item label="Server">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['bark.server']" placeholder="https://api.day.app (默认)" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['bark.server']" @click="saveField('bark.server')">保存</el-button>
-                </div>
-              </el-descriptions-item>
-            </el-descriptions>
-          </el-card>
-        </el-col>
-
-        <!-- Feishu -->
-        <el-col :md="12" :sm="24" style="margin-bottom:16px">
-          <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('feishu.webhook') }">
-            <template #header>
-              <div class="channel-header">
-                <span>🧧 飞书</span>
-                <el-tag :type="cfgStr('feishu.webhook') ? 'success' : 'info'" size="small">
-                  {{ cfgStr('feishu.webhook') ? '已配置' : '未配置' }}
-                </el-tag>
-              </div>
-            </template>
-            <el-descriptions :column="1" size="small" border>
-              <el-descriptions-item label="Webhook URL">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['feishu.webhook']" placeholder="输入 Webhook URL" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['feishu.webhook']" @click="saveField('feishu.webhook')">保存</el-button>
-                </div>
-              </el-descriptions-item>
-              <el-descriptions-item label="签名密钥">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['feishu.secret']" type="password" show-password placeholder="输入签名密钥（可选）" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['feishu.secret']" @click="saveField('feishu.secret')">保存</el-button>
-                </div>
-              </el-descriptions-item>
-            </el-descriptions>
-          </el-card>
-        </el-col>
-      </el-row>
-    </el-card>
-
-    <!-- DNS Providers -->
-    <el-card shadow="hover" class="section-card">
-      <template #header>
-        <div class="card-header">
-          <span>🌐 DNS 服务</span>
-        </div>
-      </template>
-      <el-row :gutter="16">
-        <el-col :md="12" :sm="24" style="margin-bottom:16px">
-          <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('cloudflare.api.token') }">
-            <template #header>
-              <div class="channel-header">
-                <span>☁️ Cloudflare</span>
-                <el-tag :type="cfgStr('cloudflare.api.token') ? 'success' : 'info'" size="small">
-                  {{ cfgStr('cloudflare.api.token') ? '已配置' : '未配置' }}
-                </el-tag>
-              </div>
-            </template>
-            <el-descriptions :column="1" size="small" border>
-              <el-descriptions-item label="API Token">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['cloudflare.api.token']" type="password" show-password placeholder="输入 API Token" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['cloudflare.api.token']" @click="saveField('cloudflare.api.token')">保存</el-button>
-                </div>
-              </el-descriptions-item>
-            </el-descriptions>
-            <div style="font-size:12px;color:var(--text-muted);margin-top:8px">
-              <i class="el-icon-info"></i> 请在 Cloudflare 控制台创建 API Token（推荐使用「编辑 DNS」模板）
-            </div>
-          </el-card>
-        </el-col>
-
-        <el-col :md="12" :sm="24" style="margin-bottom:16px">
-          <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('edgeone.secretId') }">
-            <template #header>
-              <div class="channel-header">
-                <span>🔷 EdgeOne (腾讯云)</span>
-                <el-tag :type="cfgStr('edgeone.secretId') ? 'success' : 'info'" size="small">
-                  {{ cfgStr('edgeone.secretId') ? '已配置' : '未配置' }}
-                </el-tag>
-              </div>
-            </template>
-            <el-descriptions :column="1" size="small" border>
-              <el-descriptions-item label="Secret ID">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['edgeone.secretId']" type="password" show-password placeholder="输入 Secret ID" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['edgeone.secretId']" @click="saveField('edgeone.secretId')">保存</el-button>
-                </div>
-              </el-descriptions-item>
-              <el-descriptions-item label="Zone ID">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['edgeone.zoneId']" placeholder="输入 Zone ID" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['edgeone.zoneId']" @click="saveField('edgeone.zoneId')">保存</el-button>
-                </div>
-              </el-descriptions-item>
-            </el-descriptions>
-          </el-card>
-        </el-col>
-      </el-row>
-    </el-card>
-
-    <!-- SSL Certificate -->
-    <el-card shadow="hover" class="section-card">
-      <template #header>
-        <div class="card-header">
-          <span>🔒 SSL 证书</span>
-        </div>
-      </template>
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="域名">
-          <div class="inline-edit">
-            <el-input v-model="editValues['ssl.domain']" placeholder="输入域名" size="small" />
-            <el-button size="small" type="primary" :loading="savingKeys['ssl.domain']" @click="saveField('ssl.domain')">保存</el-button>
-          </div>
-        </el-descriptions-item>
-        <el-descriptions-item label="Email">
-          <div class="inline-edit">
-            <el-input v-model="editValues['ssl.email']" placeholder="输入 Email" size="small" />
-            <el-button size="small" type="primary" :loading="savingKeys['ssl.email']" @click="saveField('ssl.email')">保存</el-button>
-          </div>
-        </el-descriptions-item>
-        <el-descriptions-item label="模式">
-          <el-tag :type="config.bools?.['ssl.staging'] ? 'warning' : 'success'" size="small">
-            {{ config.bools?.['ssl.staging'] ? 'Staging (测试)' : 'Production (生产)' }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="自动续期">
-          <el-tag type="info" size="small">每天 04:00 (SslCertJob)</el-tag>
-        </el-descriptions-item>
-      </el-descriptions>
-      <div v-if="!cfgStr('ssl.domain')" style="margin-top:12px">
-        <el-alert
-          title="SSL 证书未配置"
-          type="info"
-          description="在系统配置中设置 ssl.domain、ssl.email、cloudflare.api.token 以启用 Let's Encrypt 自动签发/续期。"
-          :closable="false"
-          show-icon
-        />
-      </div>
-    </el-card>
-
-    <!-- Network Proxy -->
-    <el-card shadow="hover" class="section-card">
-      <template #header>
-        <div class="card-header">
-          <span>🌐 网络代理</span>
-          <el-tag :type="proxyForm.enabled ? 'success' : 'info'" size="small" style="margin-left: 8px;">
-            {{ proxyForm.enabled ? '已启用' : '已禁用' }}
-          </el-tag>
-        </div>
-      </template>
-      <el-alert
-        title="配置应用级别的出站代理，用于访问外部 API（如 Telegram Bot、OCI API 等）"
-        type="info"
-        :closable="false"
-        show-icon
-        style="margin-bottom: 16px;"
-      />
-      <el-form :model="proxyForm" label-width="100px" :rules="proxyRules" ref="proxyFormRef">
-        <el-row :gutter="16">
-          <el-col :md="12" :sm="24">
-            <el-form-item label="代理类型" prop="type">
-              <el-select v-model="proxyForm.type" style="width: 100%">
-                <el-option label="HTTP" value="HTTP" />
-                <el-option label="HTTPS" value="HTTPS" />
-                <el-option label="SOCKS5（推荐）" value="SOCKS5" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :md="12" :sm="24">
-            <el-form-item label="启用代理">
-              <el-switch v-model="proxyForm.enabled" active-text="启用" inactive-text="禁用" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :md="16" :sm="24">
-            <el-form-item label="代理地址" prop="host">
-              <el-input v-model="proxyForm.host" placeholder="代理服务器 IP 或域名" />
-            </el-form-item>
-          </el-col>
-          <el-col :md="8" :sm="24">
-            <el-form-item label="端口" prop="port">
-              <el-input-number v-model="proxyForm.port" :min="1" :max="65535" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :md="12" :sm="24">
-            <el-form-item label="用户名">
-              <el-input v-model="proxyForm.username" placeholder="选填" />
-            </el-form-item>
-          </el-col>
-          <el-col :md="12" :sm="24">
-            <el-form-item label="密码">
-              <el-input v-model="proxyForm.password" type="password" show-password placeholder="选填" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item>
-          <el-button type="primary" :loading="proxySaving" @click="saveProxyConfig">
-            <el-icon><Check /></el-icon> 保存配置
-          </el-button>
-          <el-button :loading="proxyTesting" @click="testProxyConnection">
-            <el-icon><Connection /></el-icon> 测试连通性
-          </el-button>
-          <el-button @click="loadProxyConfig">
-            <el-icon><Refresh /></el-icon> 重置
-          </el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <!-- Security & Auth -->
-    <el-card shadow="hover" class="section-card">
-      <template #header>
-        <div class="card-header">
-          <span>🔐 安全与认证</span>
-        </div>
-      </template>
-
-      <el-row :gutter="20">
-        <!-- MFA -->
-        <el-col :xs="24" :sm="8">
-          <div class="security-block">
-            <div class="security-block-header">
-              <span class="security-block-title">MFA 验证</span>
-              <el-tag v-if="mfaStatus.enabled" type="success" size="small" effect="dark">已启用</el-tag>
-              <el-tag v-else type="info" size="small">未启用</el-tag>
-            </div>
-            <p class="security-block-desc">使用 TOTP 动态验证码保护登录安全</p>
-            <div class="security-block-actions">
-              <el-button v-if="mfaStatus.enabled" type="danger" size="small" :loading="mfaDisabling" @click="disableMfa">
-                禁用
-              </el-button>
-              <el-button v-else type="primary" size="small" :loading="mfaSettingUp" @click="setupTotp">
-                设置 TOTP
+            <div style="margin-top: 16px;">
+              <el-button type="warning" @click="openChangePassword">
+                <el-icon><Lock /></el-icon> 修改密码
               </el-button>
             </div>
           </div>
-        </el-col>
+        </el-tab-pane>
 
-        <!-- Turnstile -->
-        <el-col :xs="24" :sm="8">
-          <div class="security-block">
-            <div class="security-block-header">
-              <span class="security-block-title">Turnstile 验证</span>
-              <el-tag v-if="turnstileForm.enabled" type="success" size="small" effect="dark">已启用</el-tag>
-              <el-tag v-else type="info" size="small">未启用</el-tag>
-            </div>
-            <p class="security-block-desc">Cloudflare 人机验证，防止恶意登录</p>
-            <el-form label-width="70px" size="small" class="security-block-form">
-              <el-form-item label="启用">
-                <el-switch v-model="turnstileForm.enabled" />
-              </el-form-item>
-              <el-form-item label="Site Key">
-                <el-input v-model="turnstileForm.siteKey" placeholder="站点密钥" />
-              </el-form-item>
-              <el-form-item label="Secret">
-                <el-input v-model="turnstileForm.secretKey" type="password" show-password placeholder="安全密钥" />
-              </el-form-item>
-            </el-form>
-            <div class="security-block-actions">
-              <el-button type="primary" size="small" :loading="turnstileSaving" @click="saveTurnstile">保存</el-button>
+        <!-- 通知渠道 -->
+        <el-tab-pane label="📢 通知" name="notification">
+          <div class="tab-content">
+            <el-row :gutter="16">
+              <!-- Telegram -->
+              <el-col :md="12" :sm="24" style="margin-bottom:16px">
+                <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('telegram.bot.token') }">
+                  <template #header>
+                    <div class="channel-header">
+                      <span>📨 Telegram</span>
+                      <el-tag :type="cfgStr('telegram.bot.token') ? 'success' : 'info'" size="small">
+                        {{ cfgStr('telegram.bot.token') ? '已配置' : '未配置' }}
+                      </el-tag>
+                    </div>
+                  </template>
+                  <el-descriptions :column="1" size="small" border>
+                    <el-descriptions-item label="Bot Token">
+                      <div class="inline-edit">
+                        <el-input v-model="editValues['telegram.bot.token']" type="password" show-password placeholder="输入 Bot Token" size="small" />
+                        <el-button size="small" type="primary" :loading="savingKeys['telegram.bot.token']" @click="saveField('telegram.bot.token')">保存</el-button>
+                      </div>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="Chat ID">
+                      <div class="inline-edit">
+                        <el-input v-model="editValues['telegram.chat.id']" placeholder="输入 Chat ID" size="small" />
+                        <el-button size="small" type="primary" :loading="savingKeys['telegram.chat.id']" @click="saveField('telegram.chat.id')">保存</el-button>
+                      </div>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </el-card>
+              </el-col>
+
+              <!-- DingTalk -->
+              <el-col :md="12" :sm="24" style="margin-bottom:16px">
+                <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('dingtalk.webhook') }">
+                  <template #header>
+                    <div class="channel-header">
+                      <span>🔔 钉钉</span>
+                      <el-tag :type="cfgStr('dingtalk.webhook') ? 'success' : 'info'" size="small">
+                        {{ cfgStr('dingtalk.webhook') ? '已配置' : '未配置' }}
+                      </el-tag>
+                    </div>
+                  </template>
+                  <el-descriptions :column="1" size="small" border>
+                    <el-descriptions-item label="Webhook URL">
+                      <div class="inline-edit">
+                        <el-input v-model="editValues['dingtalk.webhook']" placeholder="输入 Webhook URL" size="small" />
+                        <el-button size="small" type="primary" :loading="savingKeys['dingtalk.webhook']" @click="saveField('dingtalk.webhook')">保存</el-button>
+                      </div>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="签名密钥">
+                      <div class="inline-edit">
+                        <el-input v-model="editValues['dingtalk.secret']" type="password" show-password placeholder="输入签名密钥（可选）" size="small" />
+                        <el-button size="small" type="primary" :loading="savingKeys['dingtalk.secret']" @click="saveField('dingtalk.secret')">保存</el-button>
+                      </div>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </el-card>
+              </el-col>
+
+              <!-- Bark -->
+              <el-col :md="12" :sm="24" style="margin-bottom:16px">
+                <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('bark.key') }">
+                  <template #header>
+                    <div class="channel-header">
+                      <span>📱 Bark (iOS)</span>
+                      <el-tag :type="cfgStr('bark.key') ? 'success' : 'info'" size="small">
+                        {{ cfgStr('bark.key') ? '已配置' : '未配置' }}
+                      </el-tag>
+                    </div>
+                  </template>
+                  <el-descriptions :column="1" size="small" border>
+                    <el-descriptions-item label="Device Key">
+                      <div class="inline-edit">
+                        <el-input v-model="editValues['bark.key']" placeholder="输入 Device Key" size="small" />
+                        <el-button size="small" type="primary" :loading="savingKeys['bark.key']" @click="saveField('bark.key')">保存</el-button>
+                      </div>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="Server">
+                      <div class="inline-edit">
+                        <el-input v-model="editValues['bark.server']" placeholder="https://api.day.app (默认)" size="small" />
+                        <el-button size="small" type="primary" :loading="savingKeys['bark.server']" @click="saveField('bark.server')">保存</el-button>
+                      </div>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </el-card>
+              </el-col>
+
+              <!-- Feishu -->
+              <el-col :md="12" :sm="24" style="margin-bottom:16px">
+                <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('feishu.webhook') }">
+                  <template #header>
+                    <div class="channel-header">
+                      <span>🧧 飞书</span>
+                      <el-tag :type="cfgStr('feishu.webhook') ? 'success' : 'info'" size="small">
+                        {{ cfgStr('feishu.webhook') ? '已配置' : '未配置' }}
+                      </el-tag>
+                    </div>
+                  </template>
+                  <el-descriptions :column="1" size="small" border>
+                    <el-descriptions-item label="Webhook URL">
+                      <div class="inline-edit">
+                        <el-input v-model="editValues['feishu.webhook']" placeholder="输入 Webhook URL" size="small" />
+                        <el-button size="small" type="primary" :loading="savingKeys['feishu.webhook']" @click="saveField('feishu.webhook')">保存</el-button>
+                      </div>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="签名密钥">
+                      <div class="inline-edit">
+                        <el-input v-model="editValues['feishu.secret']" type="password" show-password placeholder="输入签名密钥（可选）" size="small" />
+                        <el-button size="small" type="primary" :loading="savingKeys['feishu.secret']" @click="saveField('feishu.secret')">保存</el-button>
+                      </div>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </el-card>
+              </el-col>
+            </el-row>
+          </div>
+        </el-tab-pane>
+
+        <!-- DNS 服务 -->
+        <el-tab-pane label="🌐 DNS" name="dns">
+          <div class="tab-content">
+            <el-row :gutter="16">
+              <el-col :md="12" :sm="24" style="margin-bottom:16px">
+                <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('cloudflare.api.token') }">
+                  <template #header>
+                    <div class="channel-header">
+                      <span>☁️ Cloudflare</span>
+                      <el-tag :type="cfgStr('cloudflare.api.token') ? 'success' : 'info'" size="small">
+                        {{ cfgStr('cloudflare.api.token') ? '已配置' : '未配置' }}
+                      </el-tag>
+                    </div>
+                  </template>
+                  <el-descriptions :column="1" size="small" border>
+                    <el-descriptions-item label="API Token">
+                      <div class="inline-edit">
+                        <el-input v-model="editValues['cloudflare.api.token']" type="password" show-password placeholder="输入 API Token" size="small" />
+                        <el-button size="small" type="primary" :loading="savingKeys['cloudflare.api.token']" @click="saveField('cloudflare.api.token')">保存</el-button>
+                      </div>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                  <div style="font-size:12px;color:var(--text-muted);margin-top:8px">
+                    <i class="el-icon-info"></i> 请在 Cloudflare 控制台创建 API Token（推荐使用「编辑 DNS」模板）
+                  </div>
+                </el-card>
+              </el-col>
+
+              <el-col :md="12" :sm="24" style="margin-bottom:16px">
+                <el-card shadow="none" class="channel-card" :class="{ configured: cfgStr('edgeone.secretId') }">
+                  <template #header>
+                    <div class="channel-header">
+                      <span>🔷 EdgeOne (腾讯云)</span>
+                      <el-tag :type="cfgStr('edgeone.secretId') ? 'success' : 'info'" size="small">
+                        {{ cfgStr('edgeone.secretId') ? '已配置' : '未配置' }}
+                      </el-tag>
+                    </div>
+                  </template>
+                  <el-descriptions :column="1" size="small" border>
+                    <el-descriptions-item label="Secret ID">
+                      <div class="inline-edit">
+                        <el-input v-model="editValues['edgeone.secretId']" type="password" show-password placeholder="输入 Secret ID" size="small" />
+                        <el-button size="small" type="primary" :loading="savingKeys['edgeone.secretId']" @click="saveField('edgeone.secretId')">保存</el-button>
+                      </div>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="Zone ID">
+                      <div class="inline-edit">
+                        <el-input v-model="editValues['edgeone.zoneId']" placeholder="输入 Zone ID" size="small" />
+                        <el-button size="small" type="primary" :loading="savingKeys['edgeone.zoneId']" @click="saveField('edgeone.zoneId')">保存</el-button>
+                      </div>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </el-card>
+              </el-col>
+            </el-row>
+          </div>
+        </el-tab-pane>
+
+        <!-- SSL 证书 -->
+        <el-tab-pane label="🔒 SSL" name="ssl">
+          <div class="tab-content">
+            <el-descriptions :column="2" border>
+              <el-descriptions-item label="域名">
+                <div class="inline-edit">
+                  <el-input v-model="editValues['ssl.domain']" placeholder="输入域名" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['ssl.domain']" @click="saveField('ssl.domain')">保存</el-button>
+                </div>
+              </el-descriptions-item>
+              <el-descriptions-item label="Email">
+                <div class="inline-edit">
+                  <el-input v-model="editValues['ssl.email']" placeholder="输入 Email" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['ssl.email']" @click="saveField('ssl.email')">保存</el-button>
+                </div>
+              </el-descriptions-item>
+              <el-descriptions-item label="模式">
+                <el-tag :type="config.bools?.['ssl.staging'] ? 'warning' : 'success'" size="small">
+                  {{ config.bools?.['ssl.staging'] ? 'Staging (测试)' : 'Production (生产)' }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="自动续期">
+                <el-tag type="info" size="small">每天 04:00 (SslCertJob)</el-tag>
+              </el-descriptions-item>
+            </el-descriptions>
+            <div v-if="!cfgStr('ssl.domain')" style="margin-top:12px">
+              <el-alert
+                title="SSL 证书未配置"
+                type="info"
+                description="在系统配置中设置 ssl.domain、ssl.email、cloudflare.api.token 以启用 Let's Encrypt 自动签发/续期。"
+                :closable="false"
+                show-icon
+              />
             </div>
           </div>
-        </el-col>
+        </el-tab-pane>
 
-        <!-- GitHub OAuth -->
-        <el-col :xs="24" :sm="8">
-          <div class="security-block">
-            <div class="security-block-header">
-              <span class="security-block-title">GitHub OAuth</span>
-              <el-tag v-if="githubForm.enabled" type="success" size="small" effect="dark">已启用</el-tag>
-              <el-tag v-else type="info" size="small">未启用</el-tag>
-            </div>
-            <p class="security-block-desc">使用 GitHub 账号作为替代登录方式</p>
-            <el-form label-width="70px" size="small" class="security-block-form">
-              <el-form-item label="启用">
-                <el-switch v-model="githubForm.enabled" />
-              </el-form-item>
-              <el-form-item label="Client ID">
-                <el-input v-model="githubForm.clientId" placeholder="OAuth App Client ID" />
-              </el-form-item>
-              <el-form-item label="Secret">
-                <el-input v-model="githubForm.clientSecret" type="password" show-password placeholder="Client Secret" />
-              </el-form-item>
-              <el-form-item label="回调地址">
-                <el-input v-model="githubForm.redirectUri" placeholder="http://your-domain/api/github/callback" />
+        <!-- 网络代理 -->
+        <el-tab-pane label="🌐 代理" name="proxy">
+          <div class="tab-content">
+            <el-alert
+              title="配置应用级别的出站代理，用于访问外部 API（如 Telegram Bot、OCI API 等）"
+              type="info"
+              :closable="false"
+              show-icon
+              style="margin-bottom: 16px;"
+            />
+            <el-form :model="proxyForm" label-width="100px" :rules="proxyRules" ref="proxyFormRef">
+              <el-row :gutter="16">
+                <el-col :md="12" :sm="24">
+                  <el-form-item label="代理类型" prop="type">
+                    <el-select v-model="proxyForm.type" style="width: 100%">
+                      <el-option label="HTTP" value="HTTP" />
+                      <el-option label="HTTPS" value="HTTPS" />
+                      <el-option label="SOCKS5（推荐）" value="SOCKS5" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :md="12" :sm="24">
+                  <el-form-item label="启用代理">
+                    <el-switch v-model="proxyForm.enabled" active-text="启用" inactive-text="禁用" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="16">
+                <el-col :md="16" :sm="24">
+                  <el-form-item label="代理地址" prop="host">
+                    <el-input v-model="proxyForm.host" placeholder="代理服务器 IP 或域名" />
+                  </el-form-item>
+                </el-col>
+                <el-col :md="8" :sm="24">
+                  <el-form-item label="端口" prop="port">
+                    <el-input-number v-model="proxyForm.port" :min="1" :max="65535" style="width: 100%" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="16">
+                <el-col :md="12" :sm="24">
+                  <el-form-item label="用户名">
+                    <el-input v-model="proxyForm.username" placeholder="选填" />
+                  </el-form-item>
+                </el-col>
+                <el-col :md="12" :sm="24">
+                  <el-form-item label="密码">
+                    <el-input v-model="proxyForm.password" type="password" show-password placeholder="选填" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-form-item>
+                <el-button type="primary" :loading="proxySaving" @click="saveProxyConfig">
+                  <el-icon><Check /></el-icon> 保存配置
+                </el-button>
+                <el-button :loading="proxyTesting" @click="testProxyConnection">
+                  <el-icon><Connection /></el-icon> 测试连通性
+                </el-button>
+                <el-button @click="loadProxyConfig">
+                  <el-icon><Refresh /></el-icon> 重置
+                </el-button>
               </el-form-item>
             </el-form>
-            <div class="security-block-actions">
-              <el-button type="primary" size="small" :loading="githubSaving" @click="saveGithubOAuth">保存</el-button>
-            </div>
           </div>
-        </el-col>
-      </el-row>
-    </el-card>
+        </el-tab-pane>
+
+        <!-- 安全与认证 -->
+        <el-tab-pane label="🔐 安全" name="security">
+          <div class="tab-content">
+            <el-row :gutter="20">
+              <!-- MFA -->
+              <el-col :xs="24" :sm="8">
+                <div class="security-block">
+                  <div class="security-block-header">
+                    <span class="security-block-title">MFA 验证</span>
+                    <el-tag v-if="mfaStatus.enabled" type="success" size="small" effect="dark">已启用</el-tag>
+                    <el-tag v-else type="info" size="small">未启用</el-tag>
+                  </div>
+                  <p class="security-block-desc">使用 TOTP 动态验证码保护登录安全</p>
+                  <div class="security-block-actions">
+                    <el-button v-if="mfaStatus.enabled" type="danger" size="small" :loading="mfaDisabling" @click="disableMfa">
+                      禁用
+                    </el-button>
+                    <el-button v-else type="primary" size="small" :loading="mfaSettingUp" @click="setupTotp">
+                      设置 TOTP
+                    </el-button>
+                  </div>
+                </div>
+              </el-col>
+
+              <!-- Turnstile -->
+              <el-col :xs="24" :sm="8">
+                <div class="security-block">
+                  <div class="security-block-header">
+                    <span class="security-block-title">Turnstile 验证</span>
+                    <el-tag v-if="turnstileForm.enabled" type="success" size="small" effect="dark">已启用</el-tag>
+                    <el-tag v-else type="info" size="small">未启用</el-tag>
+                  </div>
+                  <p class="security-block-desc">Cloudflare 人机验证，防止恶意登录</p>
+                  <el-form label-width="70px" size="small" class="security-block-form">
+                    <el-form-item label="启用">
+                      <el-switch v-model="turnstileForm.enabled" />
+                    </el-form-item>
+                    <el-form-item label="Site Key">
+                      <el-input v-model="turnstileForm.siteKey" placeholder="站点密钥" />
+                    </el-form-item>
+                    <el-form-item label="Secret">
+                      <el-input v-model="turnstileForm.secretKey" type="password" show-password placeholder="安全密钥" />
+                    </el-form-item>
+                  </el-form>
+                  <div class="security-block-actions">
+                    <el-button type="primary" size="small" :loading="turnstileSaving" @click="saveTurnstile">保存</el-button>
+                  </div>
+                </div>
+              </el-col>
+
+              <!-- GitHub OAuth -->
+              <el-col :xs="24" :sm="8">
+                <div class="security-block">
+                  <div class="security-block-header">
+                    <span class="security-block-title">GitHub OAuth</span>
+                    <el-tag v-if="githubForm.enabled" type="success" size="small" effect="dark">已启用</el-tag>
+                    <el-tag v-else type="info" size="small">未启用</el-tag>
+                  </div>
+                  <p class="security-block-desc">使用 GitHub 账号作为替代登录方式</p>
+                  <el-form label-width="70px" size="small" class="security-block-form">
+                    <el-form-item label="启用">
+                      <el-switch v-model="githubForm.enabled" />
+                    </el-form-item>
+                    <el-form-item label="Client ID">
+                      <el-input v-model="githubForm.clientId" placeholder="OAuth App Client ID" />
+                    </el-form-item>
+                    <el-form-item label="Secret">
+                      <el-input v-model="githubForm.clientSecret" type="password" show-password placeholder="Client Secret" />
+                    </el-form-item>
+                    <el-form-item label="回调地址">
+                      <el-input v-model="githubForm.redirectUri" placeholder="http://your-domain/api/github/callback" />
+                    </el-form-item>
+                  </el-form>
+                  <div class="security-block-actions">
+                    <el-button type="primary" size="small" :loading="githubSaving" @click="saveGithubOAuth">保存</el-button>
+                  </div>
+                </div>
+              </el-col>
+            </el-row>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </div>
 
     <!-- TOTP Setup Dialog -->
     <el-dialog v-model="totpDialogVisible" title="设置 TOTP 验证" width="420px" destroy-on-close>
@@ -457,10 +440,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Lock, Check, Connection } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import request from '../utils/request'
+import PageHeader from '../components/common/PageHeader.vue'
 import type { SystemConfig } from '../types/api'
 
 const user = useUserStore()
 const loading = ref(false)
+const activeTab = ref('user')
 const config = ref<SystemConfig>({
   strings: {},
   bools: {},
@@ -797,53 +782,28 @@ onMounted(async () => {
   padding: 0;
 }
 
-.toolbar {
+.settings-layout {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-6);
-  flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--space-6);
 }
 
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+.settings-tabs {
+  flex: 1;
 }
 
-.toolbar-left h2 {
-  margin: 0;
-  font-size: var(--text-xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  letter-spacing: var(--tracking-tight);
+.settings-tabs :deep(.el-tabs__header) {
+  margin-right: var(--space-6);
 }
 
-.toolbar-left :deep(.el-tag) {
-  border-radius: var(--radius-sm);
-  font-weight: var(--font-semibold);
-  background: var(--accent-subtle);
-  color: var(--accent);
-  border: none;
+.settings-tabs :deep(.el-tabs__item) {
+  height: 44px;
+  line-height: 44px;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
 }
 
-.section-card {
-  margin-bottom: var(--space-6);
-  border-radius: var(--radius-md);
-}
-
-.section-card :deep(.el-card__body) {
-  padding: var(--space-5);
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-md);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
+.tab-content {
+  min-height: 400px;
 }
 
 .channel-card {
@@ -922,25 +882,6 @@ onMounted(async () => {
   flex: 1;
 }
 
-@media (max-width: 768px) {
-  .toolbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .toolbar-left h2 {
-    font-size: var(--text-lg);
-  }
-
-  .section-card {
-    margin-bottom: var(--space-4);
-  }
-
-  .card-header {
-    font-size: var(--text-base);
-  }
-}
-
 :deep(.el-form-item) {
   margin-bottom: 18px;
 }
@@ -998,5 +939,20 @@ onMounted(async () => {
   margin-top: auto;
   padding-top: 10px;
   text-align: right;
+}
+
+@media (max-width: 768px) {
+  .settings-layout {
+    flex-direction: column;
+  }
+
+  .settings-tabs :deep(.el-tabs__header) {
+    margin-right: 0;
+    margin-bottom: var(--space-4);
+  }
+
+  .settings-tabs :deep(.el-tabs__nav-wrap) {
+    overflow-x: auto;
+  }
 }
 </style>
