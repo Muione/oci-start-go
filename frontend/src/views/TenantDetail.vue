@@ -191,6 +191,12 @@
             <el-button type="danger" @click="deleteEmail">删除配置</el-button>
           </el-form-item>
         </el-form>
+        <el-divider/>
+        <div style="display:flex;gap:8px">
+          <el-button size="small" type="success" :loading="emailEnabling" @click="enableEmail">启用邮件服务（OCI + DNS）</el-button>
+          <el-button size="small" type="warning" :loading="emailDisabling" @click="disableEmail">禁用邮件服务</el-button>
+        </div>
+        <p style="color:var(--text-secondary);font-size:12px;margin-top:8px">启用：配置 OCI Email Delivery 域名 + Cloudflare DNS 记录。禁用：拆除 OCI 邮件资源 + DNS 记录。</p>
       </el-tab-pane>
 
       <!-- ======================== 社交登录 ======================== -->
@@ -264,6 +270,44 @@
             <el-button type="primary" :loading="secRuleSaving" @click="addSecRule">添加</el-button>
           </template>
         </el-dialog>
+      </el-tab-pane>
+
+      <!-- ======================== 区域 ======================== -->
+      <el-tab-pane label="区域" name="regions">
+        <!-- Summary -->
+        <el-descriptions v-if="regionSummary" :column="3" border size="small" style="margin-bottom:16px">
+          <el-descriptions-item label="总区域">{{ regionSummary.totalRegions }}</el-descriptions-item>
+          <el-descriptions-item label="已订阅">{{ regionSummary.subscribedRegions }}</el-descriptions-item>
+          <el-descriptions-item label="未订阅">{{ regionSummary.unsubscribedRegions }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-tabs v-model="regionSubTab">
+          <el-tab-pane label="已订阅" name="subscribed">
+            <el-skeleton v-if="regionsLoading" :rows="4" animated/>
+            <el-table v-else :data="subscribedRegions" border stripe size="small">
+              <template #empty><el-empty description="无已订阅区域" :image-size="40"/></template>
+              <el-table-column prop="regionKey" label="区域代码" min-width="160"/>
+              <el-table-column prop="regionName" label="区域名称" min-width="160"/>
+              <el-table-column prop="status" label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status==='READY'?'success':'warning'" size="small">{{ row.status || '—' }}</el-tag></template></el-table-column>
+              <el-table-column label="主区域" width="80" align="center"><template #default="{ row }">{{ row.isHomeRegion ? '是' : '否' }}</template></el-table-column>
+            </el-table>
+          </el-tab-pane>
+          <el-tab-pane label="可订阅" name="unsubscribed">
+            <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+              <el-button type="primary" size="small" :disabled="!selectedRegions.length" :loading="subscribing" @click="subscribeRegions">
+                <el-icon><Plus /></el-icon> 订阅选中 ({{ selectedRegions.length }})
+              </el-button>
+            </div>
+            <el-skeleton v-if="regionsLoading" :rows="4" animated/>
+            <el-table v-else :data="unsubscribedRegions" border stripe size="small" @selection-change="(rows: any[]) => { selectedRegions = rows.map(r => r.key) }">
+              <template #empty><el-empty description="无可订阅区域" :image-size="40"/></template>
+              <el-table-column type="selection" width="50"/>
+              <el-table-column prop="key" label="区域代码" min-width="160"/>
+              <el-table-column prop="name" label="区域名称" min-width="160"/>
+              <el-table-column prop="cnName" label="中文名" min-width="120"/>
+            </el-table>
+          </el-tab-pane>
+        </el-tabs>
       </el-tab-pane>
 
       <!-- ======================== 设置 ======================== -->
@@ -423,6 +467,9 @@ const pwPolicy = ref({ isPasswordExpiryEnabled: false, passwordExpiryDays: 90 })
 // email
 const emailForm = ref({ domainName: '', smtpHost: '', smtpPort: '587', smtpUsername: '', smtpPassword: '', senderEmail: '', active: false })
 const emailSaving = ref(false)
+const emailConfigId = ref<number | null>(null)
+const emailEnabling = ref(false)
+const emailDisabling = ref(false)
 
 // social
 const socialList = ref<any[]>([])
@@ -461,6 +508,15 @@ const auditLoading = ref(false)
 const auditDays = ref(1)
 const auditDateRange = ref<string[] | null>(null)
 
+// regions
+const regionSummary = ref<any>(null)
+const subscribedRegions = ref<any[]>([])
+const unsubscribedRegions = ref<any[]>([])
+const regionsLoading = ref(false)
+const subscribing = ref(false)
+const selectedRegions = ref<string[]>([])
+const regionSubTab = ref('subscribed')
+
 // --- lifecycle ---
 onMounted(async () => {
   loading.value = true
@@ -480,6 +536,7 @@ function onTabChange(tab: string | number) {
   if (t === 'secRules' && !secRulesList.value.length) loadSecRules()
   if (t === 'settings' && !Object.keys(mfaStatus.value).some(k => mfaStatus.value[k])) { loadMfaStatus(); loadNotifRecipients(); loadQuota() }
   if (t === 'overview' && !domains.value.length) loadDomains()
+  if (t === 'regions') loadRegions()
 }
 
 // --- overview actions ---
@@ -617,8 +674,9 @@ async function savePasswordPolicy() {
 async function loadEmail() {
   try {
     const cfg: any = await request.get(`/tenants/${tenantId}/email`)
+    emailConfigId.value = cfg?.id ?? null
     emailForm.value = { domainName: cfg?.domainName || '', smtpHost: cfg?.smtpHost || '', smtpPort: cfg?.smtpPort || '587', smtpUsername: cfg?.smtpUsername || '', smtpPassword: cfg?.smtpPassword || '', senderEmail: cfg?.senderEmail || '', active: cfg?.active === true || cfg?.active === 1 }
-  } catch { /* no config yet */ }
+  } catch { emailConfigId.value = null }
 }
 async function saveEmail() {
   emailSaving.value = true
@@ -627,8 +685,22 @@ async function saveEmail() {
   finally { emailSaving.value = false }
 }
 async function deleteEmail() {
-  try { await request.delete(`/tenants/${tenantId}/email`); ElMessage.success('已删除'); emailForm.value = { domainName: '', smtpHost: '', smtpPort: '587', smtpUsername: '', smtpPassword: '', senderEmail: '', active: false } }
+  try { await request.delete(`/tenants/${tenantId}/email`); ElMessage.success('已删除'); emailForm.value = { domainName: '', smtpHost: '', smtpPort: '587', smtpUsername: '', smtpPassword: '', senderEmail: '', active: false }; emailConfigId.value = null }
   catch (e: any) { ElMessage.error(e.message) }
+}
+async function enableEmail() {
+  if (!emailForm.value.domainName) { ElMessage.warning('请先填写域名'); return }
+  emailEnabling.value = true
+  try { await request.post('/api/email/enable', { tenantId, domainName: emailForm.value.domainName }); ElMessage.success('邮件服务已启用') }
+  catch (e: any) { ElMessage.error(e.message) }
+  finally { emailEnabling.value = false }
+}
+async function disableEmail() {
+  if (!emailConfigId.value) { ElMessage.warning('未找到邮件配置 ID'); return }
+  emailDisabling.value = true
+  try { await request.post('/api/email/disable', { tenantEmailConfigId: emailConfigId.value }); ElMessage.success('邮件服务已禁用') }
+  catch (e: any) { ElMessage.error(e.message) }
+  finally { emailDisabling.value = false }
 }
 
 // --- social ---
@@ -759,6 +831,36 @@ async function loadAuditCustom() {
     auditLogs.value = r?.data || []
   } catch { auditLogs.value = [] }
   finally { auditLoading.value = false }
+}
+
+// --- regions ---
+async function loadRegions() {
+  regionsLoading.value = true
+  try {
+    const [summary, sub, unsub] = await Promise.all([
+      request.get(`/tenants/${tenantId}/regions/summary`),
+      request.get(`/tenants/${tenantId}/regions/subscribed`) as Promise<any[]>,
+      request.get(`/tenants/${tenantId}/regions/unsubscribed`) as Promise<any[]>,
+    ])
+    regionSummary.value = summary
+    subscribedRegions.value = sub || []
+    unsubscribedRegions.value = unsub || []
+  } catch { regionSummary.value = null; subscribedRegions.value = []; unsubscribedRegions.value = [] }
+  finally { regionsLoading.value = false }
+}
+async function subscribeRegions() {
+  if (!selectedRegions.value.length) return
+  subscribing.value = true
+  try {
+    const r: any = await request.post(`/tenants/${tenantId}/regions/subscribe`, { regionKeys: selectedRegions.value })
+    const ok = r?.details?.filter((d: any) => d.success).length || 0
+    const fail = r?.details?.filter((d: any) => !d.success).length || 0
+    if (fail) ElMessage.warning(`订阅完成: ${ok} 成功, ${fail} 失败`)
+    else ElMessage.success(`已订阅 ${ok} 个区域`)
+    selectedRegions.value = []
+    await loadRegions()
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { subscribing.value = false }
 }
 
 // --- export / delete ---

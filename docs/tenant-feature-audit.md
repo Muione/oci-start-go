@@ -46,11 +46,11 @@
 |------|----------|---------|---------|
 | 区域列表 | `GET /tenants/regionList` | ❌（前端硬编码） | 🟡 TenantList/TenantAdd 区域选择器（硬编码列表） |
 | 区域订阅列表 | `GET /tenants/regionSubList` | ❌ | ❌ |
-| 已订阅区域数据 | `GET /tenants/subscribed-regions-data` | ✅ `GET /tenants/:id/regions/subscribed` | ❌ 前端未接 |
-| 区域摘要 | `GET /tenants/region-summary` | ✅ `GET /tenants/:id/regions/summary` | ❌ 前端未接 |
-| 未订阅区域 | `GET /tenants/unsubscribed-regions` | ✅ `GET /tenants/:id/regions/unsubscribed` | ❌ 前端未接 |
-| 订阅区域 | `POST /tenants/subscribe-regions` | ✅ `POST /tenants/:id/regions/subscribe` | ❌ 前端未接 |
-| 订阅状态检查 | `GET /tenants/check-subscription-status` | ✅ `GET /tenants/:id/regions/subscription-status` | ❌ 前端未接 |
+| 已订阅区域数据 | `GET /tenants/subscribed-regions-data` | ✅ `GET /tenants/:id/regions/subscribed` | ✅ TenantDetail 区域 |
+| 区域摘要 | `GET /tenants/region-summary` | ✅ `GET /tenants/:id/regions/summary` | ✅ TenantDetail 区域 |
+| 未订阅区域 | `GET /tenants/unsubscribed-regions` | ✅ `GET /tenants/:id/regions/unsubscribed` | ✅ TenantDetail 区域 |
+| 订阅区域 | `POST /tenants/subscribe-regions` | ✅ `POST /tenants/:id/regions/subscribe` | ✅ TenantDetail 区域 |
+| 订阅状态检查 | `GET /tenants/check-subscription-status` | ✅ `GET /tenants/:id/regions/subscription-status` | ❌ 前端未接（按需查询） |
 | 列出父租户 | `GET /tenants/listParentTenants` | ❌ | ❌ |
 | 按父租户列区域 | `GET /tenants/listRegions` | ❌ | ❌ |
 
@@ -85,8 +85,8 @@
 | 保存邮件配置 | `POST /tenants/:id/email` | ✅ `POST /tenants/:id/email` | ✅ TenantDetail 邮件 |
 | 删除邮件配置 | `DELETE /tenants/:id/email` | ✅ `DELETE /tenants/:id/email` | ✅ TenantDetail 邮件 |
 | 切换启用/禁用 | `POST /tenants/:id/email/toggle` | ✅ `POST /tenants/:id/email/toggle` | ✅ TenantDetail 邮件（switch + 保存） |
-| 启用邮件服务 | `POST /tenants/email/enable` | ✅ `POST /api/email/enable` | ❌ 前端未接（独立端点） |
-| 禁用邮件服务 | `POST /tenants/email/disable` | ✅ `POST /api/email/disable` | ❌ 前端未接（独立端点） |
+| 启用邮件服务 | `POST /tenants/email/enable` | ✅ `POST /api/email/enable` | ✅ TenantDetail 邮件 |
+| 禁用邮件服务 | `POST /tenants/email/disable` | ✅ `POST /api/email/disable` | ✅ TenantDetail 邮件 |
 | 邮件服务状态 | `GET /tenants/email/status` | ❌ | ❌ |
 | 测试邮件服务 | `POST /tenants/email/test` | ❌ | ❌ |
 
@@ -172,14 +172,13 @@
 
 ### 已实现（✅ 后端 + 前端均到位）
 
-密码策略、MFA 状态/切换/重置、通知接收人、配额、域内租户、订阅天数、审计日志、安全规则删除/批量启用、用户组、邮件切换 — 均已在 TenantDetail 对应 tab 实现。
+密码策略、MFA 状态/切换/重置、通知接收人、配额、域内租户、订阅天数、审计日志、安全规则删除/批量启用、用户组、邮件切换、区域订阅管理（摘要+已订阅+可订阅+订阅操作）、邮件服务启用/禁用 — 均已在 TenantDetail 对应 tab 实现。
 
 ### Go 后端已有但前端未接（🔲）
 
 | 功能 | API 路由 | 说明 |
 |------|----------|------|
-| 区域订阅管理（订阅/退订/摘要） | `/tenants/:id/regions/*` | 需要独立 tab 或费用 tab 子区 |
-| 启用/禁用邮件服务 | `POST /api/email/enable` `/disable` | 独立端点，与邮件配置 toggle 不同 |
+| 订阅状态检查（按区域查询） | `GET /tenants/:id/regions/subscription-status` | 按需查询，低优先级 |
 
 ### Go 后端完全缺失（❌ = 需要后端 + 前端）
 
