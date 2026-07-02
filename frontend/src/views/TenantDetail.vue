@@ -387,10 +387,28 @@
         </div>
         <el-table v-loading="quotaLoading" :data="quotaItems" border stripe size="small" max-height="300">
           <template #empty><el-empty description="暂无配额数据" :image-size="40"/></template>
-          <el-table-column prop="name" label="配额名称" min-width="280" show-overflow-tooltip/>
-          <el-table-column prop="used" label="已用" width="100" align="right"/>
-          <el-table-column prop="available" label="可用" width="100" align="right"/>
-          <el-table-column prop="total" label="总量" width="100" align="right"/>
+          <el-table-column prop="name" label="配额名称" min-width="220" show-overflow-tooltip/>
+          <el-table-column label="使用率" width="160">
+            <template #default="{ row }">
+              <el-progress
+                v-if="row.total > 0"
+                :percentage="Math.min(100, Math.round(row.used / row.total * 100))"
+                :color="quotaUsageColor(row.used, row.total)"
+                :stroke-width="12"
+                :text-inside="true"
+              />
+              <span v-else style="color: var(--text-secondary); font-size: 12px">无限制/未配置</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="已用" width="90" align="right">
+            <template #default="{ row }"><span class="data-mono">{{ row.used }}</span></template>
+          </el-table-column>
+          <el-table-column label="可用" width="90" align="right">
+            <template #default="{ row }"><span class="data-mono" :style="row.available > 0 ? '' : 'color:var(--status-down)'">{{ row.available }}</span></template>
+          </el-table-column>
+          <el-table-column label="总量" width="90" align="right">
+            <template #default="{ row }"><span class="data-mono">{{ row.total || '—' }}</span></template>
+          </el-table-column>
         </el-table>
           <el-empty v-if="!quotaServices.length && !quotaLoading" description="该租户无任何配额数据" :image-size="40"/>
 
@@ -584,7 +602,7 @@ function onTabChange(tab: string | number) {
   if (t === 'email') loadEmail()
   if (t === 'social' && !socialLoaded.value) loadSocial()
   if (t === 'secRules' && !secRulesList.value.length) loadSecRules()
-  if (t === 'settings' && !settingsLoaded.value) { loadMfaStatus(); loadNotifRecipients(); loadQuota(); loadQuotaServices(); settingsLoaded.value = true }
+  if (t === 'settings' && !settingsLoaded.value) { loadMfaStatus(); loadNotifRecipients(); loadQuotaServices().then(() => loadQuota()); settingsLoaded.value = true }
   if (t === 'overview' && !domainsLoaded.value) loadDomains()
   if (t === 'regions') loadRegions()
 }
@@ -901,6 +919,10 @@ async function deleteRecipient(email: string) {
 
 // --- quota ---
 async function loadQuota() {
+  if (!quotaServiceName.value || !quotaServices.value.find(s => s.name === quotaServiceName.value)) {
+    quotaItems.value = []
+    return
+  }
   quotaLoading.value = true; quotaError.value = ''
   try {
     const r: any = await request.get(`/tenants/${tenantId}/quota`, {
@@ -911,24 +933,19 @@ async function loadQuota() {
   finally { quotaLoading.value = false }
 }
 
+function quotaUsageColor(used: number, total: number): string {
+  if (total <= 0) return '#909399'
+  const pct = used / total * 100
+  if (pct >= 90) return '#f56c6c'   // red
+  if (pct >= 70) return '#e6a23c'   // orange
+  return '#67c23a'                   // green
+}
+
 async function loadQuotaServices() {
   quotaLoading.value = true
   try {
-    const allServices = await request.get(`/tenants/${tenantId}/quota/services`) as any[]
-    // Check each service for actual quota data (pageSize=1 for minimal cost)
-    const checks = await Promise.allSettled(
-      allServices.map(s =>
-        request.get(`/tenants/${tenantId}/quota`, {
-          params: { serviceName: s.name, pageSize: 1 }
-        })
-      )
-    )
-    // Keep only services that have quota data
-    quotaServices.value = allServices.filter((_, i) => {
-      const r = checks[i]
-      return r.status === 'fulfilled' && (r.value as any)?.items?.length > 0
-    })
-    // Auto-select first available service if current selection is gone
+    quotaServices.value = await request.get(`/tenants/${tenantId}/quota/services`) as any[]
+    // Auto-select first available service if current selection not in list
     if (quotaServices.value.length && !quotaServices.value.find(s => s.name === quotaServiceName.value)) {
       quotaServiceName.value = quotaServices.value[0].name
     }
