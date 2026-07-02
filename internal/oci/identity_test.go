@@ -3,6 +3,9 @@ package oci
 import (
 	"testing"
 	"time"
+
+	"github.com/oracle/oci-go-sdk/v65/common"
+	"github.com/oracle/oci-go-sdk/v65/identitydomains"
 )
 
 func TestGetSubscriptionDays_Calculation(t *testing.T) {
@@ -97,4 +100,44 @@ func TestDomainInfo_Fields(t *testing.T) {
 	if info.LifecycleState != "ACTIVE" {
 		t.Errorf("LifecycleState = %q, want ACTIVE", info.LifecycleState)
 	}
+}
+
+// TestPwdPolicyToDetail covers the SDK→detail mapping branches:
+// expiry set vs unset, name propagation.
+func TestPwdPolicyToDetail(t *testing.T) {
+	t.Run("expiry_enabled", func(t *testing.T) {
+		p := identitydomains.PasswordPolicy{
+			Name:                 common.String("CustomPolicy"),
+			PasswordExpiresAfter: common.Int(90),
+		}
+		d := pwdPolicyToDetail(p)
+		if d.Name != "CustomPolicy" {
+			t.Errorf("Name = %q, want CustomPolicy", d.Name)
+		}
+		if !d.IsPasswordExpiryEnabled {
+			t.Errorf("IsPasswordExpiryEnabled = false, want true")
+		}
+		if d.PasswordExpiryDays != 90 {
+			t.Errorf("PasswordExpiryDays = %d, want 90", d.PasswordExpiryDays)
+		}
+	})
+	t.Run("expiry_zero_disables", func(t *testing.T) {
+		p := identitydomains.PasswordPolicy{
+			Name:                 common.String("P"),
+			PasswordExpiresAfter: common.Int(0),
+		}
+		d := pwdPolicyToDetail(p)
+		if d.IsPasswordExpiryEnabled {
+			t.Errorf("IsPasswordExpiryEnabled = true for 0 days, want false")
+		}
+		if d.PasswordExpiryDays != 0 {
+			t.Errorf("PasswordExpiryDays = %d, want 0", d.PasswordExpiryDays)
+		}
+	})
+	t.Run("nil_fields_safe", func(t *testing.T) {
+		d := pwdPolicyToDetail(identitydomains.PasswordPolicy{})
+		if d.Name != "" || d.IsPasswordExpiryEnabled || d.PasswordExpiryDays != 0 {
+			t.Errorf("got %+v, want zero value", d)
+		}
+	})
 }

@@ -3,20 +3,15 @@
 // MFAUtils, NotificationUtils from the Java reference implementation.
 //
 // Identity Domains (SCIM) API support:
-// MFA factor settings and notification settings use the OCI Go SDK
-// identitydomains client (NewIdentityDomainsClientWithConfigurationProvider),
-// which handles IDCS token auth internally — raw OCI-signed HTTP gets 401 on
-// /admin/v1 endpoints. Password policy still calls the SCIM REST endpoints
-// directly via doIdDomainCall (see GetPasswordPolicy/UpdatePasswordPolicy).
+// MFA factor settings, notification settings, and password policy all use
+// the OCI Go SDK identitydomains client
+// (NewIdentityDomainsClientWithConfigurationProvider), which handles IDCS
+// token auth internally — raw OCI-signed HTTP gets 401 on /admin/v1 endpoints.
 package oci
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
@@ -112,49 +107,6 @@ func getIdDomainsClient(ctx context.Context, prov common.ConfigurationProvider, 
 		return identitydomains.IdentityDomainsClient{}, fmt.Errorf("create identity domains client: %w", err)
 	}
 	return client, nil
-}
-
-// httpClient is the shared HTTP client used for Identity Domains SCIM calls.
-var httpClient = &http.Client{Timeout: 60 * time.Second}
-
-// doIdDomainCall makes a signed HTTP request to an Identity Domain SCIM
-// endpoint. The domainURL should end without a trailing slash (e.g.
-// "https://idcs-xxx.identity.oraclecloud.com").
-func doIdDomainCall(ctx context.Context, prov common.ConfigurationProvider, method, domainURL, path string, body interface{}) (*http.Response, error) {
-	url := strings.TrimRight(domainURL, "/") + path
-
-	var bodyReader io.Reader
-	if body != nil {
-		bodyBytes, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("marshal request body: %w", err)
-		}
-		bodyReader = bytes.NewReader(bodyBytes)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/scim+json")
-	req.Header.Set("Accept", "application/scim+json")
-
-	// Sign the request using the OCI credentials.
-	signer := common.DefaultRequestSigner(prov)
-	if err := signer.Sign(req); err != nil {
-		return nil, fmt.Errorf("sign request: %w", err)
-	}
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("execute request: %w", err)
-	}
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return nil, fmt.Errorf("id domain API error %d %s: %s", resp.StatusCode, url, string(respBody))
-	}
-	return resp, nil
 }
 
 // ─── User operations ───────────────────────────────────────────────────────
@@ -453,82 +405,45 @@ type PasswordPolicyDetail struct {
 	PasswordExpiryDays     int    `json:"passwordExpiryDays"`
 }
 
-// idDomainPasswordPolicy represents a SCIM PasswordPolicy resource from the
-// Identity Domain list response.
-type idDomainPasswordPolicy struct {
-	ID                   string `json:"id"`
-	Name                 string `json:"name"`
-	PasswordExpiresAfter *int   `json:"passwordExpiresAfter"`
-	PasswordStrength     string `json:"passwordStrength"`
-	Schemas              []string `json:"schemas"`
-	Meta                 *struct {
-		ResourceType string `json:"resourceType"`
-	} `json:"meta"`
-}
-
-type idDomainPwdPolicyListResponse struct {
-	Schemas      []string                 `json:"schemas"`
-	TotalResults int                      `json:"totalResults"`
-	Resources    []idDomainPasswordPolicy `json:"Resources"`
-}
-
-// passwordPolicyPutBody is the PUT body for updating a password policy.
-type passwordPolicyPutBody struct {
-	Schemas              []string `json:"schemas"`
-	PasswordExpiresAfter int      `json:"passwordExpiresAfter"`
-	PasswordExpireWarning int     `json:"passwordExpireWarning"`
-	ForcePasswordReset   bool     `json:"forcePasswordReset"`
-	PasswordStrength     string   `json:"passwordStrength,omitempty"`
-	ID                   string   `json:"id,omitempty"`
-	Name                 string   `json:"name,omitempty"`
-}
-
 // GetPasswordPolicy retrieves the password expiry policy from the Identity
-// Domain SCIM API. Filters to policies with passwordStrength=Custom (the
-// Java reference skips non-Custom policies).
+// Domain. Filters to policies with passwordStrength=Custom (the Java reference
+// skips non-Custom policies).
 func GetPasswordPolicy(ctx context.Context, prov common.ConfigurationProvider, tenancyOCID string) (*PasswordPolicyDetail, error) {
-	domainURL, err := getDomainURL(ctx, prov, tenancyOCID)
+	client, err := getIdDomainsClient(ctx, prov, tenancyOCID)
 	if err != nil {
-		return nil, fmt.Errorf("get domain URL: %w", err)
+		return nil, err
 	}
-
-	resp, err := doIdDomainCall(ctx, prov, "GET", domainURL, "/admin/v1/PasswordPolicies", nil)
+	resp, err := client.ListPasswordPolicies(ctx, identitydomains.ListPasswordPoliciesRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("list password policies: %w", err)
 	}
-	defer resp.Body.Close()
-
-	var listResp idDomainPwdPolicyListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
-		return nil, fmt.Errorf("decode password policies: %w", err)
-	}
+	resources := resp.PasswordPolicies.Resources
 
 	// Find the first Custom-strength policy (Java: filter by PasswordStrength.Custom)
-	for _, p := range listResp.Resources {
-		if p.PasswordStrength == "Custom" {
-			detail := &PasswordPolicyDetail{Name: p.Name}
-			if p.PasswordExpiresAfter != nil && *p.PasswordExpiresAfter > 0 {
-				detail.IsPasswordExpiryEnabled = true
-				detail.PasswordExpiryDays = *p.PasswordExpiresAfter
-			}
-			return detail, nil
+	for _, p := range resources {
+		if p.PasswordStrength == identitydomains.PasswordPolicyPasswordStrengthCustom {
+			return pwdPolicyToDetail(p), nil
 		}
 	}
 	// Fallback: use the first policy if no Custom one found
-	for _, p := range listResp.Resources {
-		detail := &PasswordPolicyDetail{Name: p.Name}
-		if p.PasswordExpiresAfter != nil && *p.PasswordExpiresAfter > 0 {
-			detail.IsPasswordExpiryEnabled = true
-			detail.PasswordExpiryDays = *p.PasswordExpiresAfter
-		}
-		return detail, nil
+	for _, p := range resources {
+		return pwdPolicyToDetail(p), nil
 	}
-
 	// No policies found — return defaults
-	return &PasswordPolicyDetail{
-		IsPasswordExpiryEnabled: false,
-		PasswordExpiryDays:      0,
-	}, nil
+	return &PasswordPolicyDetail{IsPasswordExpiryEnabled: false, PasswordExpiryDays: 0}, nil
+}
+
+// pwdPolicyToDetail maps an SDK PasswordPolicy to PasswordPolicyDetail.
+func pwdPolicyToDetail(p identitydomains.PasswordPolicy) *PasswordPolicyDetail {
+	detail := &PasswordPolicyDetail{}
+	if p.Name != nil {
+		detail.Name = *p.Name
+	}
+	if p.PasswordExpiresAfter != nil && *p.PasswordExpiresAfter > 0 {
+		detail.IsPasswordExpiryEnabled = true
+		detail.PasswordExpiryDays = *p.PasswordExpiresAfter
+	}
+	return detail
 }
 
 // UpdatePasswordPolicy enables or disables password expiry by updating the
@@ -539,38 +454,35 @@ func UpdatePasswordPolicy(ctx context.Context, prov common.ConfigurationProvider
 		return fmt.Errorf("expiry days must be between 0 and 365, got %d", expiryDays)
 	}
 
-	domainURL, err := getDomainURL(ctx, prov, tenancyOCID)
+	client, err := getIdDomainsClient(ctx, prov, tenancyOCID)
 	if err != nil {
-		return fmt.Errorf("get domain URL: %w", err)
+		return err
 	}
 
 	// 1. List password policies to find a Custom one to update
-	resp, err := doIdDomainCall(ctx, prov, "GET", domainURL, "/admin/v1/PasswordPolicies", nil)
+	listResp, err := client.ListPasswordPolicies(ctx, identitydomains.ListPasswordPoliciesRequest{})
 	if err != nil {
 		return fmt.Errorf("list password policies: %w", err)
 	}
-	defer resp.Body.Close()
-
-	var listResp idDomainPwdPolicyListResponse
-	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
-		return fmt.Errorf("decode password policies: %w", err)
-	}
-
-	if len(listResp.Resources) == 0 {
+	resources := listResp.PasswordPolicies.Resources
+	if len(resources) == 0 {
 		return fmt.Errorf("no password policies found in identity domain")
 	}
 
 	// Find Custom policy (Java: filter by PasswordStrength.Custom)
-	var targetPolicy *idDomainPasswordPolicy
-	for i, p := range listResp.Resources {
-		if p.PasswordStrength == "Custom" {
-			targetPolicy = &listResp.Resources[i]
+	var target *identitydomains.PasswordPolicy
+	for i := range resources {
+		if resources[i].PasswordStrength == identitydomains.PasswordPolicyPasswordStrengthCustom {
+			target = &resources[i]
 			break
 		}
 	}
-	if targetPolicy == nil {
+	if target == nil {
 		// Use the first one as fallback
-		targetPolicy = &listResp.Resources[0]
+		target = &resources[0]
+	}
+	if target.Id == nil {
+		return fmt.Errorf("target password policy has no ID")
 	}
 
 	// 2. Determine expiry settings
@@ -583,20 +495,20 @@ func UpdatePasswordPolicy(ctx context.Context, prov common.ConfigurationProvider
 		}
 	}
 
-	// 3. PUT updated policy
-	putBody := passwordPolicyPutBody{
-		Schemas:              []string{"urn:ietf:params:scim:schemas:oracle:idcs:PasswordPolicy"},
-		PasswordExpiresAfter: newExpiry,
-		PasswordExpireWarning: 7,  // 7-day warning before expiry
-		ForcePasswordReset:   false,
-	}
+	// 3. Copy the policy, modify expiry fields, PUT full object.
+	// Schemas/Name/etc. are preserved from the GET response.
+	updated := *target
+	updated.PasswordExpiresAfter = common.Int(newExpiry)
+	updated.PasswordExpireWarning = common.Int(7) // 7-day warning before expiry
+	updated.ForcePasswordReset = common.Bool(false)
 
-	putResp, err := doIdDomainCall(ctx, prov, "PUT", domainURL,
-		"/admin/v1/PasswordPolicies/"+targetPolicy.ID, putBody)
+	_, err = client.PutPasswordPolicy(ctx, identitydomains.PutPasswordPolicyRequest{
+		PasswordPolicyId: target.Id,
+		PasswordPolicy:   updated,
+	})
 	if err != nil {
 		return fmt.Errorf("update password policy: %w", err)
 	}
-	putResp.Body.Close()
 	return nil
 }
 
