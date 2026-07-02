@@ -66,7 +66,7 @@
           <template #empty><el-empty description="该租户下暂无实例" :image-size="60"/></template>
           <el-table-column prop="displayName" label="名称" min-width="160">
             <template #default="{ row }">
-              <el-link type="primary" @click="router.push(`/instances/${row.id}`)">{{ row.displayName }}</el-link>
+              <el-link type="primary" @click="router.push({ path: '/instances', query: { instanceId: row.instanceId } })">{{ row.displayName }}</el-link>
             </template>
           </el-table-column>
           <el-table-column prop="instanceId" label="实例 ID" min-width="200" show-overflow-tooltip/>
@@ -338,6 +338,10 @@
         </el-descriptions>
 
         <!-- MFA -->
+        <el-alert v-if="mfaError" type="warning" :closable="false" show-icon style="margin-bottom:8px">
+          <template #title>MFA 状态加载失败: {{ mfaError }}</template>
+          <template #default><el-button size="small" text type="primary" @click="loadMfaStatus">重试</el-button></template>
+        </el-alert>
         <h4 style="margin:16px 0 8px">MFA 多因素认证</h4>
         <el-descriptions :column="2" border size="small" style="margin-bottom:12px">
           <el-descriptions-item label="TOTP"><el-tag :type="mfaStatus.totpEnabled?'success':'info'" size="small">{{ mfaStatus.totpEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
@@ -352,6 +356,10 @@
         </div>
 
         <!-- Notification recipients -->
+        <el-alert v-if="notifError" type="warning" :closable="false" show-icon style="margin-bottom:8px">
+          <template #title>通知接收人加载失败: {{ notifError }}</template>
+          <template #default><el-button size="small" text type="primary" @click="loadNotifRecipients">重试</el-button></template>
+        </el-alert>
         <h4 style="margin:16px 0 8px">通知接收人</h4>
         <el-table :data="notifRecipients" border size="small" style="margin-bottom:8px" max-height="200">
           <template #empty><el-empty description="暂无通知接收人" :image-size="40"/></template>
@@ -362,6 +370,10 @@
         <el-button size="small" type="primary" @click="updateNotifRecipients" :loading="notifSaving">更新接收人</el-button>
 
         <!-- Quota -->
+        <el-alert v-if="quotaError" type="warning" :closable="false" show-icon style="margin-bottom:8px">
+          <template #title>配额加载失败: {{ quotaError }}</template>
+          <template #default><el-button size="small" text type="primary" @click="loadQuota">重试</el-button></template>
+        </el-alert>
         <h4 style="margin:16px 0 8px">配额</h4>
         <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center">
           <el-select v-model="quotaServiceName" size="small" style="width:200px" @change="loadQuota">
@@ -375,8 +387,13 @@
           <el-table-column prop="available" label="可用" width="100" align="right"/>
           <el-table-column prop="total" label="总量" width="100" align="right"/>
         </el-table>
+          <el-empty v-if="!quotaServices.length && !quotaLoading" description="该租户无任何配额数据" :image-size="40"/>
 
         <!-- Audit log -->
+        <el-alert v-if="auditError" type="warning" :closable="false" show-icon style="margin-bottom:8px">
+          <template #title>审计日志加载失败: {{ auditError }}</template>
+          <template #default><el-button size="small" text type="primary" @click="loadAudit(auditDays || 1)">重试</el-button></template>
+        </el-alert>
         <h4 style="margin:16px 0 8px">审计日志</h4>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
           <el-button size="small" :type="auditDays===1?'primary':''" @click="loadAudit(1)">今日</el-button>
@@ -417,7 +434,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -465,7 +482,7 @@ const costQueryType = ref('current_month')
 const costDateRange = ref<string[] | null>(null)
 const costLoading = ref(false)
 const costData = ref<any[]>([])
-const costTotal = ref(0)
+const costTotal = computed(() => costData.value.reduce((s, i) => s + (Number(i.computedAmount) || 0), 0))
 
 // users
 const userLoading = ref(false)
@@ -533,6 +550,18 @@ const subscribing = ref(false)
 const selectedRegions = ref<string[]>([])
 const regionSubTab = ref('subscribed')
 
+const instLoaded = ref(false)
+const userLoaded = ref(false)
+const socialLoaded = ref(false)
+const costLoaded = ref(false)
+const domainsLoaded = ref(false)
+const settingsLoaded = ref(false)
+
+const mfaError = ref('')
+const notifError = ref('')
+const auditError = ref('')
+const quotaError = ref('')
+
 // --- lifecycle ---
 onMounted(async () => {
   loading.value = true
@@ -544,14 +573,14 @@ onMounted(async () => {
 
 function onTabChange(tab: string | number) {
   const t = String(tab)
-  if (t === 'instances' && !instances.value.length) loadInstances()
-  if (t === 'costs' && !subscriptionData.value && !costData.value.length) { loadSubscription(); loadCost(); loadSubscriptionDays() }
-  if (t === 'users' && !userList.value.length) { loadUsers(); loadGroups(); loadPasswordPolicy() }
+  if (t === 'instances' && !instLoaded.value) loadInstances()
+  if (t === 'costs' && !costLoaded.value) { loadSubscription().then(() => { loadCost(); loadSubscriptionDays() }) }
+  if (t === 'users' && !userLoaded.value) { loadUsers(); loadGroups(); loadPasswordPolicy() }
   if (t === 'email') loadEmail()
-  if (t === 'social' && !socialList.value.length) loadSocial()
+  if (t === 'social' && !socialLoaded.value) loadSocial()
   if (t === 'secRules' && !secRulesList.value.length) loadSecRules()
-  if (t === 'settings' && !Object.keys(mfaStatus.value).some(k => mfaStatus.value[k])) { loadMfaStatus(); loadNotifRecipients(); loadQuota(); loadQuotaServices() }
-  if (t === 'overview' && !domains.value.length) loadDomains()
+  if (t === 'settings' && !settingsLoaded.value) { loadMfaStatus(); loadNotifRecipients(); loadQuota(); loadQuotaServices(); settingsLoaded.value = true }
+  if (t === 'overview' && !domainsLoaded.value) loadDomains()
   if (t === 'regions') loadRegions()
 }
 
@@ -604,7 +633,7 @@ async function loadDomains() {
   domainsLoading.value = true
   try { domains.value = await request.get(`/tenants/${tenantId}/domains`) as any[] }
   catch { domains.value = [] }
-  finally { domainsLoading.value = false }
+  finally { domainsLoading.value = false; domainsLoaded.value = true }
 }
 
 // --- instances ---
@@ -612,7 +641,7 @@ async function loadInstances() {
   instLoading.value = true
   try { instances.value = await request.get(`/tenants/${tenantId}/instances`) as any[] }
   catch (e: any) { ElMessage.error(e.message) }
-  finally { instLoading.value = false }
+  finally { instLoading.value = false; instLoaded.value = true }
 }
 
 // --- costs ---
@@ -621,18 +650,37 @@ async function loadSubscription() {
   catch { subscriptionData.value = null }
 }
 async function loadSubscriptionDays() {
-  try { const r: any = await request.get(`/tenants/${tenantId}/subscription-days`); subscriptionDays.value = r?.activeDays ?? r?.days ?? r?.subscriptionDays ?? '—' }
-  catch { subscriptionDays.value = '—' }
+  try {
+    // Prefer subscription timeStart (most accurate)
+    if (subscriptionData.value?.timeStart) {
+      const start = new Date(subscriptionData.value.timeStart)
+      const days = Math.ceil((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24))
+      subscriptionDays.value = String(days > 0 ? days : 0)
+      return
+    }
+    // Fallback: OCI API
+    const r: any = await request.get(`/tenants/${tenantId}/subscription-days`)
+    subscriptionDays.value = r?.activeDays ?? '—'
+  } catch {
+    // Final fallback: tenant createdAt
+    if (tenant.value.createdAt) {
+      const start = new Date(tenant.value.createdAt)
+      const days = Math.ceil((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24))
+      subscriptionDays.value = String(days > 0 ? days : 0)
+    } else {
+      subscriptionDays.value = '—'
+    }
+  }
 }
 async function loadCost(type?: string, start?: string, end?: string) {
-  const qType = type || costQueryType.value; costQueryType.value = qType; costLoading.value = true; costData.value = []; costTotal.value = 0
+  const qType = type || costQueryType.value; costQueryType.value = qType; costLoading.value = true; costData.value = []
   try {
     const params: any = { type: qType }
     if (qType === 'custom' && start && end) { params.start = start; params.end = end }
     const resp = await request.get(`/tenants/${tenantId}/cost`, { params }) as any[]
-    costData.value = resp || []; costTotal.value = (resp || []).reduce((s, i) => s + (Number(i.computedAmount) || 0), 0)
+    costData.value = resp || []
   } catch (e: any) { ElMessage.error('费用查询失败: ' + (e?.message || e)) }
-  finally { costLoading.value = false }
+  finally { costLoading.value = false; costLoaded.value = true }
 }
 function loadCostCustomRange() {
   if (!costDateRange.value || costDateRange.value.length !== 2) { ElMessage.warning('请选择日期范围'); return }
@@ -644,7 +692,7 @@ async function loadUsers() {
   userLoading.value = true
   try { userList.value = await request.get(`/tenants/${tenantId}/users`) as any[] }
   catch { userList.value = [] }
-  finally { userLoading.value = false }
+  finally { userLoading.value = false; userLoaded.value = true }
 }
 async function createUser() {
   if (!addUserForm.value.username || !addUserForm.value.email) {
@@ -732,7 +780,7 @@ async function loadSocial() {
   socialLoading.value = true
   try { socialList.value = await request.get(`/tenants/${tenantId}/social`) as any[] }
   catch { socialList.value = [] }
-  finally { socialLoading.value = false }
+  finally { socialLoading.value = false; socialLoaded.value = true }
 }
 function openAddSocial() { socialEditId.value = ''; socialForm.value = { socialType: 'GITHUB', clientId: '', clientSecret: '', redirectUrl: '', loginUrl: '' }; socialEditVisible.value = true }
 function editSocial(row: any) { socialEditId.value = row.id; socialForm.value = { socialType: row.socialTypeStr || 'GITHUB', clientId: row.clientId || '', clientSecret: '', redirectUrl: row.redirectUrl || '', loginUrl: row.loginUrl || '' }; socialEditVisible.value = true }
@@ -792,8 +840,9 @@ async function batchEnableSecRules() {
 
 // --- MFA ---
 async function loadMfaStatus() {
+  mfaError.value = ''
   try { mfaStatus.value = await request.get(`/tenants/${tenantId}/mfa/status`) }
-  catch { /* */ }
+  catch (e: any) { mfaError.value = e.message || '加载失败' }
 }
 async function toggleMfa(enable: boolean) {
   mfaToggling.value = true
@@ -817,8 +866,9 @@ async function resetMfa() {
 
 // --- notification recipients ---
 async function loadNotifRecipients() {
+  notifError.value = ''
   try { notifRecipients.value = await request.get(`/tenants/${tenantId}/notification-recipients`) as any[] }
-  catch { notifRecipients.value = [] }
+  catch (e: any) { notifError.value = e.message || '加载失败'; notifRecipients.value = [] }
 }
 async function updateNotifRecipients() {
   const emails = notifEmailInput.value.split(',').map(e => e.trim()).filter(Boolean)
@@ -833,38 +883,57 @@ async function updateNotifRecipients() {
 
 // --- quota ---
 async function loadQuota() {
-  quotaLoading.value = true
+  quotaLoading.value = true; quotaError.value = ''
   try {
     const r: any = await request.get(`/tenants/${tenantId}/quota`, {
       params: { serviceName: quotaServiceName.value, pageSize: 100 }
     })
     quotaItems.value = r?.items || []
-  } catch { quotaItems.value = [] }
+  } catch (e: any) { quotaError.value = e.message || '加载失败'; quotaItems.value = [] }
   finally { quotaLoading.value = false }
 }
 
 async function loadQuotaServices() {
+  quotaLoading.value = true
   try {
-    quotaServices.value = await request.get(`/tenants/${tenantId}/quota/services`) as any[]
+    const allServices = await request.get(`/tenants/${tenantId}/quota/services`) as any[]
+    // Check each service for actual quota data (pageSize=1 for minimal cost)
+    const checks = await Promise.allSettled(
+      allServices.map(s =>
+        request.get(`/tenants/${tenantId}/quota`, {
+          params: { serviceName: s.name, pageSize: 1 }
+        })
+      )
+    )
+    // Keep only services that have quota data
+    quotaServices.value = allServices.filter((_, i) => {
+      const r = checks[i]
+      return r.status === 'fulfilled' && (r.value as any)?.items?.length > 0
+    })
+    // Auto-select first available service if current selection is gone
+    if (quotaServices.value.length && !quotaServices.value.find(s => s.name === quotaServiceName.value)) {
+      quotaServiceName.value = quotaServices.value[0].name
+    }
   } catch { quotaServices.value = [] }
+  finally { quotaLoading.value = false }
 }
 
 // --- audit log ---
 async function loadAudit(days: number) {
-  auditDays.value = days; auditDateRange.value = null; auditLoading.value = true
+  auditDays.value = days; auditDateRange.value = null; auditLoading.value = true; auditError.value = ''
   try {
     const r: any = await request.post(`/tenants/${tenantId}/audit-log`, { days })
     auditLogs.value = r?.data || []
-  } catch { auditLogs.value = [] }
+  } catch (e: any) { auditError.value = e.message || '加载失败'; auditLogs.value = [] }
   finally { auditLoading.value = false }
 }
 async function loadAuditCustom() {
   if (!auditDateRange.value || auditDateRange.value.length !== 2) { ElMessage.warning('请选择日期范围'); return }
-  auditDays.value = 0; auditLoading.value = true
+  auditDays.value = 0; auditLoading.value = true; auditError.value = ''
   try {
     const r: any = await request.post(`/tenants/${tenantId}/audit-log`, { startDate: auditDateRange.value[0], endDate: auditDateRange.value[1] })
     auditLogs.value = r?.data || []
-  } catch { auditLogs.value = [] }
+  } catch (e: any) { auditError.value = e.message || '加载失败'; auditLogs.value = [] }
   finally { auditLoading.value = false }
 }
 
