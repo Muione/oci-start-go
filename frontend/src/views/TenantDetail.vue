@@ -47,6 +47,15 @@
             <el-descriptions-item label="API 同步"><el-tag :type="tenant.apiSynced ? 'success' : 'info'" size="small">{{ tenant.apiSynced ? '已同步' : '未同步' }}</el-tag></el-descriptions-item>
             <el-descriptions-item label="父租户 ID">{{ tenant.parenId || '无 (主租户)' }}</el-descriptions-item>
           </el-descriptions>
+          <!-- Domain tenants -->
+          <h4 style="margin:16px 0 8px">域内其他租户</h4>
+          <el-table v-loading="domainsLoading" :data="domains" border stripe size="small" max-height="240">
+            <template #empty><el-empty description="该域下无其他租户" :image-size="40"/></template>
+            <el-table-column prop="userName" label="用户名" min-width="120"/>
+            <el-table-column prop="tenancyDes" label="自定义名称" min-width="120"/>
+            <el-table-column prop="region" label="区域" width="120"/>
+            <el-table-column label="状态" width="80" align="center"><template #default="{ row }"><span class="status-dot" :class="row.isActive ? 'status-dot--up' : 'status-dot--down'"/>{{ row.isActive ? '正常' : '停用' }}</template></el-table-column>
+          </el-table>
         </template>
       </el-tab-pane>
 
@@ -58,9 +67,7 @@
           <el-table-column prop="displayName" label="名称" min-width="160"/>
           <el-table-column prop="instanceId" label="实例 ID" min-width="200" show-overflow-tooltip/>
           <el-table-column prop="shape" label="Shape" min-width="140"/>
-          <el-table-column label="状态" width="100">
-            <template #default="{ row }"><div class="state-cell"><span class="status-dot" :class="instStateDot(row.state)"/>{{ row.state || '—' }}</div></template>
-          </el-table-column>
+          <el-table-column label="状态" width="100"><template #default="{ row }"><div class="state-cell"><span class="status-dot" :class="instStateDot(row.state)"/>{{ row.state || '—' }}</div></template></el-table-column>
           <el-table-column prop="publicIps" label="公网 IP" width="140"/>
           <el-table-column prop="architecture" label="架构" width="80"/>
           <el-table-column label="规格" width="120"><template #default="{ row }">{{ row.ocpus || 0 }}C / {{ row.memoryInGbs || 0 }}G</template></el-table-column>
@@ -71,6 +78,11 @@
 
       <!-- ======================== 费用 ======================== -->
       <el-tab-pane label="费用" name="costs">
+        <!-- Subscription days -->
+        <el-descriptions :column="3" border size="small" style="margin-bottom:16px">
+          <el-descriptions-item label="订阅天数"><span class="days-chip">{{ subscriptionDays || '—' }}</span></el-descriptions-item>
+        </el-descriptions>
+        <!-- Subscription info -->
         <div v-if="subscriptionData" style="margin-bottom:16px">
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item label="计划类型">
@@ -85,6 +97,7 @@
             <el-descriptions-item label="邮箱">{{ subscriptionData.emailAddress || '—' }}</el-descriptions-item>
           </el-descriptions>
         </div>
+        <!-- Cost query -->
         <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <el-button size="small" :type="costQueryType==='today'?'primary':''" @click="loadCost('today')">今日</el-button>
           <el-button size="small" :type="costQueryType==='yesterday'?'primary':''" @click="loadCost('yesterday')">昨日</el-button>
@@ -111,7 +124,9 @@
 
       <!-- ======================== 用户 ======================== -->
       <el-tab-pane label="用户" name="users">
-        <div style="margin-bottom:12px"><el-button type="primary" size="small" @click="addUserFormVisible=true"><el-icon><Plus /></el-icon> 创建用户</el-button></div>
+        <div style="margin-bottom:12px;display:flex;gap:8px">
+          <el-button type="primary" size="small" @click="addUserFormVisible=true"><el-icon><Plus /></el-icon> 创建用户</el-button>
+        </div>
         <el-skeleton v-if="userLoading" :rows="4" animated/>
         <el-table v-else :data="userList" border stripe size="small">
           <template #empty><el-empty description="暂无 IAM 用户" :image-size="60"/></template>
@@ -121,11 +136,29 @@
           <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip/>
           <el-table-column label="操作" width="180" align="center">
             <template #default="{ row }">
-              <el-button size="small" @click="resetUserPassword(row)" :loading="row._resetting">重置密码</el-button>
+              <el-button size="small" @click="resetUserPassword(row)">重置密码</el-button>
               <el-button size="small" type="danger" @click="deleteUser(row)"><el-icon><Delete /></el-icon></el-button>
             </template>
           </el-table-column>
         </el-table>
+        <!-- User groups -->
+        <h4 style="margin:16px 0 8px">用户组</h4>
+        <el-table v-loading="groupsLoading" :data="groups" border stripe size="small" max-height="200">
+          <template #empty><el-empty description="暂无用户组" :image-size="40"/></template>
+          <el-table-column prop="name" label="组名" min-width="200"/>
+          <el-table-column prop="ocid" label="OCID" min-width="300" show-overflow-tooltip/>
+        </el-table>
+        <!-- Password policy -->
+        <h4 style="margin:16px 0 8px">密码策略</h4>
+        <el-form :inline="true" size="small" style="margin-bottom:12px">
+          <el-form-item label="密码过期">
+            <el-switch v-model="pwPolicy.isPasswordExpiryEnabled" @change="savePasswordPolicy"/>
+          </el-form-item>
+          <el-form-item label="过期天数" v-if="pwPolicy.isPasswordExpiryEnabled">
+            <el-input-number v-model="pwPolicy.passwordExpiryDays" :min="1" :max="365" @change="savePasswordPolicy"/>
+          </el-form-item>
+        </el-form>
+        <!-- Add user dialog -->
         <el-dialog v-model="addUserFormVisible" title="创建 IAM 用户" width="460px" append-to-body destroy-on-close>
           <el-form :model="addUserForm" label-width="80px">
             <el-form-item label="用户名" required><el-input v-model="addUserForm.name" placeholder="用户名"/></el-form-item>
@@ -201,7 +234,10 @@
           <el-tab-pane label="入站规则" name="ingress"/>
           <el-tab-pane label="出站规则" name="egress"/>
         </el-tabs>
-        <div style="margin-bottom:12px"><el-button type="primary" size="small" @click="secRuleAddVisible=true"><el-icon><Plus /></el-icon> 添加规则</el-button></div>
+        <div style="margin-bottom:12px;display:flex;gap:8px">
+          <el-button type="primary" size="small" @click="secRuleAddVisible=true"><el-icon><Plus /></el-icon> 添加规则</el-button>
+          <el-button size="small" @click="batchEnableSecRules"><el-icon><Connection /></el-icon> 批量启用全部</el-button>
+        </div>
         <el-skeleton v-if="secRulesLoading" :rows="4" animated/>
         <el-table v-else :data="secRulesList" border stripe size="small">
           <template #empty><el-empty description="暂无安全规则" :image-size="60"/></template>
@@ -209,6 +245,11 @@
           <el-table-column label="端口范围" width="120"><template #default="{ row }">{{ row.tcpOptions?.destinationPortRange?.min || row.udpOptions?.destinationPortRange?.min || '全部' }}{{ row.tcpOptions?.destinationPortRange?.min !== row.tcpOptions?.destinationPortRange?.max ? '-' + (row.tcpOptions?.destinationPortRange?.max || '') : '' }}</template></el-table-column>
           <el-table-column prop="source" label="源地址" min-width="160" show-overflow-tooltip/>
           <el-table-column prop="description" label="描述" min-width="160" show-overflow-tooltip/>
+          <el-table-column label="操作" width="80" align="center">
+            <template #default="{ row }">
+              <el-button size="small" type="danger" @click="deleteSecRule(row)"><el-icon><Delete /></el-icon></el-button>
+            </template>
+          </el-table-column>
         </el-table>
         <el-dialog v-model="secRuleAddVisible" title="添加安全规则" width="460px" append-to-body destroy-on-close>
           <el-form :model="secRuleForm" label-width="80px">
@@ -227,6 +268,7 @@
 
       <!-- ======================== 设置 ======================== -->
       <el-tab-pane label="设置" name="settings">
+        <!-- Update + Export + Delete -->
         <el-descriptions :column="1" border size="small" style="margin-bottom:16px">
           <el-descriptions-item label="从 OCI 获取信息">
             <el-button size="small" @click="doUpdateDetail" :loading="updateSaving"><el-icon><Refresh /></el-icon> 从 OCI 获取</el-button>
@@ -241,6 +283,59 @@
             <span style="color:var(--text-secondary);font-size:12px;margin-left:8px">不可恢复，将删除所有实例记录</span>
           </el-descriptions-item>
         </el-descriptions>
+
+        <!-- MFA -->
+        <h4 style="margin:16px 0 8px">MFA 多因素认证</h4>
+        <el-descriptions :column="2" border size="small" style="margin-bottom:12px">
+          <el-descriptions-item label="TOTP"><el-tag :type="mfaStatus.totpEnabled?'success':'info'" size="small">{{ mfaStatus.totpEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
+          <el-descriptions-item label="邮箱"><el-tag :type="mfaStatus.emailEnabled?'success':'info'" size="small">{{ mfaStatus.emailEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
+          <el-descriptions-item label="短信"><el-tag :type="mfaStatus.smsEnabled?'success':'info'" size="small">{{ mfaStatus.smsEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
+          <el-descriptions-item label="安全问题"><el-tag :type="mfaStatus.securityQuestionsEnabled?'success':'info'" size="small">{{ mfaStatus.securityQuestionsEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
+        </el-descriptions>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <el-button size="small" type="primary" @click="toggleMfa(true)" :loading="mfaToggling">启用邮箱 MFA</el-button>
+          <el-button size="small" @click="toggleMfa(false)" :loading="mfaToggling">禁用邮箱 MFA</el-button>
+          <el-button size="small" type="warning" @click="resetMfa" :loading="mfaResetting">重置 MFA 设备</el-button>
+        </div>
+
+        <!-- Notification recipients -->
+        <h4 style="margin:16px 0 8px">通知接收人</h4>
+        <el-table :data="notifRecipients" border size="small" style="margin-bottom:8px" max-height="200">
+          <template #empty><el-empty description="暂无通知接收人" :image-size="40"/></template>
+          <el-table-column prop="email" label="邮箱" min-width="200"/>
+          <el-table-column prop="state" label="状态" width="100"><template #default="{ row }"><el-tag :type="row.state==='VERIFIED'?'success':'warning'" size="small">{{ row.state || '—' }}</el-tag></template></el-table-column>
+        </el-table>
+        <el-input v-model="notifEmailInput" placeholder="输入邮箱地址，多个用逗号分隔" size="small" style="max-width:400px;margin-right:8px"/>
+        <el-button size="small" type="primary" @click="updateNotifRecipients" :loading="notifSaving">更新接收人</el-button>
+
+        <!-- Quota -->
+        <h4 style="margin:16px 0 8px">配额</h4>
+        <el-table v-loading="quotaLoading" :data="quotaItems" border stripe size="small" max-height="300">
+          <template #empty><el-empty description="暂无配额数据" :image-size="40"/></template>
+          <el-table-column prop="name" label="配额名称" min-width="280" show-overflow-tooltip/>
+          <el-table-column prop="used" label="已用" width="100" align="right"/>
+          <el-table-column prop="available" label="可用" width="100" align="right"/>
+          <el-table-column prop="total" label="总量" width="100" align="right"/>
+        </el-table>
+
+        <!-- Audit log -->
+        <h4 style="margin:16px 0 8px">审计日志</h4>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+          <el-button size="small" :type="auditDays===1?'primary':''" @click="loadAudit(1)">今日</el-button>
+          <el-button size="small" :type="auditDays===7?'primary':''" @click="loadAudit(7)">7 天</el-button>
+          <el-button size="small" :type="auditDays===30?'primary':''" @click="loadAudit(30)">30 天</el-button>
+          <el-date-picker v-model="auditDateRange" type="daterange" range-separator="至" start-placeholder="开始" end-placeholder="结束" format="YYYY-MM-DD" value-format="YYYY-MM-DD" size="small" style="width:280px"/>
+          <el-button size="small" type="primary" @click="loadAuditCustom" :loading="auditLoading"><el-icon><Search /></el-icon> 查询</el-button>
+        </div>
+        <el-table v-loading="auditLoading" :data="auditLogs" border stripe size="small" max-height="400" show-overflow-tooltip>
+          <template #empty><el-empty description="暂无审计日志" :image-size="40"/></template>
+          <el-table-column prop="eventTime" label="时间" width="170"/>
+          <el-table-column prop="eventType" label="事件" min-width="200"/>
+          <el-table-column prop="userName" label="用户" width="140"/>
+          <el-table-column prop="userType" label="类型" width="80"/>
+          <el-table-column prop="ipAddress" label="IP" width="130"/>
+          <el-table-column prop="responseStatus" label="状态" width="80"/>
+        </el-table>
       </el-tab-pane>
     </el-tabs>
 
@@ -287,12 +382,15 @@ const syncing = ref(false)
 const checking = ref(false)
 const checkResult = ref<any>(null)
 
-// overview: edit name / cost
+// overview: edit name / cost / domains
 const editNameVisible = ref(false)
 const editNameValue = ref('')
 const editCostVisible = ref(false)
 const editCostValue = ref('')
 const editSaving = ref(false)
+const domains = ref<any[]>([])
+const domainsLoading = ref(false)
+const subscriptionDays = ref('')
 
 // update from OCI
 const updateSaving = ref(false)
@@ -318,6 +416,9 @@ const addUserFormVisible = ref(false)
 const addUserSaving = ref(false)
 const addUserForm = ref({ name: '', description: '' })
 const createdUserPwd = ref('')
+const groups = ref<any[]>([])
+const groupsLoading = ref(false)
+const pwPolicy = ref({ isPasswordExpiryEnabled: false, passwordExpiryDays: 90 })
 
 // email
 const emailForm = ref({ domainName: '', smtpHost: '', smtpPort: '587', smtpUsername: '', smtpPassword: '', senderEmail: '', active: false })
@@ -340,6 +441,26 @@ const secRuleAddVisible = ref(false)
 const secRuleSaving = ref(false)
 const secRuleForm = ref({ protocol: '6', source: '0.0.0.0/0', min: 22, max: 22, description: '' })
 
+// MFA
+const mfaStatus = ref<any>({ totpEnabled: false, emailEnabled: false, smsEnabled: false, securityQuestionsEnabled: false })
+const mfaToggling = ref(false)
+const mfaResetting = ref(false)
+
+// notification recipients
+const notifRecipients = ref<any[]>([])
+const notifEmailInput = ref('')
+const notifSaving = ref(false)
+
+// quota
+const quotaItems = ref<any[]>([])
+const quotaLoading = ref(false)
+
+// audit log
+const auditLogs = ref<any[]>([])
+const auditLoading = ref(false)
+const auditDays = ref(1)
+const auditDateRange = ref<string[] | null>(null)
+
 // --- lifecycle ---
 onMounted(async () => {
   loading.value = true
@@ -352,11 +473,13 @@ onMounted(async () => {
 function onTabChange(tab: string | number) {
   const t = String(tab)
   if (t === 'instances' && !instances.value.length) loadInstances()
-  if (t === 'costs' && !subscriptionData.value && !costData.value.length) { loadSubscription(); loadCost() }
-  if (t === 'users' && !userList.value.length) loadUsers()
+  if (t === 'costs' && !subscriptionData.value && !costData.value.length) { loadSubscription(); loadCost(); loadSubscriptionDays() }
+  if (t === 'users' && !userList.value.length) { loadUsers(); loadGroups(); loadPasswordPolicy() }
   if (t === 'email') loadEmail()
   if (t === 'social' && !socialList.value.length) loadSocial()
   if (t === 'secRules' && !secRulesList.value.length) loadSecRules()
+  if (t === 'settings' && !Object.keys(mfaStatus.value).some(k => mfaStatus.value[k])) { loadMfaStatus(); loadNotifRecipients(); loadQuota() }
+  if (t === 'overview' && !domains.value.length) loadDomains()
 }
 
 // --- overview actions ---
@@ -402,6 +525,12 @@ async function saveAccountCost() {
   } catch (e: any) { ElMessage.error(e.message) }
   finally { editSaving.value = false }
 }
+async function loadDomains() {
+  domainsLoading.value = true
+  try { domains.value = await request.get(`/tenants/${tenantId}/domains`) as any[] }
+  catch { domains.value = [] }
+  finally { domainsLoading.value = false }
+}
 
 // --- instances ---
 async function loadInstances() {
@@ -415,6 +544,10 @@ async function loadInstances() {
 async function loadSubscription() {
   try { subscriptionData.value = await request.get(`/tenants/${tenantId}/subscription`) }
   catch { subscriptionData.value = null }
+}
+async function loadSubscriptionDays() {
+  try { const r: any = await request.get(`/tenants/${tenantId}/subscription-days`); subscriptionDays.value = r?.days || r?.subscriptionDays || '—' }
+  catch { subscriptionDays.value = '—' }
 }
 async function loadCost(type?: string, start?: string, end?: string) {
   const qType = type || costQueryType.value; costQueryType.value = qType; costLoading.value = true; costData.value = []; costTotal.value = 0
@@ -461,6 +594,24 @@ async function deleteUser(row: any) {
     ElMessage.success('已删除'); await loadUsers()
   } catch (e: any) { if (e !== 'cancel' && e?.message) ElMessage.error(e.message) }
 }
+async function loadGroups() {
+  groupsLoading.value = true
+  try { groups.value = await request.get(`/tenants/${tenantId}/groups`) as any[] }
+  catch { groups.value = [] }
+  finally { groupsLoading.value = false }
+}
+async function loadPasswordPolicy() {
+  try {
+    const r: any = await request.get(`/tenants/${tenantId}/password-policy`)
+    pwPolicy.value = { isPasswordExpiryEnabled: r?.isPasswordExpiryEnabled ?? false, passwordExpiryDays: r?.passwordExpiryDays ?? 90 }
+  } catch { /* no policy */ }
+}
+async function savePasswordPolicy() {
+  try {
+    await request.post(`/tenants/${tenantId}/password-policy`, { enableExpiry: pwPolicy.value.isPasswordExpiryEnabled, expiryDays: pwPolicy.value.passwordExpiryDays })
+    ElMessage.success('密码策略已更新')
+  } catch (e: any) { ElMessage.error(e.message) }
+}
 
 // --- email ---
 async function loadEmail() {
@@ -500,10 +651,8 @@ async function saveSocial() {
   finally { socialEditSaving.value = false }
 }
 async function toggleSocial(row: any) {
-  try {
-    await request.put(`/tenants/${tenantId}/social/${row.id}/toggle`)
-    ElMessage.success('已切换'); await loadSocial()
-  } catch (e: any) { ElMessage.error(e.message) }
+  try { await request.put(`/tenants/${tenantId}/social/${row.id}/toggle`); ElMessage.success('已切换'); await loadSocial() }
+  catch (e: any) { ElMessage.error(e.message) }
 }
 async function deleteSocial(row: any) {
   try {
@@ -526,6 +675,90 @@ async function addSecRule() {
     ElMessage.success('已添加'); secRuleAddVisible.value = false; await loadSecRules()
   } catch (e: any) { ElMessage.error(e.message) }
   finally { secRuleSaving.value = false }
+}
+async function deleteSecRule(row: any) {
+  try {
+    await ElMessageBox.confirm('确定删除此安全规则？', '确认', { type: 'warning' })
+    await request.delete(`/tenants/security-rules/${row.id}`)
+    ElMessage.success('已删除'); await loadSecRules()
+  } catch (e: any) { if (e !== 'cancel' && e?.message) ElMessage.error(e.message) }
+}
+async function batchEnableSecRules() {
+  try {
+    await ElMessageBox.confirm('将启用所有安全规则，确定？', '确认', { type: 'info' })
+    await request.post('/tenants/enableAll', { tenantId })
+    ElMessage.success('已启用全部安全规则')
+  } catch (e: any) { ElMessage.error(e.message) }
+}
+
+// --- MFA ---
+async function loadMfaStatus() {
+  try { mfaStatus.value = await request.get(`/tenants/${tenantId}/mfa/status`) }
+  catch { /* */ }
+}
+async function toggleMfa(enable: boolean) {
+  mfaToggling.value = true
+  try {
+    await request.post(`/tenants/${tenantId}/mfa/toggle`, { enable })
+    ElMessage.success(enable ? '已启用邮箱 MFA' : '已禁用邮箱 MFA')
+    await loadMfaStatus()
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { mfaToggling.value = false }
+}
+async function resetMfa() {
+  try {
+    await ElMessageBox.confirm('将重置所有 MFA 设备，确定？', '确认', { type: 'warning' })
+    mfaResetting.value = true
+    const r: any = await request.post(`/tenants/${tenantId}/mfa/reset`)
+    ElMessage.success(`已重置 ${r?.deletedDevices || 0} 个 MFA 设备`)
+    await loadMfaStatus()
+  } catch (e: any) { if (e !== 'cancel' && e?.message) ElMessage.error(e.message) }
+  finally { mfaResetting.value = false }
+}
+
+// --- notification recipients ---
+async function loadNotifRecipients() {
+  try { notifRecipients.value = await request.get(`/tenants/${tenantId}/notification-recipients`) as any[] }
+  catch { notifRecipients.value = [] }
+}
+async function updateNotifRecipients() {
+  const emails = notifEmailInput.value.split(',').map(e => e.trim()).filter(Boolean)
+  if (!emails.length) { ElMessage.warning('请输入至少一个邮箱'); return }
+  notifSaving.value = true
+  try {
+    await request.post(`/tenants/${tenantId}/notification-recipients/update`, { emails })
+    ElMessage.success('已更新'); await loadNotifRecipients(); notifEmailInput.value = ''
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { notifSaving.value = false }
+}
+
+// --- quota ---
+async function loadQuota() {
+  quotaLoading.value = true
+  try {
+    const r: any = await request.get(`/tenants/${tenantId}/quota`, { params: { serviceName: 'compute', pageSize: 100 } })
+    quotaItems.value = r?.items || []
+  } catch { quotaItems.value = [] }
+  finally { quotaLoading.value = false }
+}
+
+// --- audit log ---
+async function loadAudit(days: number) {
+  auditDays.value = days; auditDateRange.value = null; auditLoading.value = true
+  try {
+    const r: any = await request.post(`/tenants/${tenantId}/audit-log`, { days })
+    auditLogs.value = r?.data || []
+  } catch { auditLogs.value = [] }
+  finally { auditLoading.value = false }
+}
+async function loadAuditCustom() {
+  if (!auditDateRange.value || auditDateRange.value.length !== 2) { ElMessage.warning('请选择日期范围'); return }
+  auditDays.value = 0; auditLoading.value = true
+  try {
+    const r: any = await request.post(`/tenants/${tenantId}/audit-log`, { startDate: auditDateRange.value[0], endDate: auditDateRange.value[1] })
+    auditLogs.value = r?.data || []
+  } catch { auditLogs.value = [] }
+  finally { auditLoading.value = false }
 }
 
 // --- export / delete ---
