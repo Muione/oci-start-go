@@ -16,10 +16,14 @@
     <el-alert v-if="checkResult" :type="checkResult.alive ? 'success' : 'error'" show-icon style="margin-bottom:12px"
       :title="checkResult.alive ? 'OCI 认证成功' : '异常: ' + (checkResult.error || '未知错误')" />
 
-    <!-- Tabs -->
-    <el-tabs v-model="activeTab" @tab-change="onTabChange">
-      <!-- ======================== 概况 ======================== -->
-      <el-tab-pane label="概况" name="overview">
+    <!-- Fold panels -->
+    <el-collapse v-model="activePanels" accordion @change="onPanelChange">
+
+      <!-- ======================== 基本信息 ======================== -->
+      <el-collapse-item name="overview">
+        <template #title>
+          <span class="panel-title">基本信息</span>
+        </template>
         <el-skeleton v-if="loading" :rows="8" animated/>
         <template v-else>
           <el-descriptions :column="2" border size="small">
@@ -55,11 +59,30 @@
             <el-table-column prop="region" label="区域" width="120"/>
             <el-table-column label="状态" width="80" align="center"><template #default="{ row }"><span class="status-dot" :class="row.isActive ? 'status-dot--up' : 'status-dot--down'"/>{{ row.isActive ? '正常' : '停用' }}</template></el-table-column>
           </el-table>
+          <!-- Update / Export / Delete -->
+          <el-divider/>
+          <el-descriptions :column="1" border size="small" style="margin-bottom:16px">
+            <el-descriptions-item label="从 OCI 获取信息">
+              <el-button size="small" @click="doUpdateDetail" :loading="updateSaving"><el-icon><Refresh /></el-icon> 从 OCI 获取</el-button>
+              <span v-if="updateResult" style="margin-left:8px;color:var(--status-up)">✓ {{ updateResult.tenancyName || '已获取' }}</span>
+              <span v-if="updateError" style="margin-left:8px;color:var(--status-down)">✗ {{ updateError }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="导出租户数据">
+              <el-button size="small" @click="doExport"><el-icon><Download /></el-icon> 导出</el-button>
+            </el-descriptions-item>
+            <el-descriptions-item label="删除租户">
+              <el-button size="small" type="danger" @click="remove"><el-icon><Delete /></el-icon> 删除此租户</el-button>
+              <span style="color:var(--text-secondary);font-size:12px;margin-left:8px">不可恢复，将删除所有实例记录</span>
+            </el-descriptions-item>
+          </el-descriptions>
         </template>
-      </el-tab-pane>
+      </el-collapse-item>
 
-      <!-- ======================== 实例 ======================== -->
-      <el-tab-pane label="实例" name="instances">
+      <!-- ======================== 实例列表 ======================== -->
+      <el-collapse-item name="instances">
+        <template #title>
+          <span class="panel-title">实例列表 ({{ instances.length }})</span>
+        </template>
         <el-skeleton v-if="instLoading" :rows="5" animated/>
         <el-table v-else :data="instances" border stripe size="small">
           <template #empty><el-empty description="该租户下暂无实例" :image-size="60"/></template>
@@ -77,10 +100,13 @@
           <el-table-column prop="availabilityDomain" label="AD" min-width="120" show-overflow-tooltip/>
           <el-table-column prop="createTime" label="创建时间" width="160"/>
         </el-table>
-      </el-tab-pane>
+      </el-collapse-item>
 
-      <!-- ======================== 费用 ======================== -->
-      <el-tab-pane label="费用" name="costs">
+      <!-- ======================== 费用账单 ======================== -->
+      <el-collapse-item name="costs">
+        <template #title>
+          <span class="panel-title">费用账单</span>
+        </template>
         <!-- Subscription days -->
         <el-descriptions :column="3" border size="small" style="margin-bottom:16px">
           <el-descriptions-item label="订阅天数"><span class="days-chip">{{ subscriptionDays || '—' }}</span></el-descriptions-item>
@@ -123,10 +149,51 @@
           <el-table-column prop="region" label="区域" width="120"/>
           <el-table-column label="开始" width="160"><template #default="{ row }">{{ row.timeUsageStarted || '—' }}</template></el-table-column>
         </el-table>
-      </el-tab-pane>
+        <!-- Quota -->
+        <el-divider/>
+        <el-alert v-if="quotaError" type="warning" :closable="false" show-icon style="margin-bottom:8px">
+          <template #title>配额加载失败: {{ quotaError }}</template>
+          <template #default><el-button size="small" text type="primary" @click="loadQuota">重试</el-button></template>
+        </el-alert>
+        <h4 style="margin:0 0 8px">配额</h4>
+        <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center">
+          <el-select v-model="quotaServiceName" size="small" style="width:200px" @change="loadQuota">
+            <el-option v-for="s in quotaServices" :key="s.name" :label="s.description || s.name" :value="s.name"/>
+          </el-select>
+        </div>
+        <el-table v-loading="quotaLoading" :data="quotaItems" border stripe size="small" max-height="300">
+          <template #empty><el-empty description="暂无配额数据" :image-size="40"/></template>
+          <el-table-column prop="name" label="配额名称" min-width="220" show-overflow-tooltip/>
+          <el-table-column label="使用率" width="160">
+            <template #default="{ row }">
+              <el-progress
+                v-if="row.total > 0"
+                :percentage="Math.min(100, Math.round(row.used / row.total * 100))"
+                :color="quotaUsageColor(row.used, row.total)"
+                :stroke-width="12"
+                :text-inside="true"
+              />
+              <span v-else style="color: var(--text-secondary); font-size: 12px">无限制/未配置</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="已用" width="90" align="right">
+            <template #default="{ row }"><span class="data-mono">{{ row.used }}</span></template>
+          </el-table-column>
+          <el-table-column label="可用" width="90" align="right">
+            <template #default="{ row }"><span class="data-mono" :style="row.available > 0 ? '' : 'color:var(--status-down)'">{{ row.available }}</span></template>
+          </el-table-column>
+          <el-table-column label="总量" width="90" align="right">
+            <template #default="{ row }"><span class="data-mono">{{ row.total || '—' }}</span></template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!quotaServices.length && !quotaLoading" description="该租户无任何配额数据" :image-size="40"/>
+      </el-collapse-item>
 
-      <!-- ======================== 用户 ======================== -->
-      <el-tab-pane label="用户" name="users">
+      <!-- ======================== IAM 用户 ======================== -->
+      <el-collapse-item name="users">
+        <template #title>
+          <span class="panel-title">IAM 用户 ({{ userList.length }})</span>
+        </template>
         <div style="margin-bottom:12px;display:flex;gap:8px">
           <el-button type="primary" size="small" @click="addUserFormVisible=true"><el-icon><Plus /></el-icon> 创建用户</el-button>
         </div>
@@ -161,6 +228,49 @@
             <el-input-number v-model="pwPolicy.passwordExpiryDays" :min="1" :max="365" @change="savePasswordPolicy"/>
           </el-form-item>
         </el-form>
+        <!-- Credentials -->
+        <el-divider/>
+        <h4 style="margin:0 0 8px">凭证管理</h4>
+        <div style="margin-bottom:12px">
+          <el-select v-model="credUserOcid" filterable placeholder="选择 IAM 用户" @change="loadCredentials" style="width:300px">
+            <el-option v-for="u in userList" :key="u.ocid" :label="u.name" :value="u.ocid"/>
+          </el-select>
+        </div>
+        <template v-if="credUserOcid">
+          <!-- API Keys -->
+          <h4 style="margin:12px 0 8px">API 密钥</h4>
+          <el-table :data="apiKeys" v-loading="credLoading" border stripe size="small" max-height="200">
+            <template #empty><el-empty description="暂无 API 密钥" :image-size="40"/></template>
+            <el-table-column prop="fingerprint" label="指纹" min-width="200" show-overflow-tooltip/>
+            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteApiKey(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
+          </el-table>
+          <el-button size="small" type="primary" @click="apiKeyAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 添加 API 密钥</el-button>
+          <!-- Auth Tokens -->
+          <h4 style="margin:12px 0 8px">Auth 令牌</h4>
+          <el-table :data="authTokens" v-loading="credLoading" border stripe size="small" max-height="200">
+            <template #empty><el-empty description="暂无 Auth 令牌" :image-size="40"/></template>
+            <el-table-column prop="description" label="描述" min-width="200"/>
+            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteAuthToken(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
+          </el-table>
+          <el-button size="small" type="primary" @click="authTokenAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 创建 Auth 令牌</el-button>
+          <!-- SMTP Credentials -->
+          <h4 style="margin:12px 0 8px">SMTP 凭证</h4>
+          <el-table :data="smtpCreds" v-loading="credLoading" border stripe size="small" max-height="200">
+            <template #empty><el-empty description="暂无 SMTP 凭证" :image-size="40"/></template>
+            <el-table-column prop="description" label="描述" min-width="200"/>
+            <el-table-column prop="username" label="用户名" min-width="160" show-overflow-tooltip/>
+            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteSmtpCred(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
+          </el-table>
+          <el-button size="small" type="primary" @click="smtpAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 创建 SMTP 凭证</el-button>
+          <!-- Customer Secret Keys -->
+          <h4 style="margin:12px 0 8px">Customer Secret Keys</h4>
+          <el-table :data="customerSecretKeys" v-loading="credLoading" border stripe size="small" max-height="200">
+            <template #empty><el-empty description="暂无 Customer Secret Key" :image-size="40"/></template>
+            <el-table-column prop="displayName" label="显示名称" min-width="200"/>
+            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteSecretKey(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
+          </el-table>
+          <el-button size="small" type="primary" @click="secretKeyAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 创建 Customer Secret Key</el-button>
+        </template>
         <!-- Add user dialog -->
         <el-dialog v-model="addUserFormVisible" title="创建 IAM 用户" width="460px" append-to-body destroy-on-close>
           <el-form :model="addUserForm" label-width="80px">
@@ -180,138 +290,40 @@
             <el-button type="primary" :loading="addUserSaving" @click="createUser">创建</el-button>
           </template>
         </el-dialog>
-      </el-tab-pane>
-
-      <!-- ======================== 凭证 ======================== -->
-      <el-tab-pane label="凭证" name="credentials">
-        <div style="margin-bottom:12px">
-          <el-select v-model="credUserOcid" filterable placeholder="选择 IAM 用户" @change="loadCredentials" style="width:300px">
-            <el-option v-for="u in userList" :key="u.ocid" :label="u.name" :value="u.ocid"/>
-          </el-select>
-        </div>
-        <template v-if="credUserOcid">
-          <!-- API Keys -->
-          <h4 style="margin:12px 0 8px">API 密钥</h4>
-          <el-table :data="apiKeys" v-loading="credLoading" border stripe size="small" max-height="200">
-            <template #empty><el-empty description="暂无 API 密钥" :image-size="40"/></template>
-            <el-table-column prop="fingerprint" label="指纹" min-width="200" show-overflow-tooltip/>
-            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteApiKey(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
-          </el-table>
-          <el-button size="small" type="primary" @click="apiKeyAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 添加 API 密钥</el-button>
-          <el-dialog v-model="apiKeyAddVisible" title="添加 API 密钥" width="560px" append-to-body destroy-on-close>
-            <el-form label-width="100px">
-              <el-form-item label="公钥 PEM" required><el-input v-model="apiKeyPem" type="textarea" :rows="6" placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----"/></el-form-item>
-            </el-form>
-            <template #footer><el-button @click="apiKeyAddVisible=false">取消</el-button><el-button type="primary" :loading="credSaving" @click="createApiKey">添加</el-button></template>
-          </el-dialog>
-
-          <!-- Auth Tokens -->
-          <h4 style="margin:12px 0 8px">Auth 令牌</h4>
-          <el-table :data="authTokens" v-loading="credLoading" border stripe size="small" max-height="200">
-            <template #empty><el-empty description="暂无 Auth 令牌" :image-size="40"/></template>
-            <el-table-column prop="description" label="描述" min-width="200"/>
-            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteAuthToken(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
-          </el-table>
-          <el-button size="small" type="primary" @click="authTokenAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 创建 Auth 令牌</el-button>
-          <el-dialog v-model="authTokenAddVisible" title="创建 Auth 令牌" width="460px" append-to-body destroy-on-close>
-            <el-form label-width="80px"><el-form-item label="描述" required><el-input v-model="authTokenDesc" placeholder="令牌用途描述"/></el-form-item></el-form>
-            <el-alert v-if="createdToken" title="令牌已创建！请立即复制（仅显示一次）" type="success" :closable="true" show-icon @close="createdToken=''" style="margin-top:12px"><template #default><code style="user-select:all">{{ createdToken }}</code></template></el-alert>
-            <template #footer><el-button @click="authTokenAddVisible=false">关闭</el-button><el-button type="primary" :loading="credSaving" @click="createAuthToken" :disabled="!!createdToken">创建</el-button></template>
-          </el-dialog>
-
-          <!-- SMTP Credentials -->
-          <h4 style="margin:12px 0 8px">SMTP 凭证</h4>
-          <el-table :data="smtpCreds" v-loading="credLoading" border stripe size="small" max-height="200">
-            <template #empty><el-empty description="暂无 SMTP 凭证" :image-size="40"/></template>
-            <el-table-column prop="description" label="描述" min-width="200"/>
-            <el-table-column prop="username" label="用户名" min-width="160" show-overflow-tooltip/>
-            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteSmtpCred(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
-          </el-table>
-          <el-button size="small" type="primary" @click="smtpAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 创建 SMTP 凭证</el-button>
-          <el-dialog v-model="smtpAddVisible" title="创建 SMTP 凭证" width="460px" append-to-body destroy-on-close>
-            <el-form label-width="80px"><el-form-item label="描述" required><el-input v-model="smtpDesc" placeholder="凭证用途描述"/></el-form-item></el-form>
-            <el-alert v-if="createdSmtpPassword" title="SMTP 密码已创建！请立即复制（仅显示一次）" type="success" :closable="true" show-icon @close="createdSmtpPassword=''" style="margin-top:12px"><template #default><code style="user-select:all">{{ createdSmtpPassword }}</code></template></el-alert>
-            <template #footer><el-button @click="smtpAddVisible=false">关闭</el-button><el-button type="primary" :loading="credSaving" @click="createSmtpCred" :disabled="!!createdSmtpPassword">创建</el-button></template>
-          </el-dialog>
-
-          <!-- Customer Secret Keys -->
-          <h4 style="margin:12px 0 8px">Customer Secret Keys</h4>
-          <el-table :data="customerSecretKeys" v-loading="credLoading" border stripe size="small" max-height="200">
-            <template #empty><el-empty description="暂无 Customer Secret Key" :image-size="40"/></template>
-            <el-table-column prop="displayName" label="显示名称" min-width="200"/>
-            <el-table-column label="操作" width="80" align="center"><template #default="{ row }"><el-button size="small" type="danger" text @click="deleteSecretKey(row)"><el-icon><Delete/></el-icon></el-button></template></el-table-column>
-          </el-table>
-          <el-button size="small" type="primary" @click="secretKeyAddVisible=true" style="margin-top:8px"><el-icon><Plus/></el-icon> 创建 Customer Secret Key</el-button>
-          <el-dialog v-model="secretKeyAddVisible" title="创建 Customer Secret Key" width="460px" append-to-body destroy-on-close>
-            <el-form label-width="100px"><el-form-item label="显示名称" required><el-input v-model="secretKeyDisplay" placeholder="密钥显示名称"/></el-form-item></el-form>
-            <el-alert v-if="createdSecretKey" title="Secret Key 已创建！请立即复制（仅显示一次）" type="success" :closable="true" show-icon @close="createdSecretKey=''" style="margin-top:12px"><template #default><code style="user-select:all">{{ createdSecretKey }}</code></template></el-alert>
-            <template #footer><el-button @click="secretKeyAddVisible=false">关闭</el-button><el-button type="primary" :loading="credSaving" @click="createSecretKey" :disabled="!!createdSecretKey">创建</el-button></template>
-          </el-dialog>
-        </template>
-      </el-tab-pane>
-
-      <!-- ======================== 邮件 ======================== -->
-      <el-tab-pane label="邮件" name="email">
-        <el-form :model="emailForm" label-width="100px" style="max-width:500px">
-          <el-form-item label="域名"><el-input v-model="emailForm.domainName" placeholder="example.com"/></el-form-item>
-          <el-form-item label="SMTP 主机"><el-input v-model="emailForm.smtpHost" placeholder="smtp.example.com"/></el-form-item>
-          <el-form-item label="SMTP 端口"><el-input v-model="emailForm.smtpPort" placeholder="587"/></el-form-item>
-          <el-form-item label="用户名"><el-input v-model="emailForm.smtpUsername" placeholder="邮箱用户名"/></el-form-item>
-          <el-form-item label="密码"><el-input v-model="emailForm.smtpPassword" type="password" show-password placeholder="邮箱密码"/></el-form-item>
-          <el-form-item label="发件人"><el-input v-model="emailForm.senderEmail" placeholder="noreply@example.com"/></el-form-item>
-          <el-form-item label="启用">
-            <el-switch v-model="emailForm.active"/>
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" :loading="emailSaving" @click="saveEmail">保存</el-button>
-            <el-button type="danger" @click="deleteEmail">删除配置</el-button>
-          </el-form-item>
-        </el-form>
-        <el-divider/>
-        <div style="display:flex;gap:8px">
-          <el-button size="small" type="success" :loading="emailEnabling" @click="enableEmail">启用邮件服务（OCI + DNS）</el-button>
-          <el-button size="small" type="warning" :loading="emailDisabling" @click="disableEmail">禁用邮件服务</el-button>
-        </div>
-        <p style="color:var(--text-secondary);font-size:12px;margin-top:8px">启用：配置 OCI Email Delivery 域名 + Cloudflare DNS 记录。禁用：拆除 OCI 邮件资源 + DNS 记录。</p>
-      </el-tab-pane>
-
-      <!-- ======================== 社交登录 ======================== -->
-      <el-tab-pane label="社交登录" name="social">
-        <div style="margin-bottom:12px"><el-button type="primary" size="small" @click="openAddSocial"><el-icon><Plus /></el-icon> 添加配置</el-button></div>
-        <el-table :data="socialList" border size="small" v-loading="socialLoading">
-          <template #empty><el-empty description="暂无社媒配置" :image-size="40"/></template>
-          <el-table-column prop="socialTypeStr" label="平台" width="100"/>
-          <el-table-column prop="clientId" label="Client ID" min-width="160" show-overflow-tooltip/>
-          <el-table-column label="状态" width="90" align="center"><template #default="{ row }"><el-tag :type="row.socialStatus==='enabled'?'success':'info'" size="small">{{ row.socialStatus==='enabled'?'启用':'禁用' }}</el-tag></template></el-table-column>
-          <el-table-column label="操作" width="140" align="center">
-            <template #default="{ row }">
-              <el-button size="small" @click="editSocial(row)"><el-icon><Edit /></el-icon></el-button>
-              <el-button size="small" type="warning" @click="toggleSocial(row)">{{ row.socialStatus==='enabled'?'禁用':'启用' }}</el-button>
-              <el-button size="small" type="danger" @click="deleteSocial(row)"><el-icon><Delete /></el-icon></el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <el-dialog v-model="socialEditVisible" :title="socialEditId ? '编辑社媒配置' : '添加社媒配置'" width="460px" append-to-body destroy-on-close>
-          <el-form :model="socialForm" label-width="80px">
-            <el-form-item label="平台类型">
-              <el-select v-model="socialForm.socialType" placeholder="选择平台">
-                <el-option v-for="t in socialTypes" :key="t" :label="t" :value="t"/>
-              </el-select>
-            </el-form-item>
-            <el-form-item label="Client ID" required><el-input v-model="socialForm.clientId" placeholder="OAuth Client ID"/></el-form-item>
-            <el-form-item label="Secret" required><el-input v-model="socialForm.clientSecret" type="password" show-password placeholder="OAuth Client Secret"/></el-form-item>
-            <el-form-item label="回调地址"><el-input v-model="socialForm.redirectUrl" placeholder="https://your-domain.com/oauth/callback"/></el-form-item>
-            <el-form-item label="登录地址"><el-input v-model="socialForm.loginUrl" placeholder="https://platform.com/login"/></el-form-item>
+        <!-- API Key add dialog -->
+        <el-dialog v-model="apiKeyAddVisible" title="添加 API 密钥" width="560px" append-to-body destroy-on-close>
+          <el-form label-width="100px">
+            <el-form-item label="公钥 PEM" required><el-input v-model="apiKeyPem" type="textarea" :rows="6" placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----"/></el-form-item>
           </el-form>
-          <template #footer>
-            <el-button @click="socialEditVisible=false">取消</el-button>
-            <el-button type="primary" :loading="socialEditSaving" @click="saveSocial">保存</el-button>
-          </template>
+          <template #footer><el-button @click="apiKeyAddVisible=false">取消</el-button><el-button type="primary" :loading="credSaving" @click="createApiKey">添加</el-button></template>
         </el-dialog>
-      </el-tab-pane>
+        <!-- Auth Token add dialog -->
+        <el-dialog v-model="authTokenAddVisible" title="创建 Auth 令牌" width="460px" append-to-body destroy-on-close>
+          <el-form label-width="80px"><el-form-item label="描述" required><el-input v-model="authTokenDesc" placeholder="令牌用途描述"/></el-form-item></el-form>
+          <el-alert v-if="createdToken" title="令牌已创建！请立即复制（仅显示一次）" type="success" :closable="true" show-icon @close="createdToken=''" style="margin-top:12px"><template #default><code style="user-select:all">{{ createdToken }}</code></template></el-alert>
+          <template #footer><el-button @click="authTokenAddVisible=false">关闭</el-button><el-button type="primary" :loading="credSaving" @click="createAuthToken" :disabled="!!createdToken">创建</el-button></template>
+        </el-dialog>
+        <!-- SMTP add dialog -->
+        <el-dialog v-model="smtpAddVisible" title="创建 SMTP 凭证" width="460px" append-to-body destroy-on-close>
+          <el-form label-width="80px"><el-form-item label="描述" required><el-input v-model="smtpDesc" placeholder="凭证用途描述"/></el-form-item></el-form>
+          <el-alert v-if="createdSmtpPassword" title="SMTP 密码已创建！请立即复制（仅显示一次）" type="success" :closable="true" show-icon @close="createdSmtpPassword=''" style="margin-top:12px"><template #default><code style="user-select:all">{{ createdSmtpPassword }}</code></template></el-alert>
+          <template #footer><el-button @click="smtpAddVisible=false">关闭</el-button><el-button type="primary" :loading="credSaving" @click="createSmtpCred" :disabled="!!createdSmtpPassword">创建</el-button></template>
+        </el-dialog>
+        <!-- Secret Key add dialog -->
+        <el-dialog v-model="secretKeyAddVisible" title="创建 Customer Secret Key" width="460px" append-to-body destroy-on-close>
+          <el-form label-width="100px"><el-form-item label="显示名称" required><el-input v-model="secretKeyDisplay" placeholder="密钥显示名称"/></el-form-item></el-form>
+          <el-alert v-if="createdSecretKey" title="Secret Key 已创建！请立即复制（仅显示一次）" type="success" :closable="true" show-icon @close="createdSecretKey=''" style="margin-top:12px"><template #default><code style="user-select:all">{{ createdSecretKey }}</code></template></el-alert>
+          <template #footer><el-button @click="secretKeyAddVisible=false">关闭</el-button><el-button type="primary" :loading="credSaving" @click="createSecretKey" :disabled="!!createdSecretKey">创建</el-button></template>
+        </el-dialog>
+      </el-collapse-item>
 
-      <!-- ======================== 安全规则 ======================== -->
-      <el-tab-pane label="安全规则" name="secRules">
+      <!-- ======================== 安全与合规 ======================== -->
+      <el-collapse-item name="security">
+        <template #title>
+          <span class="panel-title">安全与合规</span>
+        </template>
+        <!-- Security Rules -->
+        <h4 style="margin:0 0 8px">安全规则</h4>
         <el-tabs v-model="secRulesTab" @tab-change="loadSecRules">
           <el-tab-pane label="入站规则" name="ingress"/>
           <el-tab-pane label="出站规则" name="egress"/>
@@ -333,6 +345,133 @@
             </template>
           </el-table-column>
         </el-table>
+        <!-- Social Login -->
+        <el-divider/>
+        <h4 style="margin:0 0 8px">社交登录</h4>
+        <div style="margin-bottom:12px"><el-button type="primary" size="small" @click="openAddSocial"><el-icon><Plus /></el-icon> 添加配置</el-button></div>
+        <el-table :data="socialList" border size="small" v-loading="socialLoading">
+          <template #empty><el-empty description="暂无社媒配置" :image-size="40"/></template>
+          <el-table-column prop="socialTypeStr" label="平台" width="100"/>
+          <el-table-column prop="clientId" label="Client ID" min-width="160" show-overflow-tooltip/>
+          <el-table-column label="状态" width="90" align="center"><template #default="{ row }"><el-tag :type="row.socialStatus==='enabled'?'success':'info'" size="small">{{ row.socialStatus==='enabled'?'启用':'禁用' }}</el-tag></template></el-table-column>
+          <el-table-column label="操作" width="140" align="center">
+            <template #default="{ row }">
+              <el-button size="small" @click="editSocial(row)"><el-icon><Edit /></el-icon></el-button>
+              <el-button size="small" type="warning" @click="toggleSocial(row)">{{ row.socialStatus==='enabled'?'禁用':'启用' }}</el-button>
+              <el-button size="small" type="danger" @click="deleteSocial(row)"><el-icon><Delete /></el-icon></el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <!-- Email Config -->
+        <el-divider/>
+        <h4 style="margin:0 0 8px">邮件服务</h4>
+        <el-form :model="emailForm" label-width="100px" style="max-width:500px">
+          <el-form-item label="域名"><el-input v-model="emailForm.domainName" placeholder="example.com"/></el-form-item>
+          <el-form-item label="SMTP 主机"><el-input v-model="emailForm.smtpHost" placeholder="smtp.example.com"/></el-form-item>
+          <el-form-item label="SMTP 端口"><el-input v-model="emailForm.smtpPort" placeholder="587"/></el-form-item>
+          <el-form-item label="用户名"><el-input v-model="emailForm.smtpUsername" placeholder="邮箱用户名"/></el-form-item>
+          <el-form-item label="密码"><el-input v-model="emailForm.smtpPassword" type="password" show-password placeholder="邮箱密码"/></el-form-item>
+          <el-form-item label="发件人"><el-input v-model="emailForm.senderEmail" placeholder="noreply@example.com"/></el-form-item>
+          <el-form-item label="启用">
+            <el-switch v-model="emailForm.active"/>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="emailSaving" @click="saveEmail">保存</el-button>
+            <el-button type="danger" @click="deleteEmail">删除配置</el-button>
+          </el-form-item>
+        </el-form>
+        <div style="display:flex;gap:8px">
+          <el-button size="small" type="success" :loading="emailEnabling" @click="enableEmail">启用邮件服务（OCI + DNS）</el-button>
+          <el-button size="small" type="warning" :loading="emailDisabling" @click="disableEmail">禁用邮件服务</el-button>
+        </div>
+        <p style="color:var(--text-secondary);font-size:12px;margin-top:8px">启用：配置 OCI Email Delivery 域名 + Cloudflare DNS 记录。禁用：拆除 OCI 邮件资源 + DNS 记录。</p>
+        <!-- MFA -->
+        <el-divider/>
+        <el-alert v-if="mfaError" type="warning" :closable="false" show-icon style="margin-bottom:8px">
+          <template #title>MFA 状态加载失败: {{ mfaError }}</template>
+          <template #default><el-button size="small" text type="primary" @click="loadMfaStatus">重试</el-button></template>
+        </el-alert>
+        <h4 style="margin:0 0 8px">MFA 多因素认证</h4>
+        <el-descriptions :column="2" border size="small" style="margin-bottom:12px">
+          <el-descriptions-item label="TOTP"><el-tag :type="mfaStatus.totpEnabled?'success':'info'" size="small">{{ mfaStatus.totpEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
+          <el-descriptions-item label="邮箱"><el-tag :type="mfaStatus.emailEnabled?'success':'info'" size="small">{{ mfaStatus.emailEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
+          <el-descriptions-item label="短信"><el-tag :type="mfaStatus.smsEnabled?'success':'info'" size="small">{{ mfaStatus.smsEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
+          <el-descriptions-item label="安全问题"><el-tag :type="mfaStatus.securityQuestionsEnabled?'success':'info'" size="small">{{ mfaStatus.securityQuestionsEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
+        </el-descriptions>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <el-button size="small" type="primary" @click="toggleMfa(true)" :loading="mfaToggling">启用邮箱 MFA</el-button>
+          <el-button size="small" @click="toggleMfa(false)" :loading="mfaToggling">禁用邮箱 MFA</el-button>
+          <el-button size="small" type="warning" @click="resetMfa" :loading="mfaResetting">重置 MFA 设备</el-button>
+        </div>
+        <!-- Sign-on Policies -->
+        <el-divider/>
+        <h4 style="margin:0 0 8px">登录策略</h4>
+        <el-alert v-if="signonError" type="warning" :closable="false" show-icon style="margin-bottom:8px"><template #title>加载失败: {{ signonError }}</template><template #default><el-button size="small" text type="primary" @click="loadSignonPolicies">重试</el-button></template></el-alert>
+        <el-table v-loading="signonLoading" :data="signonPolicies" border stripe size="small" max-height="200">
+          <template #empty><el-empty description="暂无登录策略" :image-size="40"/></template>
+          <el-table-column prop="name" label="名称" min-width="160"/>
+          <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip/>
+          <el-table-column label="状态" width="80" align="center"><template #default="{ row }"><el-tag :type="row.active?'success':'info'" size="small">{{ row.active ? '启用' : '禁用' }}</el-tag></template></el-table-column>
+        </el-table>
+        <!-- Account Recovery -->
+        <el-divider/>
+        <h4 style="margin:0 0 8px">账号恢复设置</h4>
+        <el-alert v-if="recoveryError" type="warning" :closable="false" show-icon style="margin-bottom:8px"><template #title>加载失败: {{ recoveryError }}</template><template #default><el-button size="small" text type="primary" @click="loadAccountRecovery">重试</el-button></template></el-alert>
+        <el-form v-loading="recoveryLoading" :inline="true" size="small" style="margin-bottom:8px">
+          <el-form-item label="恢复方式">
+            <el-checkbox-group v-model="recoveryFactors">
+              <el-checkbox label="EMAIL">邮箱</el-checkbox>
+              <el-checkbox label="SMS">短信</el-checkbox>
+              <el-checkbox label="SECURITY_QUESTIONS">安全问题</el-checkbox>
+              <el-checkbox label="PUSH">推送</el-checkbox>
+              <el-checkbox label="TOTP">TOTP</el-checkbox>
+            </el-checkbox-group>
+          </el-form-item>
+          <el-form-item><el-button type="primary" size="small" :loading="recoverySaving" @click="updateAccountRecovery">保存</el-button></el-form-item>
+        </el-form>
+        <!-- Notification Recipients -->
+        <el-divider/>
+        <el-alert v-if="notifError" type="warning" :closable="false" show-icon style="margin-bottom:8px">
+          <template #title>通知接收人加载失败: {{ notifError }}</template>
+          <template #default><el-button size="small" text type="primary" @click="loadNotifRecipients">重试</el-button></template>
+        </el-alert>
+        <h4 style="margin:0 0 8px">通知接收人</h4>
+        <el-table :data="notifRecipients" border size="small" style="margin-bottom:8px" max-height="200">
+          <template #empty><el-empty description="暂无通知接收人" :image-size="40"/></template>
+          <el-table-column prop="email" label="邮箱" min-width="200"/>
+          <el-table-column prop="state" label="状态" width="100"><template #default="{ row }"><el-tag :type="row.state==='VERIFIED'?'success':'warning'" size="small">{{ row.state || '—' }}</el-tag></template></el-table-column>
+          <el-table-column label="操作" width="80" align="center">
+            <template #default="{ row }">
+              <el-button size="small" type="danger" text @click="deleteRecipient(row.email)"><el-icon><Delete /></el-icon></el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-input v-model="notifEmailInput" placeholder="输入邮箱地址，多个用逗号分隔" size="small" style="max-width:400px;margin-right:8px"/>
+        <el-button size="small" type="primary" @click="updateNotifRecipients" :loading="notifSaving">更新接收人</el-button>
+        <!-- Audit Log -->
+        <el-divider/>
+        <el-alert v-if="auditError" type="warning" :closable="false" show-icon style="margin-bottom:8px">
+          <template #title>审计日志加载失败: {{ auditError }}</template>
+          <template #default><el-button size="small" text type="primary" @click="loadAudit(auditDays || 1)">重试</el-button></template>
+        </el-alert>
+        <h4 style="margin:0 0 8px">审计日志</h4>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+          <el-button size="small" :type="auditDays===1?'primary':''" @click="loadAudit(1)">今日</el-button>
+          <el-button size="small" :type="auditDays===7?'primary':''" @click="loadAudit(7)">7 天</el-button>
+          <el-button size="small" :type="auditDays===30?'primary':''" @click="loadAudit(30)">30 天</el-button>
+          <el-date-picker v-model="auditDateRange" type="daterange" range-separator="至" start-placeholder="开始" end-placeholder="结束" format="YYYY-MM-DD" value-format="YYYY-MM-DD" size="small" style="width:280px"/>
+          <el-button size="small" type="primary" @click="loadAuditCustom" :loading="auditLoading"><el-icon><Search /></el-icon> 查询</el-button>
+        </div>
+        <el-table v-loading="auditLoading" :data="auditLogs" border stripe size="small" max-height="400" show-overflow-tooltip>
+          <template #empty><el-empty description="暂无审计日志" :image-size="40"/></template>
+          <el-table-column prop="eventTime" label="时间" width="170"/>
+          <el-table-column prop="eventType" label="事件" min-width="200"/>
+          <el-table-column prop="userName" label="用户" width="140"/>
+          <el-table-column prop="userType" label="类型" width="80"/>
+          <el-table-column prop="ipAddress" label="IP" width="130"/>
+          <el-table-column prop="responseStatus" label="状态" width="80"/>
+        </el-table>
+        <!-- Security Rules Dialog -->
         <el-dialog v-model="secRuleAddVisible" title="添加安全规则" width="460px" append-to-body destroy-on-close>
           <el-form :model="secRuleForm" label-width="80px">
             <el-form-item label="协议"><el-select v-model="secRuleForm.protocol"><el-option label="TCP" value="6"/><el-option label="UDP" value="17"/><el-option label="全部" value="all"/></el-select></el-form-item>
@@ -346,17 +485,37 @@
             <el-button type="primary" :loading="secRuleSaving" @click="addSecRule">添加</el-button>
           </template>
         </el-dialog>
-      </el-tab-pane>
+        <!-- Social Login Dialog -->
+        <el-dialog v-model="socialEditVisible" :title="socialEditId ? '编辑社媒配置' : '添加社媒配置'" width="460px" append-to-body destroy-on-close>
+          <el-form :model="socialForm" label-width="80px">
+            <el-form-item label="平台类型">
+              <el-select v-model="socialForm.socialType" placeholder="选择平台">
+                <el-option v-for="t in socialTypes" :key="t" :label="t" :value="t"/>
+              </el-select>
+            </el-form-item>
+            <el-form-item label="Client ID" required><el-input v-model="socialForm.clientId" placeholder="OAuth Client ID"/></el-form-item>
+            <el-form-item label="Secret" required><el-input v-model="socialForm.clientSecret" type="password" show-password placeholder="OAuth Client Secret"/></el-form-item>
+            <el-form-item label="回调地址"><el-input v-model="socialForm.redirectUrl" placeholder="https://your-domain.com/oauth/callback"/></el-form-item>
+            <el-form-item label="登录地址"><el-input v-model="socialForm.loginUrl" placeholder="https://platform.com/login"/></el-form-item>
+          </el-form>
+          <template #footer>
+            <el-button @click="socialEditVisible=false">取消</el-button>
+            <el-button type="primary" :loading="socialEditSaving" @click="saveSocial">保存</el-button>
+          </template>
+        </el-dialog>
+      </el-collapse-item>
 
-      <!-- ======================== 区域 ======================== -->
-      <el-tab-pane label="区域" name="regions">
+      <!-- ======================== 区域管理 ======================== -->
+      <el-collapse-item name="regions">
+        <template #title>
+          <span class="panel-title">区域管理</span>
+        </template>
         <!-- Summary -->
         <el-descriptions v-if="regionSummary" :column="3" border size="small" style="margin-bottom:16px">
           <el-descriptions-item label="总区域">{{ regionSummary.totalRegions }}</el-descriptions-item>
           <el-descriptions-item label="已订阅">{{ regionSummary.subscribedRegions }}</el-descriptions-item>
           <el-descriptions-item label="未订阅">{{ regionSummary.unsubscribedRegions }}</el-descriptions-item>
         </el-descriptions>
-
         <el-tabs v-model="regionSubTab">
           <el-tab-pane label="已订阅" name="subscribed">
             <el-skeleton v-if="regionsLoading" :rows="4" animated/>
@@ -384,151 +543,9 @@
             </el-table>
           </el-tab-pane>
         </el-tabs>
-      </el-tab-pane>
+      </el-collapse-item>
 
-      <!-- ======================== 设置 ======================== -->
-      <el-tab-pane label="设置" name="settings">
-        <!-- Update + Export + Delete -->
-        <el-descriptions :column="1" border size="small" style="margin-bottom:16px">
-          <el-descriptions-item label="从 OCI 获取信息">
-            <el-button size="small" @click="doUpdateDetail" :loading="updateSaving"><el-icon><Refresh /></el-icon> 从 OCI 获取</el-button>
-            <span v-if="updateResult" style="margin-left:8px;color:var(--status-up)">✓ {{ updateResult.tenancyName || '已获取' }}</span>
-            <span v-if="updateError" style="margin-left:8px;color:var(--status-down)">✗ {{ updateError }}</span>
-          </el-descriptions-item>
-          <el-descriptions-item label="导出租户数据">
-            <el-button size="small" @click="doExport"><el-icon><Download /></el-icon> 导出</el-button>
-          </el-descriptions-item>
-          <el-descriptions-item label="删除租户">
-            <el-button size="small" type="danger" @click="remove"><el-icon><Delete /></el-icon> 删除此租户</el-button>
-            <span style="color:var(--text-secondary);font-size:12px;margin-left:8px">不可恢复，将删除所有实例记录</span>
-          </el-descriptions-item>
-        </el-descriptions>
-
-        <!-- MFA -->
-        <el-alert v-if="mfaError" type="warning" :closable="false" show-icon style="margin-bottom:8px">
-          <template #title>MFA 状态加载失败: {{ mfaError }}</template>
-          <template #default><el-button size="small" text type="primary" @click="loadMfaStatus">重试</el-button></template>
-        </el-alert>
-        <h4 style="margin:16px 0 8px">MFA 多因素认证</h4>
-        <el-descriptions :column="2" border size="small" style="margin-bottom:12px">
-          <el-descriptions-item label="TOTP"><el-tag :type="mfaStatus.totpEnabled?'success':'info'" size="small">{{ mfaStatus.totpEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
-          <el-descriptions-item label="邮箱"><el-tag :type="mfaStatus.emailEnabled?'success':'info'" size="small">{{ mfaStatus.emailEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
-          <el-descriptions-item label="短信"><el-tag :type="mfaStatus.smsEnabled?'success':'info'" size="small">{{ mfaStatus.smsEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
-          <el-descriptions-item label="安全问题"><el-tag :type="mfaStatus.securityQuestionsEnabled?'success':'info'" size="small">{{ mfaStatus.securityQuestionsEnabled ? '已启用' : '未启用' }}</el-tag></el-descriptions-item>
-        </el-descriptions>
-        <div style="display:flex;gap:8px;margin-bottom:16px">
-          <el-button size="small" type="primary" @click="toggleMfa(true)" :loading="mfaToggling">启用邮箱 MFA</el-button>
-          <el-button size="small" @click="toggleMfa(false)" :loading="mfaToggling">禁用邮箱 MFA</el-button>
-          <el-button size="small" type="warning" @click="resetMfa" :loading="mfaResetting">重置 MFA 设备</el-button>
-        </div>
-
-        <!-- Notification recipients -->
-        <el-alert v-if="notifError" type="warning" :closable="false" show-icon style="margin-bottom:8px">
-          <template #title>通知接收人加载失败: {{ notifError }}</template>
-          <template #default><el-button size="small" text type="primary" @click="loadNotifRecipients">重试</el-button></template>
-        </el-alert>
-        <h4 style="margin:16px 0 8px">通知接收人</h4>
-        <el-table :data="notifRecipients" border size="small" style="margin-bottom:8px" max-height="200">
-          <template #empty><el-empty description="暂无通知接收人" :image-size="40"/></template>
-          <el-table-column prop="email" label="邮箱" min-width="200"/>
-          <el-table-column prop="state" label="状态" width="100"><template #default="{ row }"><el-tag :type="row.state==='VERIFIED'?'success':'warning'" size="small">{{ row.state || '—' }}</el-tag></template></el-table-column>
-          <el-table-column label="操作" width="80" align="center">
-            <template #default="{ row }">
-              <el-button size="small" type="danger" text @click="deleteRecipient(row.email)"><el-icon><Delete /></el-icon></el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <el-input v-model="notifEmailInput" placeholder="输入邮箱地址，多个用逗号分隔" size="small" style="max-width:400px;margin-right:8px"/>
-        <el-button size="small" type="primary" @click="updateNotifRecipients" :loading="notifSaving">更新接收人</el-button>
-
-        <!-- Quota -->
-        <el-alert v-if="quotaError" type="warning" :closable="false" show-icon style="margin-bottom:8px">
-          <template #title>配额加载失败: {{ quotaError }}</template>
-          <template #default><el-button size="small" text type="primary" @click="loadQuota">重试</el-button></template>
-        </el-alert>
-        <h4 style="margin:16px 0 8px">配额</h4>
-        <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center">
-          <el-select v-model="quotaServiceName" size="small" style="width:200px" @change="loadQuota">
-            <el-option v-for="s in quotaServices" :key="s.name" :label="s.description || s.name" :value="s.name"/>
-          </el-select>
-        </div>
-        <el-table v-loading="quotaLoading" :data="quotaItems" border stripe size="small" max-height="300">
-          <template #empty><el-empty description="暂无配额数据" :image-size="40"/></template>
-          <el-table-column prop="name" label="配额名称" min-width="220" show-overflow-tooltip/>
-          <el-table-column label="使用率" width="160">
-            <template #default="{ row }">
-              <el-progress
-                v-if="row.total > 0"
-                :percentage="Math.min(100, Math.round(row.used / row.total * 100))"
-                :color="quotaUsageColor(row.used, row.total)"
-                :stroke-width="12"
-                :text-inside="true"
-              />
-              <span v-else style="color: var(--text-secondary); font-size: 12px">无限制/未配置</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="已用" width="90" align="right">
-            <template #default="{ row }"><span class="data-mono">{{ row.used }}</span></template>
-          </el-table-column>
-          <el-table-column label="可用" width="90" align="right">
-            <template #default="{ row }"><span class="data-mono" :style="row.available > 0 ? '' : 'color:var(--status-down)'">{{ row.available }}</span></template>
-          </el-table-column>
-          <el-table-column label="总量" width="90" align="right">
-            <template #default="{ row }"><span class="data-mono">{{ row.total || '—' }}</span></template>
-          </el-table-column>
-        </el-table>
-          <el-empty v-if="!quotaServices.length && !quotaLoading" description="该租户无任何配额数据" :image-size="40"/>
-
-        <!-- Sign-on policies -->
-        <h4 style="margin:16px 0 8px">登录策略</h4>
-        <el-alert v-if="signonError" type="warning" :closable="false" show-icon style="margin-bottom:8px"><template #title>加载失败: {{ signonError }}</template><template #default><el-button size="small" text type="primary" @click="loadSignonPolicies">重试</el-button></template></el-alert>
-        <el-table v-loading="signonLoading" :data="signonPolicies" border stripe size="small" max-height="200">
-          <template #empty><el-empty description="暂无登录策略" :image-size="40"/></template>
-          <el-table-column prop="name" label="名称" min-width="160"/>
-          <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip/>
-          <el-table-column label="状态" width="80" align="center"><template #default="{ row }"><el-tag :type="row.active?'success':'info'" size="small">{{ row.active ? '启用' : '禁用' }}</el-tag></template></el-table-column>
-        </el-table>
-
-        <!-- Account recovery -->
-        <h4 style="margin:16px 0 8px">账号恢复设置</h4>
-        <el-alert v-if="recoveryError" type="warning" :closable="false" show-icon style="margin-bottom:8px"><template #title>加载失败: {{ recoveryError }}</template><template #default><el-button size="small" text type="primary" @click="loadAccountRecovery">重试</el-button></template></el-alert>
-        <el-form v-loading="recoveryLoading" :inline="true" size="small" style="margin-bottom:8px">
-          <el-form-item label="恢复方式">
-            <el-checkbox-group v-model="recoveryFactors">
-              <el-checkbox label="EMAIL">邮箱</el-checkbox>
-              <el-checkbox label="SMS">短信</el-checkbox>
-              <el-checkbox label="SECURITY_QUESTIONS">安全问题</el-checkbox>
-              <el-checkbox label="PUSH">推送</el-checkbox>
-              <el-checkbox label="TOTP">TOTP</el-checkbox>
-            </el-checkbox-group>
-          </el-form-item>
-          <el-form-item><el-button type="primary" size="small" :loading="recoverySaving" @click="updateAccountRecovery">保存</el-button></el-form-item>
-        </el-form>
-
-        <!-- Audit log -->
-        <el-alert v-if="auditError" type="warning" :closable="false" show-icon style="margin-bottom:8px">
-          <template #title>审计日志加载失败: {{ auditError }}</template>
-          <template #default><el-button size="small" text type="primary" @click="loadAudit(auditDays || 1)">重试</el-button></template>
-        </el-alert>
-        <h4 style="margin:16px 0 8px">审计日志</h4>
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-          <el-button size="small" :type="auditDays===1?'primary':''" @click="loadAudit(1)">今日</el-button>
-          <el-button size="small" :type="auditDays===7?'primary':''" @click="loadAudit(7)">7 天</el-button>
-          <el-button size="small" :type="auditDays===30?'primary':''" @click="loadAudit(30)">30 天</el-button>
-          <el-date-picker v-model="auditDateRange" type="daterange" range-separator="至" start-placeholder="开始" end-placeholder="结束" format="YYYY-MM-DD" value-format="YYYY-MM-DD" size="small" style="width:280px"/>
-          <el-button size="small" type="primary" @click="loadAuditCustom" :loading="auditLoading"><el-icon><Search /></el-icon> 查询</el-button>
-        </div>
-        <el-table v-loading="auditLoading" :data="auditLogs" border stripe size="small" max-height="400" show-overflow-tooltip>
-          <template #empty><el-empty description="暂无审计日志" :image-size="40"/></template>
-          <el-table-column prop="eventTime" label="时间" width="170"/>
-          <el-table-column prop="eventType" label="事件" min-width="200"/>
-          <el-table-column prop="userName" label="用户" width="140"/>
-          <el-table-column prop="userType" label="类型" width="80"/>
-          <el-table-column prop="ipAddress" label="IP" width="130"/>
-          <el-table-column prop="responseStatus" label="状态" width="80"/>
-        </el-table>
-      </el-tab-pane>
-    </el-tabs>
+    </el-collapse>
 
     <!-- Edit name dialog -->
     <el-dialog v-model="editNameVisible" title="设置自定义名称" width="460px" destroy-on-close>
@@ -566,7 +583,7 @@ const router = useRouter()
 const tenantId = Number(route.params.id)
 
 // --- common ---
-const activeTab = ref('overview')
+const activePanels = ref('overview')
 const loading = ref(false)
 const tenant = ref<any>({})
 const syncing = ref(false)
@@ -717,21 +734,45 @@ onMounted(async () => {
   finally { loading.value = false }
 })
 
-function onTabChange(tab: string | number) {
-  const t = String(tab)
-  if (t === 'instances' && !instLoaded.value) loadInstances()
-  if (t === 'costs' && !costLoaded.value) { loadSubscription().then(() => { loadCost(); loadSubscriptionDays() }) }
-  if (t === 'users' && !userLoaded.value) { loadUsers(); loadGroups(); loadPasswordPolicy() }
-  if (t === 'credentials') {
-    if (!userList.value.length) loadUsers().then(() => { if (userList.value.length) { credUserOcid.value = userList.value[0].ocid; loadCredentials() } })
-    else if (!credLoaded.value && credUserOcid.value) loadCredentials()
+function onPanelChange(name: string | number | (string | number)[]) {
+  const panel = Array.isArray(name) ? String(name[0] || '') : String(name || '')
+  if (!panel) return
+  if (panel === 'overview' && !domainsLoaded.value) loadDomains()
+  if (panel === 'instances' && !instLoaded.value) loadInstances()
+  if (panel === 'costs') {
+    if (!costLoaded.value) loadSubscription().then(() => { loadCost(); loadSubscriptionDays() })
+    if (!quotaServices.value.length) loadQuotaServices().then(() => loadQuota())
   }
-  if (t === 'email') loadEmail()
-  if (t === 'social' && !socialLoaded.value) loadSocial()
-  if (t === 'secRules' && !secRulesList.value.length) loadSecRules()
-  if (t === 'settings' && !settingsLoaded.value) { loadMfaStatus(); loadNotifRecipients(); loadQuotaServices().then(() => loadQuota()); loadSignonPolicies(); loadAccountRecovery(); settingsLoaded.value = true }
-  if (t === 'overview' && !domainsLoaded.value) loadDomains()
-  if (t === 'regions') loadRegions()
+  if (panel === 'users') {
+    if (!userLoaded.value) {
+      loadUsers().then(() => {
+        if (userList.value.length) {
+          credUserOcid.value = userList.value[0].ocid
+          loadCredentials()
+        }
+      })
+      loadGroups()
+      loadPasswordPolicy()
+    } else {
+      if (userList.value.length && !credLoaded.value) {
+        if (!credUserOcid.value) credUserOcid.value = userList.value[0].ocid
+        loadCredentials()
+      }
+    }
+  }
+  if (panel === 'security') {
+    loadEmail()
+    if (!socialLoaded.value) loadSocial()
+    if (!secRulesList.value.length) loadSecRules()
+    if (!settingsLoaded.value) {
+      loadMfaStatus()
+      loadNotifRecipients()
+      loadSignonPolicies()
+      loadAccountRecovery()
+      settingsLoaded.value = true
+    }
+  }
+  if (panel === 'regions') loadRegions()
 }
 
 // --- overview actions ---
@@ -1274,4 +1315,7 @@ async function remove() {
 :deep(.el-descriptions) { margin-bottom: 16px; }
 :deep(.el-table) { border-radius: var(--radius-md); overflow: hidden; }
 :deep(.el-table th) { background: var(--bg-raised); font-weight: var(--font-semibold); color: var(--text-primary); }
+.panel-title { font-size: var(--text-md); font-weight: var(--font-semibold); color: var(--text-primary); }
+:deep(.el-collapse-item__header) { font-size: var(--text-md); font-weight: var(--font-semibold); }
+:deep(.el-collapse-item__content) { padding-bottom: var(--space-4); }
 </style>
