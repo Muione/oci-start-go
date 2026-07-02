@@ -482,8 +482,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Refresh, Download, ArrowDown, Search, InfoFilled,
-  VideoPlay, VideoPause, Edit, Connection, Link, Key,
-  Warning, Monitor, Operation, Delete, RefreshRight,
+  Edit, Connection, Link, Key,
+  Warning, Monitor, Operation, Delete,
 } from '@element-plus/icons-vue'
 import request from '../utils/request'
 import ShapeSelect from '../components/ShapeSelect.vue'
@@ -567,14 +567,6 @@ function getStateStatus(state: string): 'up' | 'down' | 'warn' | 'idle' {
   if (s === 'stopped' || s === 'terminated') return 'down'
   if (s === 'starting' || s === 'stopping') return 'warn'
   return 'idle'
-}
-
-function stateDotClass(state: string): string {
-  const s = (state || '').toLowerCase()
-  if (s === 'running') return 'status-dot--up status-dot--pulse'
-  if (s === 'stopped' || s === 'terminated') return 'status-dot--down'
-  if (s === 'starting' || s === 'stopping') return 'status-dot--warn'
-  return 'status-dot--idle'
 }
 
 function stateTagType(state: string): string {
