@@ -16,6 +16,7 @@ sql:
       - internal/repo/queries/tenant_social.sql
       - internal/repo/queries/cloud_tenancy.sql
       - internal/repo/queries/tenant_ext.sql
+      - internal/repo/queries/register_detail.sql
       - internal/repo/queries/multipart_upload.sql
       - internal/repo/queries/email_receive.sql
       - internal/repo/queries/email_body.sql
@@ -31,6 +32,7 @@ sql:
       - migrations/0005_multipart_upload.up.sql
       - migrations/0007_console_connection_timestamp.up.sql
       - migrations/0008_shape_image_cache.up.sql
+      - migrations/0011_subscription_fields.up.sql
     gen:
       go:
         package: "repo"
