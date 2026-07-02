@@ -10,16 +10,21 @@ export function maskedName(n: string): string {
 /** Tag type for the account type badge */
 export function accountTypeTag(t: string | undefined): 'success' | 'warning' | 'info' | '' {
   if (!t) return 'info'
-  if (t.includes('trial') || t.includes('试用')) return 'warning'
-  if (t.includes('paid') || t.includes('付费')) return 'success'
-  if (t.includes('enterprise') || t.includes('企业')) return ''
+  const s = t.toLowerCase()
+  if (s.includes('trial') || s.includes('试用') || s === 'free_tier') return 'warning'
+  if (s.includes('paid') || s.includes('付费') || s === 'payg') return 'success'
+  if (s.includes('enterprise') || s.includes('企业')) return ''
+  if (s === 'free') return 'warning'
   return 'info'
 }
 
 /** Human-readable label for the account type */
 export function accountTypeLabel(t: string | undefined): string {
   if (!t) return '—'
-  const m: Record<string, string> = { trial: '免费试用', paid: '付费账户', enterprise: '企业账户', free: '免费账户' }
+  const m: Record<string, string> = {
+    trial: '免费试用', paid: '付费账户', enterprise: '企业账户', free: '免费账户',
+    FREE_TIER: '免费层', PAYG: '按量付费', PERSONAL: '个人', CORPORATE: '企业',
+  }
   return m[t] || t
 }
 

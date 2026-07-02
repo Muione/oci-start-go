@@ -17,10 +17,11 @@ import (
 type TenantUserService struct {
 	store     *db.Store
 	masterKey []byte
+	pool      *oci.ProxyPool
 }
 
-func NewTenantUserService(store *db.Store, masterKey []byte) *TenantUserService {
-	return &TenantUserService{store: store, masterKey: masterKey}
+func NewTenantUserService(store *db.Store, masterKey []byte, pool *oci.ProxyPool) *TenantUserService {
+	return &TenantUserService{store: store, masterKey: masterKey, pool: pool}
 }
 
 func (s *TenantUserService) getProvider(ctx context.Context, tenantID int64) (oci.Credentials, error) {
@@ -213,23 +214,40 @@ func (s *TenantUserService) UpdateAccountDetail(ctx context.Context, tenantID in
 	if err != nil {
 		return nil, err
 	}
-	// Update the local tenant record with fetched data
+
+	// Fetch subscription info to get real planType (FREE_TIER/PAYG) and timeStart.
+	accountType := detail.AccountType
+	registerTime := time.Now().Format("2006-01-02 15:04:05") // fallback
+	_ = oci.WithProxy(ctx, s.pool, creds, s.masterKey, func(clients oci.Clients) error {
+		subInfo, subErr := oci.GetSubscriptionInfo(ctx, clients, creds.Tenancy)
+		if subErr != nil {
+			return nil // non-fatal
+		}
+		if subInfo.PlanType != "" {
+			accountType = subInfo.PlanType
+		}
+		if subInfo.TimeStart != nil {
+			registerTime = subInfo.TimeStart.Time.Format("2006-01-02 15:04:05")
+		}
+		return nil
+	})
+
+	// Update local tenant record with fetched data
 	err = repo.New(s.store.Write).UpdateTenantFields(ctx, repo.UpdateTenantFieldsParams{
 		TenancyName:  nullStr(detail.TenancyName),
-		AccountType:  nullStr(detail.AccountType),
+		AccountType:  nullStr(accountType),
 		EmailAddress: nullStr(detail.EmailAddress),
 		ID:           tenantID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("update tenant fields: %w", err)
 	}
-	// Also update register_detail with current timestamp for active-days calculation.
-	// The register_time should ideally come from OCI Subscription.getTimeStart(),
-	// but we use the current time as a proxy when fetching tenant details from OCI.
+
+	// Update register_detail with subscription timeStart for active-days calculation.
 	now := time.Now().Format("2006-01-02 15:04:05")
 	_ = repo.New(s.store.Write).UpsertRegisterDetail(ctx, repo.UpsertRegisterDetailParams{
-		TenantID:     creds.UserID, // User OCID == tenant.tenant_id
-		RegisterTime: nullStr(now),
+		TenantID:     creds.UserID,
+		RegisterTime: nullStr(registerTime),
 		CreatedTime:  nullStr(now),
 		UpdatedTime:  nullStr(now),
 	})

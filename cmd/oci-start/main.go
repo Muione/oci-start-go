@@ -321,7 +321,7 @@ func main() {
 	tenantSocialSvc := service.NewTenantSocialService(store)
 
 	// Phase 10 wiring: tenant IAM user management.
-	tenantUserSvc := service.NewTenantUserService(store, masterKey)
+	tenantUserSvc := service.NewTenantUserService(store, masterKey, proxyPool)
 
 	// Phase 11.4 wiring: quota, region subscription, audit log.
 	quotaSvc := service.NewQuotaService(store, masterKey, proxyPool)
