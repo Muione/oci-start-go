@@ -331,8 +331,12 @@ export interface ImageInfo {
   launchMode?: string
 }
 
-/** VPU performance levels */
-export type VpuLevel = 0 | 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 | 110 | 120
+/** VPU performance level option */
+export interface VpuLevel {
+  value: number
+  label: string
+  description: string
+}
 
 /** Object Storage bucket from GET /oci/storage/buckets */
 export interface Bucket {
@@ -772,4 +776,85 @@ export interface CreateJobRequest {
   stackId: string
   operation: 'PLAN' | 'APPLY' | 'DESTROY'
   variables?: Record<string, any>
+}
+
+// ─── Traffic Monitoring ───────────────────────────────────────────────
+
+/** Traffic data from GET /oci/traffic */
+export interface TrafficData {
+  ingressToday: number    // GB
+  egressToday: number     // GB
+  ingressMonth: number    // GB
+  egressMonth: number     // GB
+}
+
+// ─── Boot Volume ──────────────────────────────────────────────────────
+
+/** Boot volume detail from GET /oci/boot-volume */
+export interface BootVolumeDetail {
+  id: string
+  displayName: string
+  sizeInGBs: number
+  vpusPerGB: number
+  lifecycleState: string
+  timeCreated: string
+}
+
+/** Boot volume backup from GET /oci/boot-volume/backup */
+export interface BootVolumeBackup {
+  id: string
+  displayName: string
+  bootVolumeId: string
+  sizeInGBs: number
+  lifecycleState: string
+  timeCreated: string
+}
+
+// ─── VCN ──────────────────────────────────────────────────────────────
+
+/** VCN info from GET /oci/vcn */
+export interface VcnInfo {
+  id: string
+  displayName: string
+  cidrBlock: string
+  dnsLabel: string
+  defaultSecurityListId: string
+  defaultRouteTableId: string
+  timeCreated: string
+}
+
+// ─── NAT Gateway ──────────────────────────────────────────────────────
+
+/** NAT gateway info from GET /oci/nat-gateway */
+export interface NatGatewayInfo {
+  id: string
+  displayName: string
+  vcnId: string
+  lifecycleState: string
+}
+
+// ─── Route Table ──────────────────────────────────────────────────────
+
+/** Route table info from GET /oci/route-table */
+export interface RouteTableInfo {
+  id: string
+  displayName: string
+  vcnId: string
+  routeRules: RouteRuleInfo[]
+}
+
+/** Route rule within a route table */
+export interface RouteRuleInfo {
+  destination: string
+  destinationType: string
+  networkEntityId: string
+}
+
+// ─── IPv6 ─────────────────────────────────────────────────────────────
+
+/** IPv6 address info from GET /oci/ipv6 */
+export interface Ipv6Info {
+  id: string
+  ipAddress: string
+  vnicId: string
 }
