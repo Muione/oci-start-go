@@ -48,6 +48,14 @@
         :status-text="engineRunning ? '运行中' : '已停止'"
         link="/boot"
       />
+      <StatusCard
+        :value="stats.backupCount ?? 0"
+        label="备份数量"
+        :icon="CopyDocument"
+        status="idle"
+        status-text="已配置"
+        link="/instances"
+      />
     </div>
 
     <!-- Engine + Channels -->
@@ -143,7 +151,8 @@ import {
   Refresh, Monitor, User,
   SetUp, Bell, Link, InfoFilled, ArrowRight,
   ChatDotRound, Message, Notification,
-  Platform, Share, Setting, Promotion, VideoCamera, Warning
+  Platform, Share, Setting, Promotion, VideoCamera, Warning,
+  CopyDocument
 } from '@element-plus/icons-vue'
 import PageHeader from '../components/common/PageHeader.vue'
 import StatusCard from '../components/common/StatusCard.vue'
@@ -272,7 +281,7 @@ onMounted(loadAll)
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-4);
   margin-bottom: var(--space-6);
 }

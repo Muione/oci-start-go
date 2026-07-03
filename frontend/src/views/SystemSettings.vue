@@ -244,9 +244,16 @@
               <template #header>
                 <div class="channel-header">
                   <span>📋 通知历史</span>
-                  <el-button size="small" text @click="loadNotificationHistory" :loading="historyLoading">
-                    <el-icon><Refresh /></el-icon>
-                  </el-button>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <el-select v-model="notifChannelFilter" placeholder="全部频道" clearable @change="loadNotificationHistory" style="width: 160px;">
+                      <el-option label="全部" value="" />
+                      <el-option label="Email" value="email" />
+                      <el-option label="Webhook" value="webhook" />
+                    </el-select>
+                    <el-button size="small" text @click="loadNotificationHistory" :loading="historyLoading">
+                      <el-icon><Refresh /></el-icon>
+                    </el-button>
+                  </div>
                 </div>
               </template>
               <el-table :data="notificationHistory" size="small" max-height="300">
@@ -735,6 +742,7 @@ const testingChannel = ref('')
 const testingAllChannels = ref(false)
 const notificationsDisabled = ref(false)
 const historyLoading = ref(false)
+const notifChannelFilter = ref('')
 const notificationHistory = ref<Array<{ time: string; channel: string; message: string; success: boolean }>>([])
 
 // Login history state (mock data for now)
@@ -930,10 +938,10 @@ async function disableAllNotifications() {
 async function loadNotificationHistory() {
   historyLoading.value = true
   try {
-    const data = await request.get('/system/notification/history') as any
-    if (Array.isArray(data)) {
-      notificationHistory.value = data
-    }
+    const params: any = {}
+    if (notifChannelFilter.value) params.channel = notifChannelFilter.value
+    const res = await request.get('/system/notification/history', { params }) as { history: any[] }
+    notificationHistory.value = res.history ?? []
   } catch {
     // Use empty state when API is not available
   } finally {
