@@ -129,5 +129,8 @@ UPDATE instance_detail SET username = ?, port = ?, password = ? WHERE id = ?;
 -- name: UpdateInstanceDetailVpusPerGb :exec
 UPDATE instance_detail SET vpus_per_gb = ? WHERE id = ?;
 
+-- name: UpdateInstanceDetailBootVolumeSize :exec
+UPDATE instance_detail SET boot_volume_size_in_gbs = ? WHERE id = ?;
+
 -- name: DeleteInstanceTrafficByTenantId :exec
 DELETE FROM instance_traffic WHERE tenant_id = ?;

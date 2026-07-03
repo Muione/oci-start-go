@@ -708,6 +708,20 @@ func (q *Queries) UpdateInstanceConnTime(ctx context.Context, arg UpdateInstance
 	return err
 }
 
+const updateInstanceDetailBootVolumeSize = `-- name: UpdateInstanceDetailBootVolumeSize :exec
+UPDATE instance_detail SET boot_volume_size_in_gbs = ? WHERE id = ?
+`
+
+type UpdateInstanceDetailBootVolumeSizeParams struct {
+	BootVolumeSizeInGbs sql.NullInt64 `json:"boot_volume_size_in_gbs"`
+	ID                  int64         `json:"id"`
+}
+
+func (q *Queries) UpdateInstanceDetailBootVolumeSize(ctx context.Context, arg UpdateInstanceDetailBootVolumeSizeParams) error {
+	_, err := q.db.ExecContext(ctx, updateInstanceDetailBootVolumeSize, arg.BootVolumeSizeInGbs, arg.ID)
+	return err
+}
+
 const updateInstanceDetailIpv6 = `-- name: UpdateInstanceDetailIpv6 :exec
 UPDATE instance_detail SET ipv6_addresses = ? WHERE id = ?
 `

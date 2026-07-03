@@ -59,6 +59,22 @@ func UpdateVolumeVpu(ctx context.Context, c Clients, volumeID string, vpusPerGB 
 	return &resp.Volume, nil
 }
 
+// ResizeBootVolume resizes a boot volume to the specified size in GBs.
+// The new size must be larger than the current size (OCI does not support
+// shrinking boot volumes). Parity with Java OciUtils.resizeBootVolume.
+func ResizeBootVolume(ctx context.Context, c Clients, bootVolumeID string, sizeInGBs int64) (*core.BootVolume, error) {
+	resp, err := c.Blockstorage.UpdateBootVolume(ctx, core.UpdateBootVolumeRequest{
+		BootVolumeId: common.String(bootVolumeID),
+		UpdateBootVolumeDetails: core.UpdateBootVolumeDetails{
+			SizeInGBs: common.Int64(sizeInGBs),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resize boot volume %s to %d GB: %w", bootVolumeID, sizeInGBs, err)
+	}
+	return &resp.BootVolume, nil
+}
+
 // GetBootVolumeClients fetches a boot volume by OCID using the Clients wrapper.
 func GetBootVolumeClients(ctx context.Context, c Clients, bootVolumeID string) (*core.BootVolume, error) {
 	resp, err := c.Blockstorage.GetBootVolume(ctx, core.GetBootVolumeRequest{

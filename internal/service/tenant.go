@@ -127,7 +127,7 @@ func (s *TenantService) Save(ctx context.Context, in SaveInput) error {
 	// makes active-days fall back to created_at, and GetSubscriptionDetail fall
 	// back to live OCI (correct subscription start) until the first sync.
 	_ = repo.New(s.store.Write).UpsertRegisterDetail(ctx, repo.UpsertRegisterDetailParams{
-		TenantID:     in.TenantID,
+		TenantID:     nullStr(in.TenantID),
 		CloudType:    nullInt64(cloudType),
 		CreatedTime:  nullStr(now),
 		UpdatedTime:  nullStr(now),
@@ -313,7 +313,7 @@ func (s *TenantService) GetFull(ctx context.Context, id int64) (TenantFullResp, 
 func (s *TenantService) calculateTenantActiveDays(ctx context.Context, t repo.FindTenantFullByIDRow) string {
 	tenantID := ns(t.TenantID)
 	if tenantID != "" {
-		if rd, err := repo.New(s.store.Read).FindRegisterDetailByTenantId(ctx, tenantID); err == nil {
+		if rd, err := repo.New(s.store.Read).FindRegisterDetailByTenantId(ctx, nullStr(tenantID)); err == nil {
 			return calculateActiveDays(ns(rd.RegisterTime))
 		}
 	}

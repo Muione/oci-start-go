@@ -98,6 +98,10 @@ type Querier interface {
 	// VpnProxyRecord queries (Phase 3 SOCKS proxy pool). Random available pick
 	// parity with VpnProxyRecordRepository.findRandomAvailableRecord.
 	FindRandomAvailableProxy(ctx context.Context) (VpnProxyRecord, error)
+	// RegisterDetail queries (Phase 9). register_detail stores OCI subscription
+	// information including register_time (timeStart) used for active-days calculation.
+	// ALL COMMENTS MUST BE ASCII-ONLY.
+	FindRegisterDetailByTenantId(ctx context.Context, tenantID sql.NullString) (FindRegisterDetailByTenantIdRow, error)
 	// Replaces the inline SELECT in cmd/oci-start/main.go wsHub.Rescue.SetDeps.
 	// Returns: instance_id, display_name, state, boot_volume_id, shape,
 	// availability_domain, compartment_id, public_ips, username, password.
@@ -193,6 +197,7 @@ type Querier interface {
 	UpdateEmailBodyTotals(ctx context.Context, arg UpdateEmailBodyTotalsParams) error
 	UpdateEmailSendRecordState(ctx context.Context, arg UpdateEmailSendRecordStateParams) error
 	UpdateInstanceConnTime(ctx context.Context, arg UpdateInstanceConnTimeParams) error
+	UpdateInstanceDetailBootVolumeSize(ctx context.Context, arg UpdateInstanceDetailBootVolumeSizeParams) error
 	UpdateInstanceDetailIpv6(ctx context.Context, arg UpdateInstanceDetailIpv6Params) error
 	UpdateInstanceDetailPublicIp(ctx context.Context, arg UpdateInstanceDetailPublicIpParams) error
 	UpdateInstanceDetailRemark(ctx context.Context, arg UpdateInstanceDetailRemarkParams) error
@@ -220,6 +225,7 @@ type Querier interface {
 	UpsertConfigEnabled(ctx context.Context, arg UpsertConfigEnabledParams) error
 	UpsertConfigValue(ctx context.Context, arg UpsertConfigValueParams) error
 	UpsertImageCache(ctx context.Context, arg UpsertImageCacheParams) error
+	UpsertRegisterDetail(ctx context.Context, arg UpsertRegisterDetailParams) error
 	UpsertShapeCache(ctx context.Context, arg UpsertShapeCacheParams) error
 	UpsertTenantEmailConfig(ctx context.Context, arg UpsertTenantEmailConfigParams) error
 	UpsertTenantEmailConfigFull(ctx context.Context, arg UpsertTenantEmailConfigFullParams) error

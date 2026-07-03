@@ -252,7 +252,7 @@ func (s *TenantUserService) UpdateAccountDetail(ctx context.Context, tenantID in
 		now := time.Now().Format("2006-01-02 15:04:05")
 		var registerTime string
 		// Check existing value first.
-		if rd, e := repo.New(s.store.Read).FindRegisterDetailByTenantId(ctx, creds.UserID); e == nil {
+		if rd, e := repo.New(s.store.Read).FindRegisterDetailByTenantId(ctx, nullStr(creds.UserID)); e == nil {
 			registerTime = ns(rd.RegisterTime)
 		}
 		// Prefer real subscription timeStart.
@@ -266,7 +266,7 @@ func (s *TenantUserService) UpdateAccountDetail(ctx context.Context, tenantID in
 			}
 		}
 		regParams := repo.UpsertRegisterDetailParams{
-			TenantID:                creds.UserID,
+			TenantID:                nullStr(creds.UserID),
 			RegisterTime:            nullStr(registerTime),
 			CreatedTime:             nullStr(now),
 			UpdatedTime:             nullStr(now),

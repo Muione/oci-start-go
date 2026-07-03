@@ -161,6 +161,81 @@ func instanceUpdateVpu(deps *Deps) gin.HandlerFunc {
 	}
 }
 
+// instanceBootVolumeResize resizes the boot volume of an instance.
+// The new size must be larger than the current size (OCI does not support shrinking).
+// POST /instances/:id/resize  {sizeInGBs: 100}
+func instanceBootVolumeResize(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid id")
+			return
+		}
+		var body struct {
+			SizeInGBs int64 `json:"sizeInGBs"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid body")
+			return
+		}
+		if body.SizeInGBs <= 0 {
+			response.Fail(c, http.StatusBadRequest, "sizeInGBs must be positive")
+			return
+		}
+
+		inst, err := deps.InstanceSvc.GetByID(c.Request.Context(), id)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "instance not found")
+			return
+		}
+		if inst.BootVolumeID == "" {
+			response.Fail(c, http.StatusBadRequest, "instance has no boot volume ID")
+			return
+		}
+		if body.SizeInGBs <= inst.BootVolumeSizeInGbs {
+			response.Fail(c, http.StatusBadRequest, "new size must be larger than current size")
+			return
+		}
+
+		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), inst.TenantID)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "tenant not found")
+			return
+		}
+		creds := tenantToCreds(t)
+		prov, err := oci.NewProvider(creds, deps.MasterKey)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
+			return
+		}
+		clients, err := oci.NewClients(prov)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			return
+		}
+
+		bv, err := oci.ResizeBootVolume(c.Request.Context(), clients, inst.BootVolumeID, body.SizeInGBs)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "resize boot volume: "+err.Error())
+			return
+		}
+
+		// Update local DB
+		_ = repo.New(deps.Store.Write).UpdateInstanceDetailBootVolumeSize(c.Request.Context(), repo.UpdateInstanceDetailBootVolumeSizeParams{
+			BootVolumeSizeInGbs: nullInt64(body.SizeInGBs),
+			ID:                  id,
+		})
+
+		sizeVal := int64(0)
+		if bv.SizeInGBs != nil {
+			sizeVal = *bv.SizeInGBs
+		}
+		response.OK(c, response.SuccessData(map[string]any{
+			"bootVolumeSizeInGbs": sizeVal,
+		}))
+	}
+}
+
 // instanceRestart stops then starts an instance (reset).
 // POST /instances/:id/restart
 func instanceRestart(deps *Deps) gin.HandlerFunc {

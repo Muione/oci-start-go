@@ -11,6 +11,7 @@ import (
 )
 
 const findRegisterDetailByTenantId = `-- name: FindRegisterDetailByTenantId :one
+
 SELECT id, tenant_prv_id, tenant_id, account_type, plan_type, register_time,
        city, country, email_address, first_name, last_name, line1, postal_code,
        subscription_plan_number, upgrade_state, currency_code, is_intent_to_pay,
@@ -19,9 +20,35 @@ FROM register_detail
 WHERE tenant_id = ?
 `
 
-func (q *Queries) FindRegisterDetailByTenantId(ctx context.Context, tenantID string) (RegisterDetail, error) {
+type FindRegisterDetailByTenantIdRow struct {
+	ID                     int64          `json:"id"`
+	TenantPrvID            sql.NullInt64  `json:"tenant_prv_id"`
+	TenantID               sql.NullString `json:"tenant_id"`
+	AccountType            sql.NullInt64  `json:"account_type"`
+	PlanType               sql.NullInt64  `json:"plan_type"`
+	RegisterTime           sql.NullString `json:"register_time"`
+	City                   sql.NullString `json:"city"`
+	Country                sql.NullString `json:"country"`
+	EmailAddress           sql.NullString `json:"email_address"`
+	FirstName              sql.NullString `json:"first_name"`
+	LastName               sql.NullString `json:"last_name"`
+	Line1                  sql.NullString `json:"line1"`
+	PostalCode             sql.NullString `json:"postal_code"`
+	SubscriptionPlanNumber sql.NullString `json:"subscription_plan_number"`
+	UpgradeState           sql.NullString `json:"upgrade_state"`
+	CurrencyCode           sql.NullString `json:"currency_code"`
+	IsIntentToPay          sql.NullInt64  `json:"is_intent_to_pay"`
+	CreatedTime            sql.NullString `json:"created_time"`
+	UpdatedTime            sql.NullString `json:"updated_time"`
+	CloudType              sql.NullInt64  `json:"cloud_type"`
+}
+
+// RegisterDetail queries (Phase 9). register_detail stores OCI subscription
+// information including register_time (timeStart) used for active-days calculation.
+// ALL COMMENTS MUST BE ASCII-ONLY.
+func (q *Queries) FindRegisterDetailByTenantId(ctx context.Context, tenantID sql.NullString) (FindRegisterDetailByTenantIdRow, error) {
 	row := q.db.QueryRowContext(ctx, findRegisterDetailByTenantId, tenantID)
-	var i RegisterDetail
+	var i FindRegisterDetailByTenantIdRow
 	err := row.Scan(
 		&i.ID,
 		&i.TenantPrvID,
@@ -58,7 +85,7 @@ INSERT OR REPLACE INTO register_detail (
 
 type UpsertRegisterDetailParams struct {
 	TenantPrvID            sql.NullInt64  `json:"tenant_prv_id"`
-	TenantID               string         `json:"tenant_id"`
+	TenantID               sql.NullString `json:"tenant_id"`
 	AccountType            sql.NullInt64  `json:"account_type"`
 	PlanType               sql.NullInt64  `json:"plan_type"`
 	RegisterTime           sql.NullString `json:"register_time"`

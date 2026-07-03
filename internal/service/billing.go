@@ -37,7 +37,7 @@ func (s *BillingService) GetSubscriptionDetail(ctx context.Context, tenantID int
 	creds := tenantToCreds(t)
 
 	// Try DB first.
-	rd, err := repo.New(s.store.Read).FindRegisterDetailByTenantId(ctx, creds.UserID)
+	rd, err := repo.New(s.store.Read).FindRegisterDetailByTenantId(ctx, nullStr(creds.UserID))
 	if err == nil && rd.RegisterTime.Valid && rd.RegisterTime.String != "" {
 		return subscriptionFromDB(t, rd), nil
 	}
@@ -57,7 +57,7 @@ func (s *BillingService) GetSubscriptionDetail(ctx context.Context, tenantID int
 	// the subscription start).
 	now := time.Now().Format("2006-01-02 15:04:05")
 	regParams := repo.UpsertRegisterDetailParams{
-		TenantID:               creds.UserID,
+		TenantID:               nullStr(creds.UserID),
 		EmailAddress:           nullStr(result.EmailAddress),
 		SubscriptionPlanNumber: nullStr(result.SubscriptionPlanNumber),
 		UpgradeState:           nullStr(result.UpgradeState),
@@ -74,7 +74,7 @@ func (s *BillingService) GetSubscriptionDetail(ctx context.Context, tenantID int
 }
 
 // subscriptionFromDB builds a SubscriptionInfo from persisted tenant + register_detail.
-func subscriptionFromDB(t repo.Tenant, rd repo.RegisterDetail) *oci.SubscriptionInfo {
+func subscriptionFromDB(t repo.Tenant, rd repo.FindRegisterDetailByTenantIdRow) *oci.SubscriptionInfo {
 	info := &oci.SubscriptionInfo{
 		PlanType:               ns(t.AccountType),
 		AccountType:            ns(t.AccountType), // account type = plan type per product decision

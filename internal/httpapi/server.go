@@ -155,6 +155,7 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/instances/:id/enable-ipv6", instanceEnableIPv6(deps))
 	pro.POST("/instances/:id/restart", instanceRestart(deps))
 	pro.POST("/instances/:id/vpu", instanceUpdateVpu(deps))
+	pro.POST("/instances/:id/resize", instanceBootVolumeResize(deps))
 	pro.GET("/instances/:id/ssh-config", instanceGetSSHConfig(deps))
 	pro.POST("/instances/:id/ssh-config", instanceSaveSSHConfig(deps))
 	pro.GET("/instances/:id/console-connections", instanceConsoleConnectionsList(deps))
