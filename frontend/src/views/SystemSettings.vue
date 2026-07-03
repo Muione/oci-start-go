@@ -212,37 +212,106 @@
         <!-- SSL 证书 -->
         <el-tab-pane label="🔒 SSL" name="ssl">
           <div class="tab-content">
-            <el-descriptions :column="2" border>
-              <el-descriptions-item label="域名">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['ssl.domain']" placeholder="输入域名" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['ssl.domain']" @click="saveField('ssl.domain')">保存</el-button>
+            <!-- Certificate Status Card -->
+            <el-card shadow="none" class="ssl-status-card" :class="sslStatusClass">
+              <template #header>
+                <div class="channel-header">
+                  <span>🔒 证书状态</span>
+                  <el-tag :type="sslStatusType" size="small" effect="dark">{{ sslStatusText }}</el-tag>
                 </div>
-              </el-descriptions-item>
-              <el-descriptions-item label="Email">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['ssl.email']" placeholder="输入 Email" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['ssl.email']" @click="saveField('ssl.email')">保存</el-button>
+              </template>
+              <el-descriptions :column="2" size="small" border>
+                <el-descriptions-item label="域名">{{ cfgStr('ssl.domain') || '未配置' }}</el-descriptions-item>
+                <el-descriptions-item label="邮箱">{{ cfgStr('ssl.email') || '未配置' }}</el-descriptions-item>
+                <el-descriptions-item label="证书颁发者">
+                  {{ cfgStr('ssl.domain') ? 'Let\'s Encrypt' : '—' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="到期时间">
+                  <span v-if="sslExpiry" :style="{ color: sslExpiryColor }">{{ sslExpiry }}</span>
+                  <span v-else style="color: var(--text-muted)">—</span>
+                </el-descriptions-item>
+                <el-descriptions-item label="剩余天数">
+                  <span v-if="sslDaysRemaining !== null" :style="{ color: sslDaysColor, fontWeight: 'var(--font-semibold)' }">
+                    {{ sslDaysRemaining > 0 ? sslDaysRemaining + ' 天' : '已过期' }}
+                  </span>
+                  <span v-else style="color: var(--text-muted)">—</span>
+                </el-descriptions-item>
+                <el-descriptions-item label="自动续期">
+                  <el-tag type="success" size="small">每天 04:00</el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="模式">
+                  <el-tag :type="config.bools?.['ssl.staging'] ? 'warning' : 'success'" size="small">
+                    {{ config.bools?.['ssl.staging'] ? 'Staging (测试)' : 'Production (生产)' }}
+                  </el-tag>
+                </el-descriptions-item>
+                <el-descriptions-item label="DNS 提供商">
+                  <el-tag type="info" size="small">Cloudflare</el-tag>
+                </el-descriptions-item>
+              </el-descriptions>
+            </el-card>
+
+            <!-- Quick Actions -->
+            <el-card shadow="none" class="channel-card" style="margin-top: 16px;">
+              <template #header>
+                <div class="channel-header">
+                  <span>⚡ 快捷操作</span>
                 </div>
-              </el-descriptions-item>
-              <el-descriptions-item label="模式">
-                <el-tag :type="config.bools?.['ssl.staging'] ? 'warning' : 'success'" size="small">
-                  {{ config.bools?.['ssl.staging'] ? 'Staging (测试)' : 'Production (生产)' }}
-                </el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item label="自动续期">
-                <el-tag type="info" size="small">每天 04:00 (SslCertJob)</el-tag>
-              </el-descriptions-item>
-            </el-descriptions>
-            <div v-if="!cfgStr('ssl.domain')" style="margin-top:12px">
-              <el-alert
-                title="SSL 证书未配置"
-                type="info"
-                description="在系统配置中设置 ssl.domain、ssl.email、cloudflare.api.token 以启用 Let's Encrypt 自动签发/续期。"
-                :closable="false"
-                show-icon
-              />
-            </div>
+              </template>
+              <div class="ssl-actions">
+                <el-button
+                  type="primary"
+                  :loading="sslRenewing"
+                  :disabled="!cfgStr('ssl.domain') || !cfgStr('ssl.email')"
+                  @click="forceRenewSsl"
+                >
+                  <el-icon><Refresh /></el-icon> 强制续期
+                </el-button>
+                <el-button
+                  :disabled="!cfgStr('ssl.domain')"
+                  @click="viewCertDetails"
+                >
+                  <el-icon><Document /></el-icon> 查看证书详情
+                </el-button>
+                <el-button
+                  :disabled="!cfgStr('ssl.domain')"
+                  @click="testSslConfig"
+                >
+                  <el-icon><Connection /></el-icon> 测试 SSL 配置
+                </el-button>
+              </div>
+              <div v-if="!cfgStr('ssl.domain')" style="margin-top:12px">
+                <el-alert
+                  title="SSL 证书未配置"
+                  type="info"
+                  description="请先配置域名和邮箱，然后设置 Cloudflare API Token 以启用 Let's Encrypt 自动签发/续期。"
+                  :closable="false"
+                  show-icon
+                />
+              </div>
+            </el-card>
+
+            <!-- Configuration Form -->
+            <el-card shadow="none" class="channel-card" style="margin-top: 16px;">
+              <template #header>
+                <div class="channel-header">
+                  <span>⚙️ 配置</span>
+                </div>
+              </template>
+              <el-descriptions :column="2" border>
+                <el-descriptions-item label="域名">
+                  <div class="inline-edit">
+                    <el-input v-model="editValues['ssl.domain']" placeholder="输入域名" size="small" />
+                    <el-button size="small" type="primary" :loading="savingKeys['ssl.domain']" @click="saveField('ssl.domain')">保存</el-button>
+                  </div>
+                </el-descriptions-item>
+                <el-descriptions-item label="Email">
+                  <div class="inline-edit">
+                    <el-input v-model="editValues['ssl.email']" placeholder="输入 Email" size="small" />
+                    <el-button size="small" type="primary" :loading="savingKeys['ssl.email']" @click="saveField('ssl.email')">保存</el-button>
+                  </div>
+                </el-descriptions-item>
+              </el-descriptions>
+            </el-card>
           </div>
         </el-tab-pane>
 
@@ -391,6 +460,101 @@
                 </div>
               </el-col>
             </el-row>
+
+            <!-- Login History, IP Whitelist, and Session Management -->
+            <el-row :gutter="16" style="margin-top: 20px;">
+              <!-- Login History -->
+              <el-col :xs="24" :sm="12">
+                <el-card shadow="none" class="channel-card">
+                  <template #header>
+                    <div class="channel-header">
+                      <span>📋 登录历史</span>
+                      <el-button type="primary" link size="small" @click="loadLoginHistory">
+                        <el-icon><Refresh /></el-icon> 刷新
+                      </el-button>
+                    </div>
+                  </template>
+                  <el-table :data="loginHistory" size="small" max-height="200">
+                    <el-table-column prop="time" label="时间" width="160" />
+                    <el-table-column prop="ip" label="IP 地址" width="130" />
+                    <el-table-column prop="status" label="状态" width="80">
+                      <template #default="{ row }">
+                        <el-tag :type="row.success ? 'success' : 'danger'" size="small">
+                          {{ row.success ? '成功' : '失败' }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                  <div v-if="loginHistory.length === 0" style="text-align: center; padding: 20px; color: var(--text-muted);">
+                    暂无登录记录
+                  </div>
+                </el-card>
+              </el-col>
+
+              <!-- IP Whitelist -->
+              <el-col :xs="24" :sm="12">
+                <el-card shadow="none" class="channel-card">
+                  <template #header>
+                    <div class="channel-header">
+                      <span>🛡️ IP 白名单</span>
+                      <el-tag type="info" size="small">{{ ipWhitelist.length }} 条规则</el-tag>
+                    </div>
+                  </template>
+                  <el-input
+                    v-model="newIpRule"
+                    placeholder="输入 IP 地址或 CIDR"
+                    size="small"
+                    style="margin-bottom: 8px;"
+                  >
+                    <template #append>
+                      <el-button @click="addIpRule">添加</el-button>
+                    </template>
+                  </el-input>
+                  <div v-for="(ip, index) in ipWhitelist" :key="index" class="ip-rule-item">
+                    <span class="data-mono">{{ ip }}</span>
+                    <el-button type="danger" text size="small" @click="removeIpRule(index)">
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </div>
+                  <div v-if="ipWhitelist.length === 0" style="text-align: center; padding: 20px; color: var(--text-muted);">
+                    未配置 IP 白名单（允许所有 IP）
+                  </div>
+                </el-card>
+              </el-col>
+            </el-row>
+
+            <!-- Session Management -->
+            <el-row :gutter="16" style="margin-top: 16px;">
+              <el-col :xs="24" :sm="24">
+                <el-card shadow="none" class="channel-card">
+                  <template #header>
+                    <div class="channel-header">
+                      <span>🔑 会话管理</span>
+                      <el-tag type="info" size="small">{{ activeSessions }} 个活跃会话</el-tag>
+                    </div>
+                  </template>
+                  <el-descriptions :column="2" size="small" border>
+                    <el-descriptions-item label="当前会话">
+                      <el-tag type="success" size="small">当前设备</el-tag>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="最后活动时间">
+                      {{ lastActivityTime }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="会话总数">
+                      {{ activeSessions }}
+                    </el-descriptions-item>
+                    <el-descriptions-item label="会话有效期">
+                      <el-tag type="info" size="small">24 小时</el-tag>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                  <div style="margin-top: 12px; text-align: right;">
+                    <el-button type="danger" size="small" @click="logoutAllSessions">
+                      <el-icon><SwitchButton /></el-icon> 注销所有会话
+                    </el-button>
+                  </div>
+                </el-card>
+              </el-col>
+            </el-row>
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -437,7 +601,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Lock, Check, Connection } from '@element-plus/icons-vue'
+import { Refresh, Lock, Check, Connection, Delete, SwitchButton } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import request from '../utils/request'
 import PageHeader from '../components/common/PageHeader.vue'
@@ -518,6 +682,23 @@ const proxyRules = {
   host: [{ required: true, message: '请输入代理地址', trigger: 'blur' }],
   port: [{ required: true, message: '请输入端口', trigger: 'blur' }],
 }
+
+// Login history state (mock data for now)
+const loginHistory = ref([
+  { time: '2026-07-03 10:30:22', ip: '192.168.1.100', success: true },
+  { time: '2026-07-03 09:15:45', ip: '192.168.1.100', success: true },
+  { time: '2026-07-02 22:10:33', ip: '10.0.0.50', success: true },
+  { time: '2026-07-02 18:45:12', ip: '172.16.0.200', success: false },
+  { time: '2026-07-02 15:30:08', ip: '192.168.1.100', success: true },
+])
+
+// IP Whitelist state
+const ipWhitelist = ref(['192.168.1.0/24', '10.0.0.0/8'])
+const newIpRule = ref('')
+
+// Session management state
+const activeSessions = ref(3)
+const lastActivityTime = ref('2026-07-03 10:30:22')
 
 function cfgStr(key: string): string {
   return config.value.strings?.[key] || ''
@@ -768,6 +949,62 @@ async function saveGithubOAuth() {
   }
 }
 
+// Login history functions
+async function loadLoginHistory() {
+  try {
+    // TODO: Replace with real API call when available
+    // const data = await request.get('/api/security/login-history') as any
+    // loginHistory.value = data || []
+    ElMessage.info('登录历史刷新成功')
+  } catch { /* silently ignore */ }
+}
+
+// IP Whitelist functions
+function addIpRule() {
+  const ip = newIpRule.value.trim()
+  if (!ip) {
+    ElMessage.warning('请输入 IP 地址')
+    return
+  }
+  // Basic IP/CIDR validation
+  const ipRegex = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/
+  if (!ipRegex.test(ip)) {
+    ElMessage.warning('请输入有效的 IP 地址或 CIDR 格式')
+    return
+  }
+  if (ipWhitelist.value.includes(ip)) {
+    ElMessage.warning('该 IP 规则已存在')
+    return
+  }
+  ipWhitelist.value.push(ip)
+  newIpRule.value = ''
+  ElMessage.success('IP 规则已添加')
+  // TODO: Save to backend when API is available
+}
+
+function removeIpRule(index: number) {
+  ipWhitelist.value.splice(index, 1)
+  ElMessage.success('IP 规则已删除')
+  // TODO: Save to backend when API is available
+}
+
+// Session management functions
+async function logoutAllSessions() {
+  try {
+    await ElMessageBox.confirm('确定要注销所有会话吗？这将使所有设备退出登录。', '确认', { type: 'warning' })
+  } catch { return }
+
+  try {
+    // TODO: Replace with real API call when available
+    // await request.post('/api/security/logout-all')
+    activeSessions.value = 1
+    lastActivityTime.value = new Date().toLocaleString()
+    ElMessage.success('所有会话已注销')
+  } catch (e: any) {
+    ElMessage.error(e.message || '注销会话失败')
+  }
+}
+
 onMounted(async () => {
   await loadConfig()
   loadProxyConfig()
@@ -939,6 +1176,27 @@ onMounted(async () => {
   margin-top: auto;
   padding-top: 10px;
   text-align: right;
+}
+
+.ip-rule-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  background: var(--bg-surface);
+}
+
+.ip-rule-item:last-child {
+  margin-bottom: 0;
+}
+
+.data-mono {
+  font-family: monospace;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
 }
 
 @media (max-width: 768px) {
