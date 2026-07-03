@@ -207,6 +207,7 @@ func NewServer(deps *Deps) *gin.Engine {
 
 	// Notification test API.
 	pro.POST("/system/notification/test", notificationTest(deps))
+	pro.GET("/system/notification/history", notificationHistory(deps))
 
 	// Cloudflare DNS management (Phase 7).
 	pro.GET("/dns/cloudflare/zones", cloudflareZones(deps))

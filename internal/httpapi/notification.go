@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
@@ -82,6 +83,59 @@ func notificationTest(deps *Deps) gin.HandlerFunc {
 			"success": true,
 			"message": "测试通知已发送",
 		}))
+	}
+}
+
+// notificationHistoryResp represents a notification history entry.
+type notificationHistoryResp struct {
+	ID           int64  `json:"id"`
+	Channel      string `json:"channel"`
+	Message      string `json:"message"`
+	Success      bool   `json:"success"`
+	ErrorMessage string `json:"error_message,omitempty"`
+	CreatedAt    string `json:"created_at"`
+}
+
+// GET /system/notification/history — protected. Returns notification history.
+func notificationHistory(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		channel := c.Query("channel")
+		limit := 50
+		if l, err := strconv.Atoi(c.DefaultQuery("limit", "50")); err == nil && l > 0 && l <= 200 {
+			limit = l
+		}
+
+		query := "SELECT id, channel, message, success, error_message, created_at FROM notification_history WHERE 1=1"
+		args := []interface{}{}
+
+		if channel != "" {
+			query += " AND channel = ?"
+			args = append(args, channel)
+		}
+
+		query += " ORDER BY created_at DESC LIMIT ?"
+		args = append(args, limit)
+
+		rows, err := deps.Store.Read.QueryContext(ctx, query, args...)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "查询失败")
+			return
+		}
+		defer rows.Close()
+
+		history := []notificationHistoryResp{}
+		for rows.Next() {
+			var item notificationHistoryResp
+			var success int
+			if err := rows.Scan(&item.ID, &item.Channel, &item.Message, &success, &item.ErrorMessage, &item.CreatedAt); err != nil {
+				continue
+			}
+			item.Success = success == 1
+			history = append(history, item)
+		}
+
+		response.OK(c, response.SuccessData(gin.H{"history": history}))
 	}
 }
 
