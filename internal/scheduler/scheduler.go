@@ -156,6 +156,12 @@ func (s *Scheduler) registerJobs() {
 		s.multipartCleanupJob()
 	})
 
+	// NotificationHistoryCleanupJob: daily at 03:00 — prune notification_history
+	// to the latest 1000 rows.
+	s.addFunc("NotificationHistoryCleanupJob", "0 0 3 * * *", func() {
+		s.cleanupNotificationHistory()
+	})
+
 	s.logger.Info().Int("jobs", len(s.cron.Entries())).Msg("scheduler: jobs registered")
 }
 
@@ -238,6 +244,23 @@ func (s *Scheduler) monitorHeartbeatJob() {
 			Type: "heartbeat",
 		})
 		s.logger.Debug().Int("clients", count).Msg("scheduler: monitor heartbeat broadcast")
+	}
+}
+
+// cleanupNotificationHistory deletes old notification records, keeping only
+// the latest 1000 rows. Prevents unbounded growth of the notification_history
+// table (introduced in migration 0014).
+func (s *Scheduler) cleanupNotificationHistory() {
+	ctx := context.Background()
+	result, err := s.store.Write.ExecContext(ctx,
+		`DELETE FROM notification_history WHERE id NOT IN (SELECT id FROM notification_history ORDER BY id DESC LIMIT 1000)`)
+	if err != nil {
+		s.logger.Error().Err(err).Msg("cleanup notification history failed")
+		return
+	}
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected > 0 {
+		s.logger.Info().Int64("deleted", rowsAffected).Msg("cleaned up old notification records")
 	}
 }
 
