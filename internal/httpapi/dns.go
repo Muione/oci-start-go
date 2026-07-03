@@ -24,21 +24,27 @@ func sslList(deps *Deps) gin.HandlerFunc {
 		domain := deps.SysConf.GetString(ctx, "ssl.domain")
 		email := deps.SysConf.GetString(ctx, "ssl.email")
 		staging := deps.SysConf.GetBool(ctx, "ssl.staging")
+		notAfter := deps.SysConf.GetString(ctx, "ssl.notAfter")
 
 		certs := []gin.H{}
 		if domain != "" {
-			certs = append(certs, gin.H{
+			cert := gin.H{
 				"domain":  domain,
 				"email":   email,
 				"staging": staging,
 				"status":  "configured",
-			})
+			}
+			if notAfter != "" {
+				cert["notAfter"] = notAfter
+			}
+			certs = append(certs, cert)
 		}
 
 		response.OK(c, response.SuccessData(gin.H{
 			"certs":      certs,
 			"configured": domain != "" && email != "",
 			"staging":    staging,
+			"notAfter":   notAfter,
 		}))
 	}
 }
@@ -147,6 +153,8 @@ func systemConfigGet(deps *Deps) gin.HandlerFunc {
 			"ssl.domain",
 			"ssl.email",
 			"ssl.staging",
+			"ssl.notAfter",
+			"ssl.certificate",
 			"turnstile.enabled",
 			"turnstile.site.key",
 			"turnstile.secret.key",
