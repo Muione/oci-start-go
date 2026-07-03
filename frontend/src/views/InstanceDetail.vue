@@ -241,8 +241,7 @@
 
       <!-- ======================== 磁盘管理 Tab ======================== -->
       <el-tab-pane label="磁盘管理" name="disk-mgmt">
-        <!-- DiskManagementPanel will be created in Task 5 -->
-        <el-empty description="磁盘管理面板 (即将上线)" />
+        <DiskManagementPanel v-if="instance.instanceId" :instance-id="instance.instanceId" :boot-volume-id="instance.bootVolumeId" />
       </el-tab-pane>
 
       <!-- ======================== 控制台连接 Tab ======================== -->
@@ -335,6 +334,7 @@ import request from '../utils/request'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import MonoText from '../components/common/MonoText.vue'
 import InstanceTrafficPanel from '../components/instance/InstanceTrafficPanel.vue'
+import DiskManagementPanel from '../components/instance/DiskManagementPanel.vue'
 
 defineOptions({ name: 'instance-detail' })
 
