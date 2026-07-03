@@ -220,7 +220,7 @@
       <!-- Tab 2: Security Rules (Task 7) -->
       <!-- ============================================================ -->
       <el-tab-pane label="安全规则" name="security">
-        <!-- Task 7 -->
+        <SecurityRulesPanel :compartment-id="selectedInstance?.compartmentId ?? ''" />
       </el-tab-pane>
 
       <!-- ============================================================ -->
@@ -521,6 +521,7 @@ import type {
 } from '../types/api'
 import VnicIpv6Row from '../components/vnic/VnicIpv6Row.vue'
 import BatchCreateModal from '../components/vnic/BatchCreateModal.vue'
+import SecurityRulesPanel from '../components/vnic/SecurityRulesPanel.vue'
 
 // ---- Types ----
 interface Instance {
