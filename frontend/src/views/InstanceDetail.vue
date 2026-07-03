@@ -23,212 +23,235 @@
       </div>
     </div>
 
-    <!-- Fold panels -->
-    <el-collapse v-model="activePanels" @change="onPanelChange">
+    <!-- Tabs -->
+    <el-tabs v-model="activeTab" type="border-card">
+      <!-- ======================== 概览 Tab ======================== -->
+      <el-tab-pane label="概览" name="overview">
+        <el-collapse v-model="activePanels" @change="onPanelChange">
 
-      <!-- ======================== 基本信息 ======================== -->
-      <el-collapse-item name="info">
-        <template #title>
-          <span class="panel-title">基本信息</span>
-        </template>
-        <el-skeleton v-if="loading" :rows="8" animated />
-        <template v-else>
-          <el-descriptions :column="2" border size="small">
-            <el-descriptions-item label="实例 ID" :span="2">
-              <MonoText>{{ instance.instanceId || '-' }}</MonoText>
-            </el-descriptions-item>
-            <el-descriptions-item label="Shape">{{ instance.shape || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="架构">{{ instance.architecture || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="OCPU">{{ instance.ocpus ?? '-' }}</el-descriptions-item>
-            <el-descriptions-item label="内存(GB)">{{ instance.memoryInGbs ?? '-' }}</el-descriptions-item>
-            <el-descriptions-item label="公网 IP">
-              <MonoText>{{ instance.publicIps || '-' }}</MonoText>
-            </el-descriptions-item>
-            <el-descriptions-item label="私网 IP">
-              <MonoText>{{ instance.privateIps || '-' }}</MonoText>
-            </el-descriptions-item>
-            <el-descriptions-item label="IPv6">
-              <MonoText>{{ instance.ipv6Addresses || '-' }}</MonoText>
-            </el-descriptions-item>
-            <el-descriptions-item label="可用域">{{ instance.availabilityDomain || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="启动卷 ID" :span="2">
-              <MonoText>{{ instance.bootVolumeId || '-' }}</MonoText>
-            </el-descriptions-item>
-            <el-descriptions-item label="VNIC IDs" :span="2">
-              <MonoText>{{ instance.vnicIds || '-' }}</MonoText>
-            </el-descriptions-item>
-            <el-descriptions-item label="最后心跳">{{ instance.lastHeartbeat || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="创建时间">{{ instance.createTime || '-' }}</el-descriptions-item>
-          </el-descriptions>
-        </template>
-      </el-collapse-item>
+          <!-- ======================== 基本信息 ======================== -->
+          <el-collapse-item name="info">
+            <template #title>
+              <span class="panel-title">基本信息</span>
+            </template>
+            <el-skeleton v-if="loading" :rows="8" animated />
+            <template v-else>
+              <el-descriptions :column="2" border size="small">
+                <el-descriptions-item label="实例 ID" :span="2">
+                  <MonoText>{{ instance.instanceId || '-' }}</MonoText>
+                </el-descriptions-item>
+                <el-descriptions-item label="Shape">{{ instance.shape || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="架构">{{ instance.architecture || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="OCPU">{{ instance.ocpus ?? '-' }}</el-descriptions-item>
+                <el-descriptions-item label="内存(GB)">{{ instance.memoryInGbs ?? '-' }}</el-descriptions-item>
+                <el-descriptions-item label="公网 IP">
+                  <MonoText>{{ instance.publicIps || '-' }}</MonoText>
+                </el-descriptions-item>
+                <el-descriptions-item label="私网 IP">
+                  <MonoText>{{ instance.privateIps || '-' }}</MonoText>
+                </el-descriptions-item>
+                <el-descriptions-item label="IPv6">
+                  <MonoText>{{ instance.ipv6Addresses || '-' }}</MonoText>
+                </el-descriptions-item>
+                <el-descriptions-item label="可用域">{{ instance.availabilityDomain || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="启动卷 ID" :span="2">
+                  <MonoText>{{ instance.bootVolumeId || '-' }}</MonoText>
+                </el-descriptions-item>
+                <el-descriptions-item label="VNIC IDs" :span="2">
+                  <MonoText>{{ instance.vnicIds || '-' }}</MonoText>
+                </el-descriptions-item>
+                <el-descriptions-item label="最后心跳">{{ instance.lastHeartbeat || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="创建时间">{{ instance.createTime || '-' }}</el-descriptions-item>
+              </el-descriptions>
+            </template>
+          </el-collapse-item>
 
-      <!-- ======================== 操作 ======================== -->
-      <el-collapse-item name="actions">
-        <template #title>
-          <span class="panel-title">操作</span>
-        </template>
-        <div class="action-buttons">
-          <el-button size="small" @click="handleAction('rescue')">
-            <el-icon><FirstAidKit /></el-icon> 救援模式
-          </el-button>
-          <el-button size="small" @click="handleAction('console')">
-            <el-icon><Monitor /></el-icon> VNC 控制台
-          </el-button>
-          <el-button size="small" @click="handleAction('terminal')">
-            <el-icon><Connection /></el-icon> SSH 终端
-          </el-button>
-          <el-button size="small" type="warning" @click="handleAction('modify')">
-            <el-icon><Edit /></el-icon> 修改配置
-          </el-button>
-        </div>
-      </el-collapse-item>
+          <!-- ======================== 操作 ======================== -->
+          <el-collapse-item name="actions">
+            <template #title>
+              <span class="panel-title">操作</span>
+            </template>
+            <div class="action-buttons">
+              <el-button size="small" @click="handleAction('rescue')">
+                <el-icon><FirstAidKit /></el-icon> 救援模式
+              </el-button>
+              <el-button size="small" @click="handleAction('console')">
+                <el-icon><Monitor /></el-icon> VNC 控制台
+              </el-button>
+              <el-button size="small" @click="handleAction('terminal')">
+                <el-icon><Connection /></el-icon> SSH 终端
+              </el-button>
+              <el-button size="small" type="warning" @click="handleAction('modify')">
+                <el-icon><Edit /></el-icon> 修改配置
+              </el-button>
+            </div>
+          </el-collapse-item>
 
-      <!-- ======================== 磁盘 ======================== -->
-      <el-collapse-item name="disk">
-        <template #title>
-          <span class="panel-title">磁盘</span>
-        </template>
-        <el-skeleton v-if="diskLoading" :rows="4" animated />
-        <template v-else>
-          <el-descriptions :column="2" border size="small" style="margin-bottom:16px">
-            <el-descriptions-item label="启动卷大小">{{ instance.bootVolumeSizeInGbs ?? '-' }} GB</el-descriptions-item>
-            <el-descriptions-item label="当前 VPU/GB">{{ instance.vpusPerGb || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="启动卷 ID" :span="2">
-              <MonoText style="font-size:var(--text-xs)">{{ instance.bootVolumeId || '-' }}</MonoText>
-            </el-descriptions-item>
-          </el-descriptions>
-          <el-alert
-            title="调整磁盘 VPU 性能需要先停止实例。修改后重新启动实例生效。"
-            type="info"
-            :closable="false"
-            show-icon
-            style="margin-bottom:16px"
-          />
-          <el-form :model="diskForm" label-width="120px" size="small">
-            <el-form-item label="VPU 性能等级">
-              <el-select v-model="diskForm.vpusPerGb" style="width:100%">
-                <el-option :value="10" label="10 - 均衡 (Balanced)">
-                  <div class="vpu-option">
-                    <span class="vpu-label">10 - 均衡</span>
-                    <span class="vpu-desc">适用于大多数工作负载</span>
-                  </div>
-                </el-option>
-                <el-option :value="20" label="20 - 更高性能 (Higher Performance)">
-                  <div class="vpu-option">
-                    <span class="vpu-label">20 - 更高性能</span>
-                    <span class="vpu-desc">适用于需要更高 IOPS 的场景</span>
-                  </div>
-                </el-option>
-                <el-option :value="30" label="30 - 超高性能 (Ultra High)">
-                  <div class="vpu-option">
-                    <span class="vpu-label">30 - 超高性能</span>
-                    <span class="vpu-desc">适用于数据库和高 IO 负载</span>
-                  </div>
-                </el-option>
-                <el-option :value="40" label="40 - 超高性能">
-                  <div class="vpu-option"><span class="vpu-label">40 - 超高性能</span></div>
-                </el-option>
-                <el-option :value="50" label="50 - 超高性能">
-                  <div class="vpu-option"><span class="vpu-label">50 - 超高性能</span></div>
-                </el-option>
-                <el-option :value="60" label="60 - 超高性能">
-                  <div class="vpu-option"><span class="vpu-label">60 - 超高性能</span></div>
-                </el-option>
-                <el-option :value="80" label="80 - 超高性能">
-                  <div class="vpu-option"><span class="vpu-label">80 - 超高性能</span></div>
-                </el-option>
-                <el-option :value="100" label="100 - 超高性能">
-                  <div class="vpu-option"><span class="vpu-label">100 - 超高性能</span></div>
-                </el-option>
-                <el-option :value="120" label="120 - 超高性能">
-                  <div class="vpu-option"><span class="vpu-label">120 - 超高性能</span></div>
-                </el-option>
-              </el-select>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" :loading="vpuSaving" @click="saveVpu">更新 VPU 设置</el-button>
-            </el-form-item>
-          </el-form>
-        </template>
-      </el-collapse-item>
+          <!-- ======================== 磁盘 ======================== -->
+          <el-collapse-item name="disk">
+            <template #title>
+              <span class="panel-title">磁盘</span>
+            </template>
+            <el-skeleton v-if="diskLoading" :rows="4" animated />
+            <template v-else>
+              <el-descriptions :column="2" border size="small" style="margin-bottom:16px">
+                <el-descriptions-item label="启动卷大小">{{ instance.bootVolumeSizeInGbs ?? '-' }} GB</el-descriptions-item>
+                <el-descriptions-item label="当前 VPU/GB">{{ instance.vpusPerGb || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="启动卷 ID" :span="2">
+                  <MonoText style="font-size:var(--text-xs)">{{ instance.bootVolumeId || '-' }}</MonoText>
+                </el-descriptions-item>
+              </el-descriptions>
+              <el-alert
+                title="调整磁盘 VPU 性能需要先停止实例。修改后重新启动实例生效。"
+                type="info"
+                :closable="false"
+                show-icon
+                style="margin-bottom:16px"
+              />
+              <el-form :model="diskForm" label-width="120px" size="small">
+                <el-form-item label="VPU 性能等级">
+                  <el-select v-model="diskForm.vpusPerGb" style="width:100%">
+                    <el-option :value="10" label="10 - 均衡 (Balanced)">
+                      <div class="vpu-option">
+                        <span class="vpu-label">10 - 均衡</span>
+                        <span class="vpu-desc">适用于大多数工作负载</span>
+                      </div>
+                    </el-option>
+                    <el-option :value="20" label="20 - 更高性能 (Higher Performance)">
+                      <div class="vpu-option">
+                        <span class="vpu-label">20 - 更高性能</span>
+                        <span class="vpu-desc">适用于需要更高 IOPS 的场景</span>
+                      </div>
+                    </el-option>
+                    <el-option :value="30" label="30 - 超高性能 (Ultra High)">
+                      <div class="vpu-option">
+                        <span class="vpu-label">30 - 超高性能</span>
+                        <span class="vpu-desc">适用于数据库和高 IO 负载</span>
+                      </div>
+                    </el-option>
+                    <el-option :value="40" label="40 - 超高性能">
+                      <div class="vpu-option"><span class="vpu-label">40 - 超高性能</span></div>
+                    </el-option>
+                    <el-option :value="50" label="50 - 超高性能">
+                      <div class="vpu-option"><span class="vpu-label">50 - 超高性能</span></div>
+                    </el-option>
+                    <el-option :value="60" label="60 - 超高性能">
+                      <div class="vpu-option"><span class="vpu-label">60 - 超高性能</span></div>
+                    </el-option>
+                    <el-option :value="80" label="80 - 超高性能">
+                      <div class="vpu-option"><span class="vpu-label">80 - 超高性能</span></div>
+                    </el-option>
+                    <el-option :value="100" label="100 - 超高性能">
+                      <div class="vpu-option"><span class="vpu-label">100 - 超高性能</span></div>
+                    </el-option>
+                    <el-option :value="120" label="120 - 超高性能">
+                      <div class="vpu-option"><span class="vpu-label">120 - 超高性能</span></div>
+                    </el-option>
+                  </el-select>
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" :loading="vpuSaving" @click="saveVpu">更新 VPU 设置</el-button>
+                </el-form-item>
+              </el-form>
+            </template>
+          </el-collapse-item>
 
-      <!-- ======================== 网络 ======================== -->
-      <el-collapse-item name="network">
-        <template #title>
-          <span class="panel-title">网络</span>
-        </template>
-        <el-descriptions :column="2" border size="small" style="margin-bottom:16px">
-          <el-descriptions-item label="VNIC IDs" :span="2">
-            <MonoText style="font-size:var(--text-xs)">{{ instance.vnicIds || '-' }}</MonoText>
-          </el-descriptions-item>
-          <el-descriptions-item label="公网 IP">
-            <MonoText>{{ instance.publicIps || '-' }}</MonoText>
-          </el-descriptions-item>
-          <el-descriptions-item label="私网 IP">
-            <MonoText>{{ instance.privateIps || '-' }}</MonoText>
-          </el-descriptions-item>
-          <el-descriptions-item label="IPv6" :span="2">
-            <MonoText>{{ instance.ipv6Addresses || '未启用' }}</MonoText>
-          </el-descriptions-item>
-        </el-descriptions>
-        <div style="display:flex;gap:var(--space-3);flex-wrap:wrap">
-          <el-button type="primary" size="small" @click="router.push({ path: '/vnic', query: { instanceId: instance.instanceId } })">
-            <el-icon><Connection /></el-icon> 打开 VNIC 管理
-          </el-button>
-          <el-button size="small" @click="handleAction('change-ip')">
-            <el-icon><Connection /></el-icon> 更换公网 IP
-          </el-button>
-          <el-button size="small" :disabled="!!instance.ipv6Addresses" @click="handleAction('enable-ipv6')">
-            <el-icon><Link /></el-icon> 启用 IPv6
-          </el-button>
-        </div>
-      </el-collapse-item>
+          <!-- ======================== 网络 ======================== -->
+          <el-collapse-item name="network">
+            <template #title>
+              <span class="panel-title">网络</span>
+            </template>
+            <el-descriptions :column="2" border size="small" style="margin-bottom:16px">
+              <el-descriptions-item label="VNIC IDs" :span="2">
+                <MonoText style="font-size:var(--text-xs)">{{ instance.vnicIds || '-' }}</MonoText>
+              </el-descriptions-item>
+              <el-descriptions-item label="公网 IP">
+                <MonoText>{{ instance.publicIps || '-' }}</MonoText>
+              </el-descriptions-item>
+              <el-descriptions-item label="私网 IP">
+                <MonoText>{{ instance.privateIps || '-' }}</MonoText>
+              </el-descriptions-item>
+              <el-descriptions-item label="IPv6" :span="2">
+                <MonoText>{{ instance.ipv6Addresses || '未启用' }}</MonoText>
+              </el-descriptions-item>
+            </el-descriptions>
+            <div style="display:flex;gap:var(--space-3);flex-wrap:wrap">
+              <el-button type="primary" size="small" @click="router.push({ path: '/vnic', query: { instanceId: instance.instanceId } })">
+                <el-icon><Connection /></el-icon> 打开 VNIC 管理
+              </el-button>
+              <el-button size="small" @click="handleAction('change-ip')">
+                <el-icon><Connection /></el-icon> 更换公网 IP
+              </el-button>
+              <el-button size="small" :disabled="!!instance.ipv6Addresses" @click="handleAction('enable-ipv6')">
+                <el-icon><Link /></el-icon> 启用 IPv6
+              </el-button>
+            </div>
+          </el-collapse-item>
 
-      <!-- ======================== SSH 配置 ======================== -->
-      <el-collapse-item name="ssh">
-        <template #title>
-          <span class="panel-title">SSH 配置</span>
-        </template>
-        <el-skeleton v-if="sshLoading" :rows="4" animated />
-        <template v-else>
-          <el-form :model="sshForm" label-width="100px" size="small" style="max-width:500px">
-            <el-form-item label="用户名">
-              <el-input v-model="sshForm.username" placeholder="root" />
-            </el-form-item>
-            <el-form-item label="端口">
-              <el-input-number v-model="sshForm.port" :min="1" :max="65535" style="width:100%" />
-            </el-form-item>
-            <el-form-item label="密码">
-              <el-input v-model="sshForm.password" type="password" show-password placeholder="SSH 密码" />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" :loading="sshSaving" @click="saveSshConfig">保存 SSH 配置</el-button>
-            </el-form-item>
-          </el-form>
-        </template>
-      </el-collapse-item>
+          <!-- ======================== SSH 配置 ======================== -->
+          <el-collapse-item name="ssh">
+            <template #title>
+              <span class="panel-title">SSH 配置</span>
+            </template>
+            <el-skeleton v-if="sshLoading" :rows="4" animated />
+            <template v-else>
+              <el-form :model="sshForm" label-width="100px" size="small" style="max-width:500px">
+                <el-form-item label="用户名">
+                  <el-input v-model="sshForm.username" placeholder="root" />
+                </el-form-item>
+                <el-form-item label="端口">
+                  <el-input-number v-model="sshForm.port" :min="1" :max="65535" style="width:100%" />
+                </el-form-item>
+                <el-form-item label="密码">
+                  <el-input v-model="sshForm.password" type="password" show-password placeholder="SSH 密码" />
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" :loading="sshSaving" @click="saveSshConfig">保存 SSH 配置</el-button>
+                </el-form-item>
+              </el-form>
+            </template>
+          </el-collapse-item>
 
-      <!-- ======================== 备注 ======================== -->
-      <el-collapse-item name="remark">
-        <template #title>
-          <span class="panel-title">备注</span>
-        </template>
-        <el-skeleton v-if="remarkLoading" :rows="3" animated />
-        <template v-else>
-          <el-input
-            v-model="remarkText"
-            type="textarea"
-            :rows="4"
-            placeholder="添加备注信息..."
-          />
-          <el-button type="primary" size="small" style="margin-top:12px" :loading="remarkSaving" @click="saveRemark">
-            保存备注
-          </el-button>
-        </template>
-      </el-collapse-item>
+          <!-- ======================== 备注 ======================== -->
+          <el-collapse-item name="remark">
+            <template #title>
+              <span class="panel-title">备注</span>
+            </template>
+            <el-skeleton v-if="remarkLoading" :rows="3" animated />
+            <template v-else>
+              <el-input
+                v-model="remarkText"
+                type="textarea"
+                :rows="4"
+                placeholder="添加备注信息..."
+              />
+              <el-button type="primary" size="small" style="margin-top:12px" :loading="remarkSaving" @click="saveRemark">
+                保存备注
+              </el-button>
+            </template>
+          </el-collapse-item>
 
-    </el-collapse>
+        </el-collapse>
+      </el-tab-pane>
+
+      <!-- ======================== 流量监控 Tab ======================== -->
+      <el-tab-pane label="流量监控" name="traffic">
+        <!-- InstanceTrafficPanel will be created in Task 4 -->
+        <el-empty description="流量监控面板 (即将上线)" />
+      </el-tab-pane>
+
+      <!-- ======================== 磁盘管理 Tab ======================== -->
+      <el-tab-pane label="磁盘管理" name="disk-mgmt">
+        <!-- DiskManagementPanel will be created in Task 5 -->
+        <el-empty description="磁盘管理面板 (即将上线)" />
+      </el-tab-pane>
+
+      <!-- ======================== 控制台连接 Tab ======================== -->
+      <el-tab-pane label="控制台连接" name="console">
+        <!-- Console connection panel placeholder -->
+        <el-empty description="控制台连接面板 (即将上线)" />
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- ================================================================ -->
     <!-- Change IP Dialog -->
@@ -332,6 +355,7 @@ const instanceId = Number(route.params.id)
 // --- state ---
 const loading = ref(false)
 const instance = ref<Instance>({} as Instance)
+const activeTab = ref('overview')
 const activePanels = ref('info')
 const actionLoading = ref(false)
 
