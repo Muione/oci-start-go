@@ -17,6 +17,7 @@ const router = createRouter({
         { path: 'proxies', name: 'proxies', component: () => import('../views/ProxyManager.vue') },
         { path: 'boot', name: 'boot', component: () => import('../views/BootTasks.vue') },
         { path: 'instances', name: 'instances', component: () => import('../views/Instances.vue') },
+        { path: 'instances/:id', name: 'instance-detail', component: () => import('../views/InstanceDetail.vue') },
         { path: 'terminal', name: 'terminal', component: () => import('../views/SSHTerminal.vue') },
         { path: 'settings', name: 'settings', component: () => import('../views/SystemSettings.vue') },
         { path: 'migration', name: 'migration', component: () => import('../views/Migration.vue') },

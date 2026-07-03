@@ -137,273 +137,7 @@
       style="margin-top: var(--space-5); justify-content: center"
     />
 
-    <!-- ================================================================ -->
-    <!-- Detail Dialog -->
-    <!-- ================================================================ -->
-    <el-dialog v-model="detailVisible" title="实例详情" width="780px" destroy-on-close @opened="onDetailOpened">
-      <template v-if="detail">
-        <el-tabs v-model="detailTab">
-          <el-tab-pane label="基本信息" name="info">
-            <el-descriptions :column="2" border size="small">
-              <el-descriptions-item label="显示名称" :span="2">
-                <span style="font-weight:var(--font-semibold)">{{ detail.displayName }}</span>
-              </el-descriptions-item>
-              <el-descriptions-item label="实例ID" :span="2">{{ detail.instanceId }}</el-descriptions-item>
-              <el-descriptions-item label="租户">{{ detail.tenantName || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="状态">
-                <el-tag :type="stateTagType(detail.state)" size="small">
-                  {{ detail.state }}
-                </el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item label="Shape">{{ detail.shape }}</el-descriptions-item>
-              <el-descriptions-item label="架构">{{ detail.architecture }}</el-descriptions-item>
-              <el-descriptions-item label="OCPU">{{ detail.ocpus }}</el-descriptions-item>
-              <el-descriptions-item label="内存(GB)">{{ detail.memoryInGbs }}</el-descriptions-item>
-              <el-descriptions-item label="启动卷(GB)">{{ detail.bootVolumeSizeInGbs }}</el-descriptions-item>
-              <el-descriptions-item label="VPU/GB">{{ detail.vpusPerGb || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="公网IP">{{ detail.publicIps || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="私网IP">{{ detail.privateIps || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="IPv6">{{ detail.ipv6Addresses || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="可用域">{{ detail.availabilityDomain }}</el-descriptions-item>
-              <el-descriptions-item label="启动卷ID" :span="2">{{ detail.bootVolumeId || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="VNIC IDs" :span="2">{{ detail.vnicIds || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="最后心跳">{{ detail.lastHeartbeat || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="创建时间">{{ detail.createTime || '-' }}</el-descriptions-item>
-            </el-descriptions>
-            <!-- Quick actions -->
-            <div style="margin-top:var(--space-4);display:flex;gap:var(--space-3);flex-wrap:wrap">
-              <el-button size="small" @click="handleAction('rescue', detail)">救援模式</el-button>
-              <el-button size="small" @click="handleAction('console', detail)">VNC 控制台</el-button>
-              <el-button size="small" @click="handleAction('terminal', detail)">SSH 终端</el-button>
-              <el-button size="small" type="warning" @click="handleAction('modify', detail)">修改配置</el-button>
-            </div>
-          </el-tab-pane>
-
-          <el-tab-pane label="备注" name="remark">
-            <el-input
-              v-model="remarkText"
-              type="textarea"
-              :rows="4"
-              placeholder="添加备注信息..."
-            />
-            <el-button type="primary" size="small" style="margin-top:12px" @click="saveDetailRemark">
-              保存备注
-            </el-button>
-          </el-tab-pane>
-
-          <el-tab-pane label="流量统计" name="traffic" v-if="trafficData">
-            <el-descriptions :column="2" border size="small">
-              <el-descriptions-item label="统计日期">{{ trafficData.statsDate || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="区域">{{ trafficData.region || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="入站流量">
-                <span class="data-mono">{{ formatBytes(trafficData.ingressBytes) }}</span>
-              </el-descriptions-item>
-              <el-descriptions-item label="出站流量">
-                <span class="data-mono">{{ formatBytes(trafficData.egressBytes) }}</span>
-              </el-descriptions-item>
-              <el-descriptions-item label="流量阈值">
-                <span class="data-mono">{{ trafficData.threshold ? formatBytes(trafficData.threshold) : '未设置' }}</span>
-              </el-descriptions-item>
-              <el-descriptions-item label="自动关机">
-                <el-tag :type="trafficData.autoShutdown ? 'warning' : 'info'" size="small">
-                  {{ trafficData.autoShutdown ? '启用' : '禁用' }}
-                </el-tag>
-              </el-descriptions-item>
-            </el-descriptions>
-          </el-tab-pane>
-
-          <el-tab-pane label="备份记录" name="backups">
-            <div v-if="backups.length === 0" style="text-align:center;padding:24px;color:var(--text-muted)">
-              暂无备份记录
-            </div>
-            <el-table v-else :data="backups" size="small" border>
-              <el-table-column prop="displayName" label="名称" min-width="140" />
-              <el-table-column prop="shape" label="Shape" min-width="120" />
-              <el-table-column prop="state" label="状态" width="80" />
-              <el-table-column prop="publicIps" label="公网IP" width="130" />
-              <el-table-column label="操作" width="80">
-                <template #default="{ row: bk }">
-                  <el-popconfirm title="确定删除此备份记录？" @confirm="deleteBackup(bk.id)">
-                    <template #reference>
-                      <el-button size="small" type="danger" link>删除</el-button>
-                    </template>
-                  </el-popconfirm>
-                </template>
-              </el-table-column>
-            </el-table>
-          </el-tab-pane>
-
-          <el-tab-pane label="SSH 配置" name="ssh">
-            <el-form :model="sshForm" label-width="100px" size="small">
-              <el-form-item label="用户名">
-                <el-input v-model="sshForm.username" placeholder="root" />
-              </el-form-item>
-              <el-form-item label="端口">
-                <el-input-number v-model="sshForm.port" :min="1" :max="65535" style="width:100%" />
-              </el-form-item>
-              <el-form-item label="密码">
-                <el-input v-model="sshForm.password" type="password" show-password placeholder="SSH 密码" />
-              </el-form-item>
-              <el-form-item>
-                <el-button type="primary" :loading="sshSaving" @click="saveSshConfig">
-                  保存 SSH 配置
-                </el-button>
-              </el-form-item>
-            </el-form>
-          </el-tab-pane>
-
-          <!-- ============================================================ -->
-          <!-- Config Modification Tab (FE-101) -->
-          <!-- ============================================================ -->
-          <el-tab-pane label="配置修改" name="config">
-            <el-alert
-              title="修改 Shape 需要先停止实例。OCPU/内存调整仅对 Flex 类型 Shape 有效。"
-              type="warning"
-              :closable="false"
-              show-icon
-              style="margin-bottom:16px"
-            />
-            <el-form :model="configForm" label-width="120px" size="small">
-              <el-form-item label="当前 Shape">
-                <el-tag type="info">{{ detail.shape }}</el-tag>
-                <span style="margin-left:8px;color:var(--text-muted);font-size:var(--text-xs)">
-                  {{ detail.ocpus }}C / {{ detail.memoryInGbs }}G
-                </span>
-              </el-form-item>
-              <el-form-item label="显示名称">
-                <el-input v-model="configForm.displayName" placeholder="修改实例显示名称" />
-              </el-form-item>
-              <el-form-item label="新 Shape">
-                <ShapeSelect
-                  v-model="configForm.shape"
-                  :tenant-id="detail.tenantId"
-                  :architecture="detail.architecture"
-                  placeholder="留空则不修改 Shape"
-                />
-              </el-form-item>
-              <el-form-item label="OCPU">
-                <el-input-number v-model="configForm.ocpus" :min="1" :max="128" :step="1" controls-position="right" style="width:100%" />
-              </el-form-item>
-              <el-form-item label="内存(GB)">
-                <el-input-number v-model="configForm.memoryInGbs" :min="1" :max="1024" :step="1" controls-position="right" style="width:100%" />
-              </el-form-item>
-              <el-form-item>
-                <el-button type="primary" :loading="configSaving" @click="saveConfig">
-                  保存配置
-                </el-button>
-                <el-button v-if="detail.state === 'Running'" type="warning" :loading="restartingForConfig" @click="stopForConfig">
-                  停止实例后修改
-                </el-button>
-              </el-form-item>
-            </el-form>
-          </el-tab-pane>
-
-          <!-- ============================================================ -->
-          <!-- Disk Settings Tab (FE-102) -->
-          <!-- ============================================================ -->
-          <el-tab-pane label="磁盘设置" name="disk">
-            <el-alert
-              title="调整磁盘 VPU 性能需要先停止实例。修改后重新启动实例生效。"
-              type="info"
-              :closable="false"
-              show-icon
-              style="margin-bottom:16px"
-            />
-            <el-descriptions :column="2" border size="small" style="margin-bottom:16px">
-              <el-descriptions-item label="启动卷大小">{{ detail.bootVolumeSizeInGbs }} GB</el-descriptions-item>
-              <el-descriptions-item label="当前 VPU/GB">{{ detail.vpusPerGb || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="启动卷ID" :span="2">
-                <span class="data-mono" style="font-size:var(--text-xs)">{{ detail.bootVolumeId || '-' }}</span>
-              </el-descriptions-item>
-            </el-descriptions>
-            <el-form :model="diskForm" label-width="120px" size="small">
-              <el-form-item label="VPU 性能等级">
-                <el-select v-model="diskForm.vpusPerGb" style="width:100%">
-                  <el-option :value="10" label="10 - 均衡 (Balanced)">
-                    <div class="vpu-option">
-                      <span class="vpu-label">10 - 均衡</span>
-                      <span class="vpu-desc">适用于大多数工作负载</span>
-                    </div>
-                  </el-option>
-                  <el-option :value="20" label="20 - 更高性能 (Higher Performance)">
-                    <div class="vpu-option">
-                      <span class="vpu-label">20 - 更高性能</span>
-                      <span class="vpu-desc">适用于需要更高 IOPS 的场景</span>
-                    </div>
-                  </el-option>
-                  <el-option :value="30" label="30 - 超高性能 (Ultra High)">
-                    <div class="vpu-option">
-                      <span class="vpu-label">30 - 超高性能</span>
-                      <span class="vpu-desc">适用于数据库和高 IO 负载</span>
-                    </div>
-                  </el-option>
-                  <el-option :value="40" label="40 - 超高性能">
-                    <div class="vpu-option">
-                      <span class="vpu-label">40 - 超高性能</span>
-                    </div>
-                  </el-option>
-                  <el-option :value="50" label="50 - 超高性能">
-                    <div class="vpu-option">
-                      <span class="vpu-label">50 - 超高性能</span>
-                    </div>
-                  </el-option>
-                  <el-option :value="60" label="60 - 超高性能">
-                    <div class="vpu-option">
-                      <span class="vpu-label">60 - 超高性能</span>
-                    </div>
-                  </el-option>
-                  <el-option :value="80" label="80 - 超高性能">
-                    <div class="vpu-option">
-                      <span class="vpu-label">80 - 超高性能</span>
-                    </div>
-                  </el-option>
-                  <el-option :value="100" label="100 - 超高性能">
-                    <div class="vpu-option">
-                      <span class="vpu-label">100 - 超高性能</span>
-                    </div>
-                  </el-option>
-                  <el-option :value="120" label="120 - 超高性能">
-                    <div class="vpu-option">
-                      <span class="vpu-label">120 - 超高性能</span>
-                    </div>
-                  </el-option>
-                </el-select>
-              </el-form-item>
-              <el-form-item>
-                <el-button type="primary" :loading="vpuSaving" @click="saveVpu">
-                  更新 VPU 设置
-                </el-button>
-              </el-form-item>
-            </el-form>
-          </el-tab-pane>
-
-          <!-- ============================================================ -->
-          <!-- VNIC Management Tab (FE-103) -->
-          <!-- ============================================================ -->
-          <el-tab-pane label="VNIC 管理" name="vnic">
-            <el-descriptions :column="2" border size="small" style="margin-bottom:16px">
-              <el-descriptions-item label="VNIC IDs" :span="2">
-                <span class="data-mono" style="font-size:var(--text-xs)">{{ detail.vnicIds || '-' }}</span>
-              </el-descriptions-item>
-              <el-descriptions-item label="公网IP">{{ detail.publicIps || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="私网IP">{{ detail.privateIps || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="IPv6" :span="2">{{ detail.ipv6Addresses || '未启用' }}</el-descriptions-item>
-            </el-descriptions>
-            <div style="display:flex;gap:var(--space-3);flex-wrap:wrap">
-              <el-button type="primary" size="small" @click="router.push({ path: '/vnic', query: { instanceId: detail.instanceId } })">
-                <el-icon><Connection /></el-icon> 打开 VNIC 管理
-              </el-button>
-              <el-button size="small" @click="handleAction('change-ip', detail)">
-                <el-icon><Connection /></el-icon> 更换公网 IP
-              </el-button>
-              <el-button size="small" :disabled="!!detail.ipv6Addresses" @click="handleAction('enable-ipv6', detail)">
-                <el-icon><Link /></el-icon> 启用 IPv6
-              </el-button>
-            </div>
-          </el-tab-pane>
-        </el-tabs>
-      </template>
-    </el-dialog>
+    <!-- Detail dialog removed: instance detail is now an independent page -->
 
     <!-- ================================================================ -->
     <!-- Modify Dialog -->
@@ -482,11 +216,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Refresh, Download, ArrowDown, Search, InfoFilled,
-  Edit, Connection, Link, Key,
-  Warning, Monitor, Operation, Delete,
 } from '@element-plus/icons-vue'
 import request from '../utils/request'
-import ShapeSelect from '../components/ShapeSelect.vue'
 import PageHeader from '../components/common/PageHeader.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import MonoText from '../components/common/MonoText.vue'
@@ -519,21 +250,7 @@ const tenantFilter = ref<number | null>(null)
 const stateFilter = ref('')
 const searchText = ref('')
 
-// Detail dialog
-const detailVisible = ref(false)
-const detail = ref<Instance | null>(null)
-const detailTab = ref('info')
-const remarkText = ref('')
-
-// Traffic
-const trafficData = ref<any>(null)
-
-// Backups
-const backups = ref<any[]>([])
-
-// SSH config
-const sshForm = ref({ username: 'root', port: 22, password: '' })
-const sshSaving = ref(false)
+// Detail dialog state removed — detail is now an independent page
 
 // Modify
 const modifyVisible = ref(false)
@@ -551,14 +268,7 @@ const ipv6Visible = ref(false)
 const ipv6Loading = ref(false)
 const ipv6Target = ref<Instance | null>(null)
 
-// Config modification tab (FE-101)
-const configForm = ref({ shape: '', ocpus: 4, memoryInGbs: 24, displayName: '' })
-const configSaving = ref(false)
-const restartingForConfig = ref(false)
-
-// Disk settings tab (FE-102)
-const diskForm = ref({ vpusPerGb: 10 })
-const vpuSaving = ref(false)
+// Config and disk state removed — now in InstanceDetail page
 
 // ---- Computed ----
 function getStateStatus(state: string): 'up' | 'down' | 'warn' | 'idle' {
@@ -567,23 +277,6 @@ function getStateStatus(state: string): 'up' | 'down' | 'warn' | 'idle' {
   if (s === 'stopped' || s === 'terminated') return 'down'
   if (s === 'starting' || s === 'stopping') return 'warn'
   return 'idle'
-}
-
-function stateTagType(state: string): string {
-  const s = (state || '').toLowerCase()
-  if (s === 'running') return 'success'
-  if (s === 'stopped' || s === 'terminated') return 'danger'
-  if (s === 'starting' || s === 'stopping') return 'warning'
-  return 'info'
-}
-
-function formatBytes(bytes: number | undefined): string {
-  if (!bytes && bytes !== 0) return '-'
-  const gb = bytes / (1024 * 1024 * 1024)
-  if (gb >= 1) return gb.toFixed(2) + ' GB'
-  const mb = bytes / (1024 * 1024)
-  if (mb >= 1) return mb.toFixed(2) + ' MB'
-  return bytes.toFixed(0) + ' B'
 }
 
 // ---- Data loading ----
@@ -627,53 +320,10 @@ function onSelectionChange(selection: Instance[]) {
 
 // ---- Detail ----
 function showDetail(row: Instance) {
-  detail.value = { ...row }
-  detailTab.value = 'info'
-  remarkText.value = ''
-  detailVisible.value = true
+  router.push({ name: 'instance-detail', params: { id: row.id } })
 }
 
-async function onDetailOpened() {
-  if (!detail.value) return
-  // Load traffic
-  try {
-    trafficData.value = await request.get('/instances/traffic', { params: { tenantId: detail.value.tenantId } })
-  } catch { trafficData.value = null }
-  // Load backups
-  try {
-    backups.value = await request.get('/backup/list', { params: { tenantId: detail.value.tenantId } }) as any[]
-  } catch { backups.value = [] }
-  // Load SSH config
-  try {
-    const ssh = await request.get(`/instances/${detail.value.id}/ssh-config`) as any
-    sshForm.value = {
-      username: ssh.username || 'root',
-      port: ssh.port || 22,
-      password: '',
-    }
-  } catch {
-    sshForm.value = { username: 'root', port: 22, password: '' }
-  }
-  // Initialize config and disk forms
-  initConfigForm()
-  initDiskForm()
-}
-
-async function saveDetailRemark() {
-  if (!detail.value) return
-  try {
-    await request.post(`/instances/${detail.value.id}/remark`, { remark: remarkText.value })
-    ElMessage.success('备注已更新')
-  } catch (e: any) { ElMessage.error(e.message) }
-}
-
-async function deleteBackup(id: number) {
-  try {
-    await request.get('/backup/delete', { params: { id } })
-    ElMessage.success('备份已删除')
-    backups.value = backups.value.filter(b => b.id !== id)
-  } catch (e: any) { ElMessage.error(e.message) }
-}
+// Detail dialog functions removed — detail is now an independent page
 
 // ---- Actions ----
 function handleAction(cmd: string, row: Instance) {
@@ -684,12 +334,6 @@ function handleAction(cmd: string, row: Instance) {
     case 'modify': return openModify(row)
     case 'change-ip': return openChangeIp(row)
     case 'enable-ipv6': return openEnableIpv6(row)
-    case 'ssh-config':
-      detail.value = row
-      detailTab.value = 'ssh'
-      detailVisible.value = true
-      onDetailOpened()
-      return
     case 'rescue':
       router.push({ path: '/rescue', query: { instanceId: row.instanceId } })
       return
@@ -829,102 +473,7 @@ async function doEnableIpv6() {
   } finally { ipv6Loading.value = false }
 }
 
-// ---- SSH Config ----
-async function saveSshConfig() {
-  if (!detail.value) return
-  if (!sshForm.value.username) { ElMessage.warning('用户名不能为空'); return }
-  sshSaving.value = true
-  try {
-    await request.post(`/instances/${detail.value.id}/ssh-config`, {
-      username: sshForm.value.username,
-      port: sshForm.value.port,
-      password: sshForm.value.password,
-    })
-    ElMessage.success('SSH 配置已保存')
-  } catch (e: any) { ElMessage.error(e.message) }
-  finally { sshSaving.value = false }
-}
-
-// ---- Config Modification (FE-101) ----
-function initConfigForm() {
-  if (!detail.value) return
-  configForm.value = {
-    shape: '',
-    ocpus: detail.value.ocpus || 4,
-    memoryInGbs: detail.value.memoryInGbs || 24,
-    displayName: detail.value.displayName || '',
-  }
-}
-
-async function saveConfig() {
-  if (!detail.value) return
-  configSaving.value = true
-  try {
-    const body: any = {}
-    if (configForm.value.shape) body.shape = configForm.value.shape
-    if (configForm.value.ocpus !== detail.value.ocpus) body.ocpus = configForm.value.ocpus
-    if (configForm.value.memoryInGbs !== detail.value.memoryInGbs) body.memoryInGbs = configForm.value.memoryInGbs
-    if (configForm.value.displayName && configForm.value.displayName !== detail.value.displayName) {
-      body.displayName = configForm.value.displayName
-    }
-    if (Object.keys(body).length === 0) {
-      ElMessage.warning('没有需要修改的配置')
-      configSaving.value = false
-      return
-    }
-    await request.post(`/instances/${detail.value.id}/modify`, body)
-    ElMessage.success('配置修改请求已提交')
-    await load()
-    // Refresh detail
-    const updated = rows.value.find(r => r.id === detail.value?.id)
-    if (updated) detail.value = { ...updated }
-  } catch (e: any) {
-    ElMessage.error(e.message || '修改失败')
-  } finally { configSaving.value = false }
-}
-
-async function stopForConfig() {
-  if (!detail.value) return
-  try {
-    await ElMessageBox.confirm(
-      '修改 Shape 需要先停止实例。确定停止实例？',
-      '确认停止',
-      { type: 'warning' }
-    )
-    restartingForConfig.value = true
-    await request.post(`/instances/${detail.value.id}/stop`)
-    ElMessage.success('实例正在停止，请稍后再修改配置')
-    await load()
-    const updated = rows.value.find(r => r.id === detail.value?.id)
-    if (updated) detail.value = { ...updated }
-  } catch (e: any) {
-    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
-  } finally { restartingForConfig.value = false }
-}
-
-// ---- Disk Settings (FE-102) ----
-function initDiskForm() {
-  if (!detail.value) return
-  diskForm.value = {
-    vpusPerGb: parseInt(detail.value.vpusPerGb) || 10,
-  }
-}
-
-async function saveVpu() {
-  if (!detail.value) return
-  vpuSaving.value = true
-  try {
-    await request.post(`/instances/${detail.value.id}/vpu`, {
-      vpusPerGb: diskForm.value.vpusPerGb,
-    })
-    ElMessage.success('VPU 设置已更新')
-    await load()
-    const updated = rows.value.find(r => r.id === detail.value?.id)
-    if (updated) detail.value = { ...updated }
-  } catch (e: any) {
-    ElMessage.error(e.message || '更新 VPU 失败')
-  } finally { vpuSaving.value = false }
-}
+// Detail page functions (SSH, config, disk, VPU) moved to InstanceDetail.vue
 
 // ---- Export ----
 async function handleExport(cmd: string) {
@@ -970,7 +519,7 @@ async function batchStop() {
 
 onMounted(async () => {
   await load()
-  // Auto-select instance from query param (navigated from TenantDetail)
+  // Auto-navigate to instance detail from query param (navigated from TenantDetail)
   const targetId = route.query.instanceId as string
   if (targetId) {
     const inst = allInstances.value.find(i => i.instanceId === targetId)
@@ -1059,24 +608,7 @@ onMounted(async () => {
   font-weight: var(--font-medium);
 }
 
-/* ---- VPU options ---- */
-.vpu-option {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 2px 0;
-}
-
-.vpu-label {
-  font-weight: var(--font-medium);
-  font-size: var(--text-sm);
-}
-
-.vpu-desc {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
+/* ---- Responsive ---- */
 @media (max-width: 768px) {
   .filter-bar {
     flex-direction: column;
