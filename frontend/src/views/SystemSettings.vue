@@ -1097,10 +1097,8 @@ async function saveGithubOAuth() {
 // Login history functions
 async function loadLoginHistory() {
   try {
-    // TODO: Replace with real API call when available
-    // const data = await request.get('/api/security/login-history') as any
-    // loginHistory.value = data || []
-    ElMessage.info('登录历史刷新成功')
+    const data = await request.get('/api/security/login-history', { params: { limit: 20 } }) as any
+    loginHistory.value = data.items || []
   } catch { /* silently ignore */ }
 }
 
@@ -1140,8 +1138,7 @@ async function logoutAllSessions() {
   } catch { return }
 
   try {
-    // TODO: Replace with real API call when available
-    // await request.post('/api/security/logout-all')
+    await request.post('/api/security/logout-all')
     activeSessions.value = 1
     lastActivityTime.value = new Date().toLocaleString()
     ElMessage.success('所有会话已注销')
@@ -1150,8 +1147,21 @@ async function logoutAllSessions() {
   }
 }
 
+async function loadSessions() {
+  try {
+    const data = await request.get('/api/security/sessions') as any
+    const sessions = data.sessions || []
+    activeSessions.value = sessions.length
+    if (sessions.length > 0) {
+      lastActivityTime.value = sessions[0].last_active_at || new Date().toLocaleString()
+    }
+  } catch { /* silently ignore */ }
+}
+
 onMounted(async () => {
   await loadConfig()
+  await loadLoginHistory()
+  await loadSessions()
   loadProxyConfig()
   loadMfaStatus()
   loadTurnstile()
