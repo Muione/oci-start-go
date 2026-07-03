@@ -227,7 +227,7 @@
       <!-- Tab 3: VCN Management (Task 8) -->
       <!-- ============================================================ -->
       <el-tab-pane label="VCN 管理" name="vcn">
-        <!-- Task 8 -->
+        <VCNPanel :instance-id="selectedInstanceId" />
       </el-tab-pane>
 
       <!-- ============================================================ -->
@@ -522,6 +522,7 @@ import type {
 import VnicIpv6Row from '../components/vnic/VnicIpv6Row.vue'
 import BatchCreateModal from '../components/vnic/BatchCreateModal.vue'
 import SecurityRulesPanel from '../components/vnic/SecurityRulesPanel.vue'
+import VCNPanel from '../components/vnic/VCNPanel.vue'
 
 // ---- Types ----
 interface Instance {
