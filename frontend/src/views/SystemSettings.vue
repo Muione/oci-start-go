@@ -527,8 +527,8 @@
                     </div>
                   </template>
                   <el-table :data="loginHistory" size="small" max-height="200">
-                    <el-table-column prop="time" label="时间" width="160" />
-                    <el-table-column prop="ip" label="IP 地址" width="130" />
+                    <el-table-column prop="created_at" label="时间" width="160" />
+                    <el-table-column prop="ip_address" label="IP 地址" width="130" />
                     <el-table-column prop="status" label="状态" width="80">
                       <template #default="{ row }">
                         <el-tag :type="row.success ? 'success' : 'danger'" size="small">
@@ -543,36 +543,6 @@
                 </el-card>
               </el-col>
 
-              <!-- IP Whitelist -->
-              <el-col :xs="24" :sm="12">
-                <el-card shadow="none" class="channel-card">
-                  <template #header>
-                    <div class="channel-header">
-                      <span>🛡️ IP 白名单</span>
-                      <el-tag type="info" size="small">{{ ipWhitelist.length }} 条规则</el-tag>
-                    </div>
-                  </template>
-                  <el-input
-                    v-model="newIpRule"
-                    placeholder="输入 IP 地址或 CIDR"
-                    size="small"
-                    style="margin-bottom: 8px;"
-                  >
-                    <template #append>
-                      <el-button @click="addIpRule">添加</el-button>
-                    </template>
-                  </el-input>
-                  <div v-for="(ip, index) in ipWhitelist" :key="index" class="ip-rule-item">
-                    <span class="data-mono">{{ ip }}</span>
-                    <el-button type="danger" text size="small" @click="removeIpRule(index)">
-                      <el-icon><Delete /></el-icon>
-                    </el-button>
-                  </div>
-                  <div v-if="ipWhitelist.length === 0" style="text-align: center; padding: 20px; color: var(--text-muted);">
-                    未配置 IP 白名单（允许所有 IP）
-                  </div>
-                </el-card>
-              </el-col>
             </el-row>
 
             <!-- Session Management -->
@@ -653,7 +623,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Lock, Check, Connection, Delete, SwitchButton, Promotion, Close, Setting } from '@element-plus/icons-vue'
+import { Refresh, Lock, Check, Connection, SwitchButton, Promotion, Close, Setting } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import request from '../utils/request'
 import PageHeader from '../components/common/PageHeader.vue'
@@ -747,16 +717,12 @@ const notificationHistory = ref<Array<{ time: string; channel: string; message: 
 
 // Login history state (mock data for now)
 const loginHistory = ref([
-  { time: '2026-07-03 10:30:22', ip: '192.168.1.100', success: true },
-  { time: '2026-07-03 09:15:45', ip: '192.168.1.100', success: true },
-  { time: '2026-07-02 22:10:33', ip: '10.0.0.50', success: true },
-  { time: '2026-07-02 18:45:12', ip: '172.16.0.200', success: false },
-  { time: '2026-07-02 15:30:08', ip: '192.168.1.100', success: true },
+  { created_at: '2026-07-03 10:30:22', ip_address: '192.168.1.100', success: true },
+  { created_at: '2026-07-03 09:15:45', ip_address: '192.168.1.100', success: true },
+  { created_at: '2026-07-02 22:10:33', ip_address: '10.0.0.50', success: true },
+  { created_at: '2026-07-02 18:45:12', ip_address: '172.16.0.200', success: false },
+  { created_at: '2026-07-02 15:30:08', ip_address: '192.168.1.100', success: true },
 ])
-
-// IP Whitelist state
-const ipWhitelist = ref(['192.168.1.0/24', '10.0.0.0/8'])
-const newIpRule = ref('')
 
 // Session management state
 const activeSessions = ref(3)
@@ -1102,35 +1068,6 @@ async function loadLoginHistory() {
   } catch { /* silently ignore */ }
 }
 
-// IP Whitelist functions
-function addIpRule() {
-  const ip = newIpRule.value.trim()
-  if (!ip) {
-    ElMessage.warning('请输入 IP 地址')
-    return
-  }
-  // Basic IP/CIDR validation
-  const ipRegex = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/
-  if (!ipRegex.test(ip)) {
-    ElMessage.warning('请输入有效的 IP 地址或 CIDR 格式')
-    return
-  }
-  if (ipWhitelist.value.includes(ip)) {
-    ElMessage.warning('该 IP 规则已存在')
-    return
-  }
-  ipWhitelist.value.push(ip)
-  newIpRule.value = ''
-  ElMessage.success('IP 规则已添加')
-  // TODO: Save to backend when API is available
-}
-
-function removeIpRule(index: number) {
-  ipWhitelist.value.splice(index, 1)
-  ElMessage.success('IP 规则已删除')
-  // TODO: Save to backend when API is available
-}
-
 // Session management functions
 async function logoutAllSessions() {
   try {
@@ -1332,27 +1269,6 @@ onMounted(async () => {
   margin-top: auto;
   padding-top: 10px;
   text-align: right;
-}
-
-.ip-rule-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 8px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  margin-bottom: 6px;
-  background: var(--bg-surface);
-}
-
-.ip-rule-item:last-child {
-  margin-bottom: 0;
-}
-
-.data-mono {
-  font-family: monospace;
-  font-size: var(--text-sm);
-  color: var(--text-primary);
 }
 
 /* User actions */
