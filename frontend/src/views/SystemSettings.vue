@@ -35,6 +35,24 @@
         <!-- 通知渠道 -->
         <el-tab-pane label="📢 通知" name="notification">
           <div class="tab-content">
+            <!-- Quick Actions -->
+            <div class="notification-quick-actions">
+              <div class="quick-actions-left">
+                <span class="quick-actions-label">快捷操作</span>
+              </div>
+              <div class="quick-actions-right">
+                <el-button size="small" type="primary" :loading="testingAllChannels" @click="testAllChannels">
+                  <el-icon><Promotion /></el-icon> 全部测试
+                </el-button>
+                <el-button size="small" @click="enableAllNotifications" :disabled="!notificationsDisabled">
+                  <el-icon><Check /></el-icon> 全部启用
+                </el-button>
+                <el-button size="small" @click="disableAllNotifications" :disabled="notificationsDisabled">
+                  <el-icon><Close /></el-icon> 全部禁用
+                </el-button>
+              </div>
+            </div>
+
             <el-row :gutter="16">
               <!-- Telegram -->
               <el-col :md="12" :sm="24" style="margin-bottom:16px">
@@ -42,9 +60,14 @@
                   <template #header>
                     <div class="channel-header">
                       <span>📨 Telegram</span>
-                      <el-tag :type="cfgStr('telegram.bot.token') ? 'success' : 'info'" size="small">
-                        {{ cfgStr('telegram.bot.token') ? '已配置' : '未配置' }}
-                      </el-tag>
+                      <div style="display: flex; gap: 8px; align-items: center;">
+                        <el-tag :type="cfgStr('telegram.bot.token') ? 'success' : 'info'" size="small">
+                          {{ cfgStr('telegram.bot.token') ? '已配置' : '未配置' }}
+                        </el-tag>
+                        <el-button size="small" text @click="testNotification('telegram')" :loading="testingChannel === 'telegram'">
+                          <el-icon><Promotion /></el-icon>
+                        </el-button>
+                      </div>
                     </div>
                   </template>
                   <el-descriptions :column="1" size="small" border>
@@ -70,9 +93,14 @@
                   <template #header>
                     <div class="channel-header">
                       <span>🔔 钉钉</span>
-                      <el-tag :type="cfgStr('dingtalk.webhook') ? 'success' : 'info'" size="small">
-                        {{ cfgStr('dingtalk.webhook') ? '已配置' : '未配置' }}
-                      </el-tag>
+                      <div style="display: flex; gap: 8px; align-items: center;">
+                        <el-tag :type="cfgStr('dingtalk.webhook') ? 'success' : 'info'" size="small">
+                          {{ cfgStr('dingtalk.webhook') ? '已配置' : '未配置' }}
+                        </el-tag>
+                        <el-button size="small" text @click="testNotification('dingtalk')" :loading="testingChannel === 'dingtalk'">
+                          <el-icon><Promotion /></el-icon>
+                        </el-button>
+                      </div>
                     </div>
                   </template>
                   <el-descriptions :column="1" size="small" border>
@@ -98,9 +126,14 @@
                   <template #header>
                     <div class="channel-header">
                       <span>📱 Bark (iOS)</span>
-                      <el-tag :type="cfgStr('bark.key') ? 'success' : 'info'" size="small">
-                        {{ cfgStr('bark.key') ? '已配置' : '未配置' }}
-                      </el-tag>
+                      <div style="display: flex; gap: 8px; align-items: center;">
+                        <el-tag :type="cfgStr('bark.key') ? 'success' : 'info'" size="small">
+                          {{ cfgStr('bark.key') ? '已配置' : '未配置' }}
+                        </el-tag>
+                        <el-button size="small" text @click="testNotification('bark')" :loading="testingChannel === 'bark'">
+                          <el-icon><Promotion /></el-icon>
+                        </el-button>
+                      </div>
                     </div>
                   </template>
                   <el-descriptions :column="1" size="small" border>
@@ -126,9 +159,14 @@
                   <template #header>
                     <div class="channel-header">
                       <span>🧧 飞书</span>
-                      <el-tag :type="cfgStr('feishu.webhook') ? 'success' : 'info'" size="small">
-                        {{ cfgStr('feishu.webhook') ? '已配置' : '未配置' }}
-                      </el-tag>
+                      <div style="display: flex; gap: 8px; align-items: center;">
+                        <el-tag :type="cfgStr('feishu.webhook') ? 'success' : 'info'" size="small">
+                          {{ cfgStr('feishu.webhook') ? '已配置' : '未配置' }}
+                        </el-tag>
+                        <el-button size="small" text @click="testNotification('feishu')" :loading="testingChannel === 'feishu'">
+                          <el-icon><Promotion /></el-icon>
+                        </el-button>
+                      </div>
                     </div>
                   </template>
                   <el-descriptions :column="1" size="small" border>
@@ -148,6 +186,37 @@
                 </el-card>
               </el-col>
             </el-row>
+
+            <!-- Notification History -->
+            <el-card shadow="none" class="channel-card notification-history-card">
+              <template #header>
+                <div class="channel-header">
+                  <span>📋 通知历史</span>
+                  <el-button size="small" text @click="loadNotificationHistory" :loading="historyLoading">
+                    <el-icon><Refresh /></el-icon>
+                  </el-button>
+                </div>
+              </template>
+              <el-table :data="notificationHistory" size="small" max-height="300">
+                <el-table-column prop="time" label="时间" width="160" />
+                <el-table-column prop="channel" label="渠道" width="100">
+                  <template #default="{ row }">
+                    <el-tag size="small">{{ row.channel }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="message" label="内容" min-width="200" show-overflow-tooltip />
+                <el-table-column prop="status" label="状态" width="80">
+                  <template #default="{ row }">
+                    <el-tag :type="row.success ? 'success' : 'danger'" size="small">
+                      {{ row.success ? '成功' : '失败' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div v-if="notificationHistory.length === 0" class="notification-history-empty">
+                暂无通知记录
+              </div>
+            </el-card>
           </div>
         </el-tab-pane>
 
@@ -212,106 +281,37 @@
         <!-- SSL 证书 -->
         <el-tab-pane label="🔒 SSL" name="ssl">
           <div class="tab-content">
-            <!-- Certificate Status Card -->
-            <el-card shadow="none" class="ssl-status-card" :class="sslStatusClass">
-              <template #header>
-                <div class="channel-header">
-                  <span>🔒 证书状态</span>
-                  <el-tag :type="sslStatusType" size="small" effect="dark">{{ sslStatusText }}</el-tag>
+            <el-descriptions :column="2" border>
+              <el-descriptions-item label="域名">
+                <div class="inline-edit">
+                  <el-input v-model="editValues['ssl.domain']" placeholder="输入域名" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['ssl.domain']" @click="saveField('ssl.domain')">保存</el-button>
                 </div>
-              </template>
-              <el-descriptions :column="2" size="small" border>
-                <el-descriptions-item label="域名">{{ cfgStr('ssl.domain') || '未配置' }}</el-descriptions-item>
-                <el-descriptions-item label="邮箱">{{ cfgStr('ssl.email') || '未配置' }}</el-descriptions-item>
-                <el-descriptions-item label="证书颁发者">
-                  {{ cfgStr('ssl.domain') ? 'Let\'s Encrypt' : '—' }}
-                </el-descriptions-item>
-                <el-descriptions-item label="到期时间">
-                  <span v-if="sslExpiry" :style="{ color: sslExpiryColor }">{{ sslExpiry }}</span>
-                  <span v-else style="color: var(--text-muted)">—</span>
-                </el-descriptions-item>
-                <el-descriptions-item label="剩余天数">
-                  <span v-if="sslDaysRemaining !== null" :style="{ color: sslDaysColor, fontWeight: 'var(--font-semibold)' }">
-                    {{ sslDaysRemaining > 0 ? sslDaysRemaining + ' 天' : '已过期' }}
-                  </span>
-                  <span v-else style="color: var(--text-muted)">—</span>
-                </el-descriptions-item>
-                <el-descriptions-item label="自动续期">
-                  <el-tag type="success" size="small">每天 04:00</el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item label="模式">
-                  <el-tag :type="config.bools?.['ssl.staging'] ? 'warning' : 'success'" size="small">
-                    {{ config.bools?.['ssl.staging'] ? 'Staging (测试)' : 'Production (生产)' }}
-                  </el-tag>
-                </el-descriptions-item>
-                <el-descriptions-item label="DNS 提供商">
-                  <el-tag type="info" size="small">Cloudflare</el-tag>
-                </el-descriptions-item>
-              </el-descriptions>
-            </el-card>
-
-            <!-- Quick Actions -->
-            <el-card shadow="none" class="channel-card" style="margin-top: 16px;">
-              <template #header>
-                <div class="channel-header">
-                  <span>⚡ 快捷操作</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="Email">
+                <div class="inline-edit">
+                  <el-input v-model="editValues['ssl.email']" placeholder="输入 Email" size="small" />
+                  <el-button size="small" type="primary" :loading="savingKeys['ssl.email']" @click="saveField('ssl.email')">保存</el-button>
                 </div>
-              </template>
-              <div class="ssl-actions">
-                <el-button
-                  type="primary"
-                  :loading="sslRenewing"
-                  :disabled="!cfgStr('ssl.domain') || !cfgStr('ssl.email')"
-                  @click="forceRenewSsl"
-                >
-                  <el-icon><Refresh /></el-icon> 强制续期
-                </el-button>
-                <el-button
-                  :disabled="!cfgStr('ssl.domain')"
-                  @click="viewCertDetails"
-                >
-                  <el-icon><Document /></el-icon> 查看证书详情
-                </el-button>
-                <el-button
-                  :disabled="!cfgStr('ssl.domain')"
-                  @click="testSslConfig"
-                >
-                  <el-icon><Connection /></el-icon> 测试 SSL 配置
-                </el-button>
-              </div>
-              <div v-if="!cfgStr('ssl.domain')" style="margin-top:12px">
-                <el-alert
-                  title="SSL 证书未配置"
-                  type="info"
-                  description="请先配置域名和邮箱，然后设置 Cloudflare API Token 以启用 Let's Encrypt 自动签发/续期。"
-                  :closable="false"
-                  show-icon
-                />
-              </div>
-            </el-card>
-
-            <!-- Configuration Form -->
-            <el-card shadow="none" class="channel-card" style="margin-top: 16px;">
-              <template #header>
-                <div class="channel-header">
-                  <span>⚙️ 配置</span>
-                </div>
-              </template>
-              <el-descriptions :column="2" border>
-                <el-descriptions-item label="域名">
-                  <div class="inline-edit">
-                    <el-input v-model="editValues['ssl.domain']" placeholder="输入域名" size="small" />
-                    <el-button size="small" type="primary" :loading="savingKeys['ssl.domain']" @click="saveField('ssl.domain')">保存</el-button>
-                  </div>
-                </el-descriptions-item>
-                <el-descriptions-item label="Email">
-                  <div class="inline-edit">
-                    <el-input v-model="editValues['ssl.email']" placeholder="输入 Email" size="small" />
-                    <el-button size="small" type="primary" :loading="savingKeys['ssl.email']" @click="saveField('ssl.email')">保存</el-button>
-                  </div>
-                </el-descriptions-item>
-              </el-descriptions>
-            </el-card>
+              </el-descriptions-item>
+              <el-descriptions-item label="模式">
+                <el-tag :type="config.bools?.['ssl.staging'] ? 'warning' : 'success'" size="small">
+                  {{ config.bools?.['ssl.staging'] ? 'Staging (测试)' : 'Production (生产)' }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="自动续期">
+                <el-tag type="info" size="small">每天 04:00 (SslCertJob)</el-tag>
+              </el-descriptions-item>
+            </el-descriptions>
+            <div v-if="!cfgStr('ssl.domain')" style="margin-top:12px">
+              <el-alert
+                title="SSL 证书未配置"
+                type="info"
+                description="在系统配置中设置 ssl.domain、ssl.email、cloudflare.api.token 以启用 Let's Encrypt 自动签发/续期。"
+                :closable="false"
+                show-icon
+              />
+            </div>
           </div>
         </el-tab-pane>
 
@@ -601,7 +601,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Lock, Check, Connection, Delete, SwitchButton } from '@element-plus/icons-vue'
+import { Refresh, Lock, Check, Connection, Delete, SwitchButton, Promotion, Close } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import request from '../utils/request'
 import PageHeader from '../components/common/PageHeader.vue'
@@ -683,6 +683,13 @@ const proxyRules = {
   port: [{ required: true, message: '请输入端口', trigger: 'blur' }],
 }
 
+// Notification state
+const testingChannel = ref('')
+const testingAllChannels = ref(false)
+const notificationsDisabled = ref(false)
+const historyLoading = ref(false)
+const notificationHistory = ref<Array<{ time: string; channel: string; message: string; success: boolean }>>([])
+
 // Login history state (mock data for now)
 const loginHistory = ref([
   { time: '2026-07-03 10:30:22', ip: '192.168.1.100', success: true },
@@ -762,6 +769,87 @@ async function doChangePassword() {
     ElMessage.error(e.message || '密码修改失败')
   } finally {
     pwdSaving.value = false
+  }
+}
+
+// Notification functions
+const channelNames: Record<string, string> = {
+  telegram: 'Telegram',
+  dingtalk: '钉钉',
+  bark: 'Bark',
+  feishu: '飞书',
+}
+
+function formatNow(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+async function testNotification(channel: string) {
+  const tokenKey = channel === 'telegram' ? 'telegram.bot.token'
+    : channel === 'dingtalk' ? 'dingtalk.webhook'
+    : channel === 'bark' ? 'bark.key'
+    : 'feishu.webhook'
+
+  if (!cfgStr(tokenKey)) {
+    ElMessage.warning(`${channelNames[channel]} 未配置，无法发送测试通知`)
+    return
+  }
+
+  testingChannel.value = channel
+  try {
+    await request.post('/system/notification/test', { channel })
+    ElMessage.success(`${channelNames[channel]} 测试通知发送成功`)
+    notificationHistory.value.unshift({
+      time: formatNow(),
+      channel: channelNames[channel],
+      message: '测试通知',
+      success: true,
+    })
+  } catch (e: any) {
+    ElMessage.error(`${channelNames[channel]} 测试通知发送失败: ${e.message || '未知错误'}`)
+    notificationHistory.value.unshift({
+      time: formatNow(),
+      channel: channelNames[channel],
+      message: `测试失败: ${e.message || '未知错误'}`,
+      success: false,
+    })
+  } finally {
+    testingChannel.value = ''
+  }
+}
+
+async function testAllChannels() {
+  testingAllChannels.value = true
+  const channels = ['telegram', 'dingtalk', 'bark', 'feishu']
+  for (const ch of channels) {
+    await testNotification(ch)
+  }
+  testingAllChannels.value = false
+}
+
+async function enableAllNotifications() {
+  notificationsDisabled.value = false
+  ElMessage.success('已启用所有通知渠道')
+}
+
+async function disableAllNotifications() {
+  notificationsDisabled.value = true
+  ElMessage.info('已禁用所有通知渠道')
+}
+
+async function loadNotificationHistory() {
+  historyLoading.value = true
+  try {
+    const data = await request.get('/system/notification/history') as any
+    if (Array.isArray(data)) {
+      notificationHistory.value = data
+    }
+  } catch {
+    // Use empty state when API is not available
+  } finally {
+    historyLoading.value = false
   }
 }
 
@@ -923,7 +1011,7 @@ function loadGithubOAuth() {
   githubForm.enabled = config.value.bools?.['github.enabled'] || false
   githubForm.clientId = strs['github.client.id'] || ''
   githubForm.clientSecret = strs['github.client.secret'] || ''
-  githubForm.redirectUri = strs['github.redirect.uri'] || ''
+  githubForm.redirectUri = strs['github.client.redirect.uri'] || ''
 }
 
 async function saveGithubOAuth() {
@@ -1011,6 +1099,7 @@ onMounted(async () => {
   loadMfaStatus()
   loadTurnstile()
   loadGithubOAuth()
+  loadNotificationHistory()
 })
 </script>
 
@@ -1199,6 +1288,41 @@ onMounted(async () => {
   color: var(--text-primary);
 }
 
+/* Notification quick actions */
+.notification-quick-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.quick-actions-label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.quick-actions-right {
+  display: flex;
+  gap: 8px;
+}
+
+/* Notification history */
+.notification-history-card {
+  margin-top: 16px;
+}
+
+.notification-history-empty {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
 @media (max-width: 768px) {
   .settings-layout {
     flex-direction: column;
@@ -1211,6 +1335,11 @@ onMounted(async () => {
 
   .settings-tabs :deep(.el-tabs__nav-wrap) {
     overflow-x: auto;
+  }
+
+  .notification-quick-actions {
+    flex-direction: column;
+    gap: 8px;
   }
 }
 </style>
