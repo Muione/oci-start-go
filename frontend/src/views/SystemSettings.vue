@@ -535,8 +535,9 @@
               </el-col>
             </el-row>
 
-            <!-- Login History -->
+            <!-- Login History, IP Whitelist, and Session Management -->
             <el-row :gutter="16" style="margin-top: 20px;">
+              <!-- Login History -->
               <el-col :xs="24" :sm="24">
                 <el-card shadow="none" class="channel-card">
                   <template #header>
@@ -550,10 +551,7 @@
                   <el-table :data="loginHistory" size="small" max-height="400">
                     <el-table-column prop="created_at" label="时间" min-width="180" />
                     <el-table-column prop="ip_address" label="IP 地址" min-width="150" />
-                    <el-table-column prop="user_agent" label="浏览器" min-width="200" show-overflow-tooltip />
-                    <el-table-column prop="login_type" label="登录方式" width="100" />
-                    <el-table-column prop="failure_reason" label="失败原因" min-width="150" show-overflow-tooltip />
-                    <el-table-column label="状态" width="80" align="center">
+                    <el-table-column prop="status" label="状态" width="80">
                       <template #default="{ row }">
                         <el-tag :type="row.success ? 'success' : 'danger'" size="small">
                           {{ row.success ? '成功' : '失败' }}
@@ -566,6 +564,7 @@
                   </div>
                 </el-card>
               </el-col>
+
             </el-row>
 
             <!-- Session Management -->
