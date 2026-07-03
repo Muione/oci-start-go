@@ -234,7 +234,7 @@
       <!-- Tab 4: Network Config (Task 9) -->
       <!-- ============================================================ -->
       <el-tab-pane label="网络配置" name="network">
-        <!-- Task 9 -->
+        <NetworkConfigPanel :compartment-id="selectedInstance?.compartmentId ?? ''" :vcn-id="currentVcnId" :instance-id="selectedInstanceId" />
       </el-tab-pane>
     </el-tabs>
 
@@ -523,6 +523,8 @@ import VnicIpv6Row from '../components/vnic/VnicIpv6Row.vue'
 import BatchCreateModal from '../components/vnic/BatchCreateModal.vue'
 import SecurityRulesPanel from '../components/vnic/SecurityRulesPanel.vue'
 import VCNPanel from '../components/vnic/VCNPanel.vue'
+import NetworkConfigPanel from '../components/vnic/NetworkConfigPanel.vue'
+import type { VcnInfo } from '../types/api'
 
 // ---- Types ----
 interface Instance {
@@ -553,6 +555,9 @@ const selectedInstance = ref<Instance | null>(null)
 // VNIC data
 const vnicData = ref<VnicLoadData | null>(null)
 const loading = ref(false)
+
+// VCN ID for network config panel
+const currentVcnId = ref('')
 
 // Batch create
 const batchCreateVisible = ref(false)
@@ -675,17 +680,28 @@ async function loadInstances(tenantId: number) {
       selectedInstance.value = only
       saveLastSelection(tenantId, only.instanceId)
       await loadVnicData(only.instanceId)
+      await loadCurrentVcnId()
     } else {
       const last = loadLastSelection()
       if (last.instanceId && instanceOptions.value.some(i => i.instanceId === last.instanceId)) {
         selectedInstanceId.value = last.instanceId
         selectedInstance.value = instanceOptions.value.find(i => i.instanceId === last.instanceId) || null
         await loadVnicData(last.instanceId)
+        await loadCurrentVcnId()
       }
     }
   } catch {
     instanceOptions.value = []
   }
+}
+
+async function loadCurrentVcnId() {
+  try {
+    const res = await request.get('/api/vcn/list') as VcnInfo[]
+    if (res && res.length > 0) {
+      currentVcnId.value = res[0].id
+    }
+  } catch { /* ignore */ }
 }
 
 async function loadVnicData(instanceId: string) {
@@ -756,9 +772,11 @@ function onTenantChange(tenantId: number | null) {
 function onInstanceChange(instanceId: string) {
   selectedInstance.value = instanceOptions.value.find(i => i.instanceId === instanceId) || null
   vnicData.value = null
+  currentVcnId.value = ''
   if (instanceId) {
     saveLastSelection(selectedTenantId.value, instanceId)
     loadVnicData(instanceId)
+    loadCurrentVcnId()
   } else {
     saveLastSelection(selectedTenantId.value, '')
   }
