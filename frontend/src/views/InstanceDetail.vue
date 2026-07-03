@@ -236,8 +236,7 @@
 
       <!-- ======================== 流量监控 Tab ======================== -->
       <el-tab-pane label="流量监控" name="traffic">
-        <!-- InstanceTrafficPanel will be created in Task 4 -->
-        <el-empty description="流量监控面板 (即将上线)" />
+        <InstanceTrafficPanel v-if="instance.instanceId" :instance-id="instance.instanceId" />
       </el-tab-pane>
 
       <!-- ======================== 磁盘管理 Tab ======================== -->
@@ -335,6 +334,7 @@ import {
 import request from '../utils/request'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import MonoText from '../components/common/MonoText.vue'
+import InstanceTrafficPanel from '../components/instance/InstanceTrafficPanel.vue'
 
 defineOptions({ name: 'instance-detail' })
 
