@@ -1215,10 +1215,10 @@ async function loadCredentials() {
       request.get(`/tenants/${tenantId}/users/${uo}/smtp-credentials`),
       request.get(`/tenants/${tenantId}/users/${uo}/customer-secret-keys`),
     ])
-    apiKeys.value = keys || []
-    authTokens.value = tokens || []
-    smtpCreds.value = smtp || []
-    customerSecretKeys.value = csks || []
+    apiKeys.value = (keys as unknown as any[]) || []
+    authTokens.value = (tokens as unknown as any[]) || []
+    smtpCreds.value = (smtp as unknown as any[]) || []
+    customerSecretKeys.value = (csks as unknown as any[]) || []
     credLoaded.value = true
   } catch (e: any) { ElMessage.error('加载凭证失败: ' + e.message) }
   finally { credLoading.value = false }

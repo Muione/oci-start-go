@@ -21,8 +21,8 @@ export function accountTypeTag(t: string | undefined): 'success' | 'warning' | '
 export function accountTypeLabel(t: string | undefined): string {
   if (!t) return '—'
   const m: Record<string, string> = {
-    FREE_TIER: '免费', PAYG: '升级号',
-    FREE: '免费', PAYG: '升级号',
+    FREE_TIER: '免费', FREE: '免费',
+    PAYG: '升级号',
     // legacy values (pre-sync) — keep for backward compat
     trial: '免费试用', paid: '付费账户', enterprise: '企业账户', free: '免费账户',
     PERSONAL: '个人', CORPORATE: '企业',
