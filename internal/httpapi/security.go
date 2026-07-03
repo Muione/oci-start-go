@@ -1,6 +1,8 @@
-// Package httpapi -- security.go: Login history API.
-// GET /api/security/login-history — protected. Returns paginated login history.
-// recordLoginAttempt() inserts a login attempt row (called from login handler).
+// Package httpapi -- security.go: Login history + session management API.
+// GET  /api/security/login-history  — paginated login history.
+// GET  /api/security/sessions       — active sessions list.
+// DELETE /api/security/sessions/:id  — delete a specific session.
+// POST /api/security/logout-all      — terminate all other sessions.
 package httpapi
 
 import (
@@ -10,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Muione/oci-start-go/internal/auth"
 	"github.com/Muione/oci-start-go/internal/response"
 )
 
@@ -110,4 +113,96 @@ func recordLoginAttempt(deps *Deps, ctx context.Context, username, ip, userAgent
 	_, _ = deps.Store.Write.ExecContext(ctx,
 		`INSERT INTO login_history (username, ip_address, user_agent, login_type, success, failure_reason) VALUES (?, ?, ?, ?, ?, ?)`,
 		username, ip, userAgent, loginType, successInt, failureReason)
+}
+
+// sessionResp represents a session entry.
+type sessionResp struct {
+	ID           string `json:"id"`
+	Username     string `json:"username"`
+	IPAddress    string `json:"ip_address"`
+	UserAgent    string `json:"user_agent"`
+	CreatedAt    string `json:"created_at"`
+	LastActiveAt string `json:"last_active_at"`
+	IsCurrent    bool   `json:"is_current"`
+}
+
+// listSessions — GET /api/security/sessions — protected.
+// Returns all active (non-expired) sessions.
+func listSessions(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		currentToken := auth.TokenFromRequest(c)
+
+		rows, err := deps.Store.Read.QueryContext(ctx,
+			`SELECT id, username, ip_address, user_agent, created_at, last_active_at FROM sessions WHERE expires_at > datetime('now') ORDER BY last_active_at DESC`)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "查询会话失败")
+			return
+		}
+		defer rows.Close()
+
+		sessions := []sessionResp{}
+		for rows.Next() {
+			var s sessionResp
+			if err := rows.Scan(&s.ID, &s.Username, &s.IPAddress, &s.UserAgent, &s.CreatedAt, &s.LastActiveAt); err != nil {
+				continue
+			}
+			s.IsCurrent = s.ID == currentToken
+			sessions = append(sessions, s)
+		}
+
+		response.OK(c, response.SuccessData(gin.H{"sessions": sessions}))
+	}
+}
+
+// deleteSession — DELETE /api/security/sessions/:id — protected.
+// Deletes a specific session. Cannot delete the current session (use logout instead).
+func deleteSession(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		sessionID := c.Param("id")
+		currentToken := auth.TokenFromRequest(c)
+
+		if sessionID == currentToken {
+			response.Fail(c, http.StatusBadRequest, "不能删除当前会话")
+			return
+		}
+
+		result, err := deps.Store.Write.ExecContext(ctx, `DELETE FROM sessions WHERE id = ?`, sessionID)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "删除会话失败")
+			return
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected == 0 {
+			response.Fail(c, http.StatusNotFound, "会话不存在")
+			return
+		}
+
+		response.OK(c, response.SuccessData(gin.H{"message": "会话已删除"}))
+	}
+}
+
+// logoutAllSessions — POST /api/security/logout-all — protected.
+// Terminates all other sessions for the current user (keeps the current session).
+func logoutAllSessions(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		currentToken := auth.TokenFromRequest(c)
+
+		result, err := deps.Store.Write.ExecContext(ctx,
+			`DELETE FROM sessions WHERE id != ? AND username = (SELECT username FROM sessions WHERE id = ?)`,
+			currentToken, currentToken)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "退出会话失败")
+			return
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		response.OK(c, response.SuccessData(gin.H{
+			"message":          "已退出所有其他会话",
+			"terminated_count": rowsAffected,
+		}))
+	}
 }
