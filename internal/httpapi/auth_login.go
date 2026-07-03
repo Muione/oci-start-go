@@ -80,6 +80,7 @@ func login(deps *Deps) gin.HandlerFunc {
 			secret := deps.SysConf.GetString(ctx, "turnstile.secret.key")
 			ok, err := turnstile.Verify(secret, req.TurnstileToken, iputil.ClientIP(c))
 			if err != nil || !ok {
+				recordLoginAttempt(deps, ctx, req.Username, iputil.ClientIP(c), c.GetHeader("User-Agent"), "password", false, "Turnstile验证失败")
 				response.Fail(c, http.StatusUnauthorized, "Turnstile验证失败")
 				return
 			}
@@ -87,27 +88,32 @@ func login(deps *Deps) gin.HandlerFunc {
 
 		plain, err := deps.Keypair.Decrypt(req.PreLoginToken, req.Password)
 		if err != nil {
+			recordLoginAttempt(deps, ctx, req.Username, iputil.ClientIP(c), c.GetHeader("User-Agent"), "password", false, "用户名或密码错误")
 			response.Fail(c, http.StatusUnauthorized, "用户名或密码错误")
 			return
 		}
 
 		user, err := repo.New(deps.Store.Read).FindUserByUsername(ctx, req.Username)
 		if err != nil {
+			recordLoginAttempt(deps, ctx, req.Username, iputil.ClientIP(c), c.GetHeader("User-Agent"), "password", false, "用户名或密码错误")
 			response.Fail(c, http.StatusUnauthorized, "用户名或密码错误")
 			return
 		}
 		if err := bcryptpkg.Compare(user.Password, plain); err != nil {
+			recordLoginAttempt(deps, ctx, req.Username, iputil.ClientIP(c), c.GetHeader("User-Agent"), "password", false, "用户名或密码错误")
 			response.Fail(c, http.StatusUnauthorized, "用户名或密码错误")
 			return
 		}
 
 		if deps.SysConf.GetBool(ctx, "mfa.enabled") {
 			if req.MfaCode == "" {
+				recordLoginAttempt(deps, ctx, req.Username, iputil.ClientIP(c), c.GetHeader("User-Agent"), "password", false, "请提供MFA验证码")
 				response.Fail(c, http.StatusUnauthorized, "请提供MFA验证码")
 				return
 			}
 			secret := deps.SysConf.GetString(ctx, "mfa.secret.key")
 			if secret == "" || !totp.Validate(secret, req.MfaCode) {
+				recordLoginAttempt(deps, ctx, req.Username, iputil.ClientIP(c), c.GetHeader("User-Agent"), "password", false, "MFA验证码错误")
 				response.Fail(c, http.StatusUnauthorized, "MFA验证码错误")
 				return
 			}
@@ -122,6 +128,7 @@ func login(deps *Deps) gin.HandlerFunc {
 			LastLoginAt: sql.NullString{String: nowStr(), Valid: true},
 			Username:    user.Username,
 		})
+		recordLoginAttempt(deps, ctx, user.Username, iputil.ClientIP(c), c.GetHeader("User-Agent"), "password", true, "")
 		auth.SetSessionCookie(c, token)
 		response.OK(c, response.SuccessData(gin.H{"redirectUrl": "/"}))
 	}

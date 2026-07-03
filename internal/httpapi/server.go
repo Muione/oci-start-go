@@ -52,6 +52,7 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/api/mfa/totp/setup", mfaTotpSetup(deps))
 	pro.POST("/api/mfa/totp/verify", mfaTotpVerify(deps))
 	pro.POST("/api/mfa/disable", mfaDisable(deps))
+	pro.GET("/api/security/login-history", loginHistory(deps))
 	pro.GET("/tenants/listAll", tenantList(deps))
 	pro.POST("/tenants/save", tenantSave(deps))
 	pro.GET("/tenants/deleteApi", tenantDelete(deps))
