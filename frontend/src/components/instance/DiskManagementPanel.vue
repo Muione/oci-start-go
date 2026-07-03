@@ -55,7 +55,7 @@ async function loadBackups() {
 async function deleteBackup(backup: BootVolumeBackup) {
   try {
     await ElMessageBox.confirm(`确定删除备份 "${backup.displayName}"？`, '删除备份', { type: 'warning', confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' })
-    await request.get('/backup/delete', { params: { id: backup.id } })
+    await request.delete('/backup/delete', { params: { id: backup.id } })
     ElMessage.success('备份已删除')
     loadBackups()
   } catch (e: any) {

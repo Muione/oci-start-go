@@ -165,7 +165,7 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/ssh-keys", sshKeyCreate(deps))
 	pro.DELETE("/ssh-keys/:id", sshKeyDelete(deps))
 	pro.GET("/backup/list", backupList(deps))
-	pro.GET("/backup/delete", backupDelete(deps))
+	pro.DELETE("/backup/delete", backupDelete(deps))
 	pro.POST("/backup/create", backupCreate(deps))
 	pro.POST("/backup/copy", backupCopy(deps))
 	pro.GET("/traffic/alert/list", trafficAlertList(deps))
@@ -270,10 +270,10 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/oci/vcn/configure-ipv6", vcnConfigureIPv6(deps))
 	pro.GET("/oci/nat/list", natList(deps))
 	pro.POST("/oci/nat/create", natCreate(deps))
-	pro.GET("/oci/nat/delete", natDelete(deps))
+	pro.DELETE("/oci/nat/delete", natDelete(deps))
 	pro.GET("/oci/route-table/list", routeTableList(deps))
 	pro.POST("/oci/route-table/create", routeTableCreate(deps))
-	pro.GET("/oci/route-table/delete", routeTableDelete(deps))
+	pro.DELETE("/oci/route-table/delete", routeTableDelete(deps))
 	pro.POST("/oci/route-table/reset", routeTableReset(deps))
 
 	// Phase 12.2: Email Delivery management.

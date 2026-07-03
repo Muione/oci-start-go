@@ -18,7 +18,7 @@ async function handleCreate() {
   saving.value = true
   result.value = null
   try {
-    const res = await request.post('/api/vnic/batch-create', {
+    const res = await request.post('/oci/vnic/create', {
       instanceId: props.instanceId,
       subnetId: props.subnetId ?? '',
       vnicCount: vnicCount.value,

@@ -22,7 +22,7 @@ const reassignIpVisible = ref(false)
 async function loadVcns() {
   loading.value = true
   try {
-    const res = await request.get('/oci/vcn/list', { params: { compartmentId: props.compartmentId } }) as VcnInfo[]
+    const res = await request.get('/oci/vcn/list', { params: { tenantId: props.tenantId, compartmentId: props.compartmentId } }) as VcnInfo[]
     vcnList.value = res ?? []
   } catch (e: any) {
     ElMessage.error(e.message || '加载 VCN 列表失败')

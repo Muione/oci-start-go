@@ -28,6 +28,7 @@ type vcnInfoDTO struct {
 type natGatewayDTO struct {
 	ID             string `json:"id"`
 	DisplayName    string `json:"displayName"`
+	VcnID          string `json:"vcnId"`
 	LifecycleState string `json:"lifecycleState"`
 }
 
@@ -183,6 +184,7 @@ func natList(deps *Deps) gin.HandlerFunc {
 					nats = append(nats, natGatewayDTO{
 						ID:             ds(gw.Id),
 						DisplayName:    ds(gw.DisplayName),
+						VcnID:          ds(gw.VcnId),
 						LifecycleState: string(gw.LifecycleState),
 					})
 				}

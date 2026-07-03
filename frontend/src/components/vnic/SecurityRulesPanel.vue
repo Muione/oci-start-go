@@ -44,7 +44,7 @@ async function deleteRule(rule: SecurityRule) {
 async function enableAll() {
   try {
     await ElMessageBox.confirm('将为当前 Compartment 启用全部协议规则（IPv4 + IPv6 + ICMP），是否继续？', '一键启用', { type: 'warning', confirmButtonText: '确认启用' })
-    await request.post('/tenants/enableAll')
+    await request.post('/tenants/enableAll', { tenantId: props.tenantId })
     ElMessage.success('全部规则已启用')
     loadRules()
   } catch (e: any) {
@@ -55,7 +55,7 @@ async function enableAll() {
 async function enableIpv6() {
   try {
     await ElMessageBox.confirm('将启用 IPv6 入站/出站规则，是否继续？', '启用 IPv6 规则', { type: 'info', confirmButtonText: '确认' })
-    await request.post('/tenants/enableIpv6')
+    await request.post('/tenants/enableIpv6', { tenantId: props.tenantId })
     ElMessage.success('IPv6 规则已启用')
     loadRules()
   } catch (e: any) {

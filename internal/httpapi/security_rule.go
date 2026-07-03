@@ -79,8 +79,24 @@ func deleteSecurityRule(deps *Deps) gin.HandlerFunc {
 }
 
 // batchEnableAll -- POST /tenants/enableAll
+// If tenantId is provided in the body, operates on that single tenant;
+// otherwise operates on ALL tenants.
 func batchEnableAll(deps *Deps) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var body struct {
+			TenantID int64 `json:"tenantId"`
+		}
+		_ = c.ShouldBindJSON(&body) // optional body
+
+		if body.TenantID > 0 {
+			if err := deps.SecurityRule.SingleEnableAll(c.Request.Context(), body.TenantID); err != nil {
+				response.Fail(c, http.StatusInternalServerError, "启用失败: "+err.Error())
+				return
+			}
+			response.OK(c, response.SuccessMsg("success"))
+			return
+		}
+
 		successCount, failCount, err := deps.SecurityRule.BatchEnableAll(c.Request.Context())
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "批量启用失败: "+err.Error())
@@ -94,9 +110,24 @@ func batchEnableAll(deps *Deps) gin.HandlerFunc {
 }
 
 // enableIpv6 -- POST /tenants/enableIpv6
-// Enables IPv6 security rules for all tenants (batch operation).
+// If tenantId is provided in the body, operates on that single tenant;
+// otherwise operates on ALL tenants.
 func enableIpv6(deps *Deps) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var body struct {
+			TenantID int64 `json:"tenantId"`
+		}
+		_ = c.ShouldBindJSON(&body) // optional body
+
+		if body.TenantID > 0 {
+			if err := deps.SecurityRule.SingleEnableIPv6(c.Request.Context(), body.TenantID); err != nil {
+				response.Fail(c, http.StatusInternalServerError, "enable IPv6 failed: "+err.Error())
+				return
+			}
+			response.OK(c, response.SuccessMsg("IPv6 rules enabled"))
+			return
+		}
+
 		if err := deps.SecurityRule.BatchEnableIPv6(c.Request.Context()); err != nil {
 			response.Fail(c, http.StatusInternalServerError, "enable IPv6 failed: "+err.Error())
 			return

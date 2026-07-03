@@ -39,7 +39,7 @@ async function loadRouteTables() {
 async function deleteNat(nat: NatGatewayInfo) {
   try {
     await ElMessageBox.confirm(`确定删除 NAT 网关 "${nat.displayName}"？`, '删除 NAT 网关', { type: 'warning', confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' })
-    await request.get('/oci/nat/delete', { params: { tenantId: props.tenantId, natGatewayId: nat.id } })
+    await request.delete('/oci/nat/delete', { params: { tenantId: props.tenantId, natGatewayId: nat.id } })
     ElMessage.success('NAT 网关已删除')
     loadNatGateways()
   } catch (e: any) {
@@ -50,7 +50,7 @@ async function deleteNat(nat: NatGatewayInfo) {
 async function deleteRouteTable(rt: RouteTableInfo) {
   try {
     await ElMessageBox.confirm(`确定删除路由表 "${rt.displayName}"？`, '删除路由表', { type: 'warning', confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' })
-    await request.get('/oci/route-table/delete', { params: { tenantId: props.tenantId, routeTableId: rt.id } })
+    await request.delete('/oci/route-table/delete', { params: { tenantId: props.tenantId, routeTableId: rt.id } })
     ElMessage.success('路由表已删除')
     loadRouteTables()
   } catch (e: any) {
