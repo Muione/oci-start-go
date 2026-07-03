@@ -6,7 +6,7 @@ import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
 import type { RegionSubInfo } from '../../types/api'
 
-const props = defineProps<{ modelValue: boolean; backupId: string }>()
+const props = defineProps<{ modelValue: boolean; backupId: string; tenantId: number }>()
 const emit = defineEmits<{ 'update:modelValue': [val: boolean]; saved: [] }>()
 
 const saving = ref(false)
@@ -16,7 +16,7 @@ const regions = ref<RegionSubInfo[]>([])
 
 async function loadRegions() {
   try {
-    const res = await request.get('/api/regions/subscribed') as RegionSubInfo[]
+    const res = await request.get(`/tenants/${props.tenantId}/regions/subscribed`) as RegionSubInfo[]
     regions.value = res ?? []
   } catch (e: any) {
     ElMessage.error(e.message || '加载区域列表失败')
@@ -30,7 +30,7 @@ async function handleCopy() {
   }
   saving.value = true
   try {
-    await request.post('/api/backup/copy', { backupId: props.backupId, targetRegion: targetRegion.value, displayName: backupName.value || undefined })
+    await request.post('/backup/copy', { tenantId: props.tenantId, backupId: props.backupId, targetRegion: targetRegion.value, displayName: backupName.value || undefined })
     ElMessage.success('备份复制任务已提交')
     emit('saved')
     emit('update:modelValue', false)

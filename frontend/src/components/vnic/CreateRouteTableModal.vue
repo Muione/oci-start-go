@@ -6,7 +6,7 @@ import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
 import type { NatGatewayInfo } from '../../types/api'
 
-const props = defineProps<{ modelValue: boolean; compartmentId: string; vcnId: string }>()
+const props = defineProps<{ modelValue: boolean; compartmentId: string; vcnId: string; tenantId: number }>()
 const emit = defineEmits<{ 'update:modelValue': [val: boolean]; saved: [] }>()
 
 const saving = ref(false)
@@ -16,7 +16,7 @@ const natGateways = ref<NatGatewayInfo[]>([])
 
 async function loadNatGateways() {
   try {
-    const res = await request.get('/api/nat/list', { params: { compartmentId: props.compartmentId, vcnId: props.vcnId } }) as NatGatewayInfo[]
+    const res = await request.get('/oci/nat/list', { params: { tenantId: props.tenantId, compartmentId: props.compartmentId, vcnId: props.vcnId } }) as NatGatewayInfo[]
     natGateways.value = res ?? []
   } catch {}
 }
@@ -28,7 +28,8 @@ async function handleCreate() {
   }
   saving.value = true
   try {
-    await request.post('/api/route-table/create', {
+    await request.post('/oci/route-table/create', {
+      tenantId: props.tenantId,
       compartmentId: props.compartmentId,
       vcnId: props.vcnId,
       displayName: displayName.value.trim(),

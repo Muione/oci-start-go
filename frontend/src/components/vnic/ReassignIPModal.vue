@@ -5,7 +5,7 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
 
-const props = defineProps<{ modelValue: boolean; instanceId: string }>()
+const props = defineProps<{ modelValue: boolean; instanceId: string; instanceDbId: number }>()
 const emit = defineEmits<{ 'update:modelValue': [val: boolean]; saved: [newIp: string] }>()
 
 const saving = ref(false)
@@ -13,9 +13,9 @@ const saving = ref(false)
 async function handleReassign() {
   saving.value = true
   try {
-    const res = await request.post('/api/vcn/reassign-ip', { instanceId: props.instanceId }) as { publicIp: string }
-    ElMessage.success(`新公网 IP: ${res.publicIp}`)
-    emit('saved', res.publicIp)
+    const res = await request.post(`/instances/${props.instanceDbId}/change-ip`) as { newIp: string }
+    ElMessage.success(`新公网 IP: ${res.newIp}`)
+    emit('saved', res.newIp)
     emit('update:modelValue', false)
   } catch (e: any) {
     ElMessage.error(e.message || '重新分配失败')

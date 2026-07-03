@@ -8,7 +8,7 @@ import type { VcnInfo } from '../../types/api'
 import ConfigureIPv6Modal from './ConfigureIPv6Modal.vue'
 import ReassignIPModal from './ReassignIPModal.vue'
 
-const props = defineProps<{ instanceId: string }>()
+const props = defineProps<{ instanceId: string; instanceDbId: number; compartmentId: string; tenantId: number; currentPublicIp?: string }>()
 
 const loading = ref(false)
 const vcnList = ref<VcnInfo[]>([])
@@ -22,7 +22,7 @@ const reassignIpVisible = ref(false)
 async function loadVcns() {
   loading.value = true
   try {
-    const res = await request.get('/api/vcn/list') as VcnInfo[]
+    const res = await request.get('/oci/vcn/list', { params: { compartmentId: props.compartmentId } }) as VcnInfo[]
     vcnList.value = res ?? []
   } catch (e: any) {
     ElMessage.error(e.message || '加载 VCN 列表失败')
@@ -31,20 +31,13 @@ async function loadVcns() {
   }
 }
 
-async function loadPublicIp() {
-  try {
-    const res = await request.get('/api/instances/detail', { params: { instanceId: props.instanceId } }) as any
-    currentPublicIp.value = res?.publicIp ?? ''
-  } catch {}
-}
-
 function selectVcn(vcn: VcnInfo) {
   selectedVcn.value = vcn
 }
 
 onMounted(() => {
+  currentPublicIp.value = props.currentPublicIp ?? ''
   loadVcns()
-  loadPublicIp()
 })
 </script>
 
@@ -86,8 +79,8 @@ onMounted(() => {
     </el-card>
 
     <!-- Modals -->
-    <ConfigureIPv6Modal v-model="configureIpv6Visible" :vcn-id="selectedVcn?.id ?? ''" @saved="loadVcns" />
-    <ReassignIPModal v-model="reassignIpVisible" :instance-id="instanceId" @saved="(ip) => currentPublicIp = ip" />
+    <ConfigureIPv6Modal v-model="configureIpv6Visible" :vcn-id="selectedVcn?.id ?? ''" :tenant-id="tenantId" @saved="loadVcns" />
+    <ReassignIPModal v-model="reassignIpVisible" :instance-id="instanceId" :instance-db-id="instanceDbId" @saved="(ip) => currentPublicIp = ip" />
   </div>
 </template>
 

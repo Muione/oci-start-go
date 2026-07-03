@@ -140,6 +140,83 @@ func backupDelete(deps *Deps) gin.HandlerFunc {
 	}
 }
 
+// backupCreate creates a boot volume backup.
+// POST /backup/create {tenantId, instanceId, displayName}
+func backupCreate(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			TenantID    int64  `json:"tenantId"`
+			InstanceID  string `json:"instanceId"`
+			DisplayName string `json:"displayName"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid body")
+			return
+		}
+		if body.TenantID <= 0 || body.InstanceID == "" {
+			response.Fail(c, http.StatusBadRequest, "tenantId and instanceId required")
+			return
+		}
+
+		if err := deps.BackupSvc.ManualBackup(c.Request.Context(), body.TenantID, body.InstanceID); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "create backup: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessMsg("backup created"))
+	}
+}
+
+// backupCopy copies a boot volume backup to another region.
+// POST /backup/copy {tenantId, backupId, targetRegion, displayName}
+func backupCopy(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			TenantID     int64  `json:"tenantId"`
+			BackupID     string `json:"backupId"`
+			TargetRegion string `json:"targetRegion"`
+			DisplayName  string `json:"displayName"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid body")
+			return
+		}
+		if body.TenantID <= 0 || body.BackupID == "" || body.TargetRegion == "" {
+			response.Fail(c, http.StatusBadRequest, "tenantId, backupId, and targetRegion required")
+			return
+		}
+
+		t, err := repo.New(deps.Store.Read).FindTenantByID(c.Request.Context(), body.TenantID)
+		if err != nil {
+			response.Fail(c, http.StatusNotFound, "tenant not found")
+			return
+		}
+		creds := tenantToCreds(t)
+		prov, err := oci.NewProvider(creds, deps.MasterKey)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci provider: "+err.Error())
+			return
+		}
+		clients, err := oci.NewClients(prov)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "oci clients: "+err.Error())
+			return
+		}
+
+		displayName := body.DisplayName
+		if displayName == "" {
+			displayName = "copy-" + body.BackupID
+		}
+		newBackupID, err := oci.CopyBootVolumeBackup(c.Request.Context(), clients.Blockstorage, body.BackupID, body.TargetRegion, displayName)
+		if err != nil {
+			response.Fail(c, http.StatusInternalServerError, "copy backup: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessData(map[string]string{
+			"backupId": newBackupID,
+		}))
+	}
+}
+
 // trafficAlertSave creates or updates a traffic alert config.
 // POST /traffic/alert/save
 func trafficAlertSave(deps *Deps) gin.HandlerFunc {

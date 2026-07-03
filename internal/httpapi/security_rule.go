@@ -92,3 +92,15 @@ func batchEnableAll(deps *Deps) gin.HandlerFunc {
 		}))
 	}
 }
+
+// enableIpv6 -- POST /tenants/enableIpv6
+// Enables IPv6 security rules for all tenants (batch operation).
+func enableIpv6(deps *Deps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := deps.SecurityRule.BatchEnableIPv6(c.Request.Context()); err != nil {
+			response.Fail(c, http.StatusInternalServerError, "enable IPv6 failed: "+err.Error())
+			return
+		}
+		response.OK(c, response.SuccessMsg("IPv6 rules enabled"))
+	}
+}

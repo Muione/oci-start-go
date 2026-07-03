@@ -5,7 +5,7 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
 
-const props = defineProps<{ modelValue: boolean; compartmentId: string; vcnId: string }>()
+const props = defineProps<{ modelValue: boolean; compartmentId: string; vcnId: string; tenantId: number }>()
 const emit = defineEmits<{ 'update:modelValue': [val: boolean]; saved: [] }>()
 
 const saving = ref(false)
@@ -18,7 +18,7 @@ async function handleCreate() {
   }
   saving.value = true
   try {
-    await request.post('/api/nat/create', { compartmentId: props.compartmentId, vcnId: props.vcnId, displayName: displayName.value.trim() })
+    await request.post('/oci/nat/create', { tenantId: props.tenantId, compartmentId: props.compartmentId, vcnId: props.vcnId, displayName: displayName.value.trim() })
     ElMessage.success('NAT 网关创建成功')
     emit('saved')
     emit('update:modelValue', false)

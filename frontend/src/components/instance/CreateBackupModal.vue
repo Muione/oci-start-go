@@ -5,7 +5,7 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
 
-const props = defineProps<{ modelValue: boolean; bootVolumeId: string }>()
+const props = defineProps<{ modelValue: boolean; instanceId: string; tenantId: number }>()
 const emit = defineEmits<{ 'update:modelValue': [val: boolean]; saved: [] }>()
 
 const saving = ref(false)
@@ -18,7 +18,7 @@ async function handleCreate() {
   }
   saving.value = true
   try {
-    await request.post('/api/backup/create', { bootVolumeId: props.bootVolumeId, displayName: backupName.value.trim() })
+    await request.post('/backup/create', { tenantId: props.tenantId, instanceId: props.instanceId, displayName: backupName.value.trim() })
     ElMessage.success('备份创建成功')
     emit('saved')
     emit('update:modelValue', false)

@@ -5,7 +5,7 @@ import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
 
-const props = defineProps<{ modelValue: boolean; bootVolumeId: string; currentVpu: number }>()
+const props = defineProps<{ modelValue: boolean; instanceDbId: number; currentVpu: number }>()
 const emit = defineEmits<{ 'update:modelValue': [val: boolean]; saved: [] }>()
 
 const saving = ref(false)
@@ -26,7 +26,7 @@ watch(() => props.modelValue, (val) => {
 async function handleSave() {
   saving.value = true
   try {
-    await request.post('/api/boot-volume/vpu', { bootVolumeId: props.bootVolumeId, vpusPerGB: selectedVpu.value })
+    await request.post(`/instances/${props.instanceDbId}/vpu`, { vpusPerGB: selectedVpu.value })
     ElMessage.success('VPU 调整成功')
     emit('saved')
     emit('update:modelValue', false)

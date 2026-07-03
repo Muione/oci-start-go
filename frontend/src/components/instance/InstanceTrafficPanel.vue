@@ -6,7 +6,7 @@ import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
 import type { TrafficData } from '../../types/api'
 
-const props = defineProps<{ instanceId: string }>()
+const props = defineProps<{ instanceId: string; tenantId: number }>()
 
 const loading = ref(false)
 const traffic = ref<TrafficData | null>(null)
@@ -14,7 +14,7 @@ const traffic = ref<TrafficData | null>(null)
 async function loadTraffic() {
   loading.value = true
   try {
-    const res = await request.get('/api/instances/traffic', { params: { instanceId: props.instanceId } }) as TrafficData
+    const res = await request.get('/instances/traffic', { params: { tenantId: props.tenantId } }) as TrafficData
     traffic.value = res
   } catch (e: any) {
     ElMessage.error(e.message || '加载流量数据失败')

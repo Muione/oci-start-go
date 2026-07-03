@@ -220,21 +220,21 @@
       <!-- Tab 2: Security Rules (Task 7) -->
       <!-- ============================================================ -->
       <el-tab-pane label="安全规则" name="security">
-        <SecurityRulesPanel :compartment-id="selectedInstance?.compartmentId ?? ''" />
+        <SecurityRulesPanel :tenant-id="selectedTenantId ?? 0" />
       </el-tab-pane>
 
       <!-- ============================================================ -->
       <!-- Tab 3: VCN Management (Task 8) -->
       <!-- ============================================================ -->
       <el-tab-pane label="VCN 管理" name="vcn">
-        <VCNPanel :instance-id="selectedInstanceId" />
+        <VCNPanel :instance-id="selectedInstanceId" :instance-db-id="selectedInstance?.id ?? 0" :compartment-id="selectedInstance?.compartmentId ?? ''" :tenant-id="selectedTenantId ?? 0" :current-public-ip="selectedInstance?.publicIps ?? ''" />
       </el-tab-pane>
 
       <!-- ============================================================ -->
       <!-- Tab 4: Network Config (Task 9) -->
       <!-- ============================================================ -->
       <el-tab-pane label="网络配置" name="network">
-        <NetworkConfigPanel :compartment-id="selectedInstance?.compartmentId ?? ''" :vcn-id="currentVcnId" :instance-id="selectedInstanceId" />
+        <NetworkConfigPanel :compartment-id="selectedInstance?.compartmentId ?? ''" :vcn-id="currentVcnId" :instance-id="selectedInstanceId" :tenant-id="selectedTenantId ?? 0" />
       </el-tab-pane>
     </el-tabs>
 
@@ -696,8 +696,9 @@ async function loadInstances(tenantId: number) {
 }
 
 async function loadCurrentVcnId() {
+  if (!selectedInstance.value?.compartmentId) return
   try {
-    const res = await request.get('/api/vcn/list') as VcnInfo[]
+    const res = await request.get('/oci/vcn/list', { params: { compartmentId: selectedInstance.value.compartmentId } }) as VcnInfo[]
     if (res && res.length > 0) {
       currentVcnId.value = res[0].id
     }

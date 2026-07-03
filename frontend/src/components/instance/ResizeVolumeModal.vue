@@ -5,7 +5,7 @@ import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
 
-const props = defineProps<{ modelValue: boolean; bootVolumeId: string; currentSizeGB: number }>()
+const props = defineProps<{ modelValue: boolean; instanceDbId: number; currentSizeGB: number }>()
 const emit = defineEmits<{ 'update:modelValue': [val: boolean]; saved: [] }>()
 
 const saving = ref(false)
@@ -22,7 +22,7 @@ async function handleSave() {
   }
   saving.value = true
   try {
-    await request.post('/api/boot-volume/resize', { bootVolumeId: props.bootVolumeId, sizeInGBs: newSize.value })
+    await request.post(`/instances/${props.instanceDbId}/resize`, { sizeInGBs: newSize.value })
     ElMessage.success('磁盘大小调整成功')
     emit('saved')
     emit('update:modelValue', false)

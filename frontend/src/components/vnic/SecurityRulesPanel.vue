@@ -7,7 +7,7 @@ import request from '../../utils/request'
 import type { SecurityRule } from '../../types/api'
 import AddRuleModal from './AddRuleModal.vue'
 
-const props = defineProps<{ compartmentId: string }>()
+const props = defineProps<{ tenantId: number }>()
 
 const loading = ref(false)
 const ingressRules = ref<SecurityRule[]>([])
@@ -18,8 +18,8 @@ async function loadRules() {
   loading.value = true
   try {
     const [ingress, egress] = await Promise.all([
-      request.get('/api/security/rules', { params: { compartmentId: props.compartmentId, type: 'ingress' } }) as Promise<SecurityRule[]>,
-      request.get('/api/security/rules', { params: { compartmentId: props.compartmentId, type: 'egress' } }) as Promise<SecurityRule[]>,
+      request.get('/tenants/security-rules', { params: { tenantId: props.tenantId, type: 'ingress' } }) as Promise<SecurityRule[]>,
+      request.get('/tenants/security-rules', { params: { tenantId: props.tenantId, type: 'egress' } }) as Promise<SecurityRule[]>,
     ])
     ingressRules.value = ingress ?? []
     egressRules.value = egress ?? []
@@ -33,7 +33,7 @@ async function loadRules() {
 async function deleteRule(rule: SecurityRule) {
   try {
     await ElMessageBox.confirm('确定删除此安全规则？', '删除规则', { type: 'warning', confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' })
-    await request.get('/api/security/rules/delete', { params: { compartmentId: props.compartmentId, id: rule.id } })
+    await request.delete(`/tenants/security-rules/${rule.id}`)
     ElMessage.success('规则已删除')
     loadRules()
   } catch (e: any) {
@@ -44,7 +44,7 @@ async function deleteRule(rule: SecurityRule) {
 async function enableAll() {
   try {
     await ElMessageBox.confirm('将为当前 Compartment 启用全部协议规则（IPv4 + IPv6 + ICMP），是否继续？', '一键启用', { type: 'warning', confirmButtonText: '确认启用' })
-    await request.post('/api/security/rules/enable-all', { compartmentId: props.compartmentId })
+    await request.post('/tenants/enableAll')
     ElMessage.success('全部规则已启用')
     loadRules()
   } catch (e: any) {
@@ -55,7 +55,7 @@ async function enableAll() {
 async function enableIpv6() {
   try {
     await ElMessageBox.confirm('将启用 IPv6 入站/出站规则，是否继续？', '启用 IPv6 规则', { type: 'info', confirmButtonText: '确认' })
-    await request.post('/api/security/rules/enable-ipv6', { compartmentId: props.compartmentId })
+    await request.post('/tenants/enableIpv6')
     ElMessage.success('IPv6 规则已启用')
     loadRules()
   } catch (e: any) {
@@ -111,7 +111,7 @@ onMounted(loadRules)
       </el-table>
     </el-card>
 
-    <AddRuleModal v-model="addRuleVisible" :compartment-id="compartmentId" @saved="loadRules" />
+    <AddRuleModal v-model="addRuleVisible" :tenant-id="tenantId" @saved="loadRules" />
   </div>
 </template>
 

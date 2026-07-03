@@ -151,3 +151,32 @@ func (s *SecurityRuleService) CheckAndEnableRule(ctx context.Context, tenantID i
 
 	return s.SingleEnableAll(ctx, tenantID)
 }
+
+// BatchEnableIPv6 iterates ALL tenants and enables IPv6 rules for each.
+func (s *SecurityRuleService) BatchEnableIPv6(ctx context.Context) error {
+	rows, err := repo.New(s.store.Read).ListTenants(ctx)
+	if err != nil {
+		return fmt.Errorf("list tenants: %w", err)
+	}
+
+	for _, r := range rows {
+		if err := s.SingleEnableIPv6(ctx, r.ID); err != nil {
+			// Log and continue with other tenants.
+			continue
+		}
+	}
+	return nil
+}
+
+// SingleEnableIPv6 enables IPv6 rules for a single tenant.
+func (s *SecurityRuleService) SingleEnableIPv6(ctx context.Context, tenantID int64) error {
+	t, err := repo.New(s.store.Read).FindTenantByID(ctx, tenantID)
+	if err != nil {
+		return fmt.Errorf("find tenant %d: %w", tenantID, err)
+	}
+	creds := tenantToCreds(t)
+
+	return oci.WithProxy(ctx, s.pool, creds, s.masterKey, func(c oci.Clients) error {
+		return oci.EnableIPv6ForTenant(ctx, c, creds.Tenancy)
+	})
+}

@@ -8,7 +8,7 @@ import type { NatGatewayInfo, RouteTableInfo } from '../../types/api'
 import CreateNatModal from './CreateNatModal.vue'
 import CreateRouteTableModal from './CreateRouteTableModal.vue'
 
-const props = defineProps<{ compartmentId: string; vcnId: string; instanceId: string }>()
+const props = defineProps<{ compartmentId: string; vcnId: string; instanceId: string; tenantId: number }>()
 
 const loading = ref(false)
 const natGateways = ref<NatGatewayInfo[]>([])
@@ -20,7 +20,7 @@ const createRouteTableVisible = ref(false)
 
 async function loadNatGateways() {
   try {
-    const res = await request.get('/api/nat/list', { params: { compartmentId: props.compartmentId, vcnId: props.vcnId } }) as NatGatewayInfo[]
+    const res = await request.get('/oci/nat/list', { params: { tenantId: props.tenantId, compartmentId: props.compartmentId, vcnId: props.vcnId } }) as NatGatewayInfo[]
     natGateways.value = res ?? []
   } catch (e: any) {
     ElMessage.error(e.message || '加载 NAT 网关失败')
@@ -29,7 +29,7 @@ async function loadNatGateways() {
 
 async function loadRouteTables() {
   try {
-    const res = await request.get('/api/route-table/list', { params: { compartmentId: props.compartmentId, vcnId: props.vcnId } }) as RouteTableInfo[]
+    const res = await request.get('/oci/route-table/list', { params: { tenantId: props.tenantId, compartmentId: props.compartmentId, vcnId: props.vcnId } }) as RouteTableInfo[]
     routeTables.value = res ?? []
   } catch (e: any) {
     ElMessage.error(e.message || '加载路由表失败')
@@ -39,7 +39,7 @@ async function loadRouteTables() {
 async function deleteNat(nat: NatGatewayInfo) {
   try {
     await ElMessageBox.confirm(`确定删除 NAT 网关 "${nat.displayName}"？`, '删除 NAT 网关', { type: 'warning', confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' })
-    await request.get('/api/nat/delete', { params: { natGatewayId: nat.id } })
+    await request.get('/oci/nat/delete', { params: { tenantId: props.tenantId, natGatewayId: nat.id } })
     ElMessage.success('NAT 网关已删除')
     loadNatGateways()
   } catch (e: any) {
@@ -50,7 +50,7 @@ async function deleteNat(nat: NatGatewayInfo) {
 async function deleteRouteTable(rt: RouteTableInfo) {
   try {
     await ElMessageBox.confirm(`确定删除路由表 "${rt.displayName}"？`, '删除路由表', { type: 'warning', confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' })
-    await request.get('/api/route-table/delete', { params: { routeTableId: rt.id } })
+    await request.get('/oci/route-table/delete', { params: { tenantId: props.tenantId, routeTableId: rt.id } })
     ElMessage.success('路由表已删除')
     loadRouteTables()
   } catch (e: any) {
@@ -61,7 +61,7 @@ async function deleteRouteTable(rt: RouteTableInfo) {
 async function resetToDefault() {
   try {
     await ElMessageBox.confirm('将重置实例主 VNIC 的路由表为 VCN 默认路由表，是否继续？', '重置路由表', { type: 'info', confirmButtonText: '确认重置' })
-    await request.post('/api/route-table/reset', { instanceId: props.instanceId })
+    await request.post('/oci/route-table/reset', { tenantId: props.tenantId, instanceId: props.instanceId, compartmentId: props.compartmentId })
     ElMessage.success('路由表已重置为默认')
   } catch (e: any) {
     if (e !== 'cancel') ElMessage.error(e.message || '重置失败')
@@ -134,8 +134,8 @@ onMounted(loadData)
     </el-card>
 
     <!-- Modals -->
-    <CreateNatModal v-model="createNatVisible" :compartment-id="compartmentId" :vcn-id="vcnId" @saved="loadNatGateways" />
-    <CreateRouteTableModal v-model="createRouteTableVisible" :compartment-id="compartmentId" :vcn-id="vcnId" @saved="loadRouteTables" />
+    <CreateNatModal v-model="createNatVisible" :compartment-id="compartmentId" :vcn-id="vcnId" :tenant-id="tenantId" @saved="loadNatGateways" />
+    <CreateRouteTableModal v-model="createRouteTableVisible" :compartment-id="compartmentId" :vcn-id="vcnId" :tenant-id="tenantId" @saved="loadRouteTables" />
   </div>
 </template>
 

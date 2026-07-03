@@ -5,7 +5,7 @@ import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
 
-const props = defineProps<{ modelValue: boolean; compartmentId: string }>()
+const props = defineProps<{ modelValue: boolean; tenantId: number }>()
 const emit = defineEmits<{ 'update:modelValue': [val: boolean]; saved: [] }>()
 
 const saving = ref(false)
@@ -23,8 +23,8 @@ const showIcmp = computed(() => form.value.protocol === 'icmp')
 async function handleAdd() {
   saving.value = true
   try {
-    await request.post('/api/security/rules/add', {
-      compartmentId: props.compartmentId,
+    await request.post('/tenants/security-rules', {
+      tenantId: props.tenantId,
       type: form.value.type,
       protocol: form.value.protocol,
       source: form.value.source,

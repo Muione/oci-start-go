@@ -236,12 +236,12 @@
 
       <!-- ======================== 流量监控 Tab ======================== -->
       <el-tab-pane label="流量监控" name="traffic">
-        <InstanceTrafficPanel v-if="instance.instanceId" :instance-id="instance.instanceId" />
+        <InstanceTrafficPanel v-if="instance.instanceId" :instance-id="instance.instanceId" :tenant-id="instance.tenantId" />
       </el-tab-pane>
 
       <!-- ======================== 磁盘管理 Tab ======================== -->
       <el-tab-pane label="磁盘管理" name="disk-mgmt">
-        <DiskManagementPanel v-if="instance.instanceId" :instance-id="instance.instanceId" :boot-volume-id="instance.bootVolumeId" />
+        <DiskManagementPanel v-if="instance.instanceId" :db-id="instance.id" :instance-id="instance.instanceId" :boot-volume-id="instance.bootVolumeId" :tenant-id="instance.tenantId" />
       </el-tab-pane>
 
       <!-- ======================== 控制台连接 Tab ======================== -->

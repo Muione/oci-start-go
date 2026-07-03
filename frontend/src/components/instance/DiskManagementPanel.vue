@@ -10,7 +10,7 @@ import ResizeVolumeModal from './ResizeVolumeModal.vue'
 import CreateBackupModal from './CreateBackupModal.vue'
 import CopyBackupModal from './CopyBackupModal.vue'
 
-const props = defineProps<{ instanceId: string; bootVolumeId?: string }>()
+const props = defineProps<{ dbId: number; instanceId: string; bootVolumeId?: string; tenantId?: number }>()
 
 const loading = ref(false)
 const bootVolume = ref<BootVolumeDetail | null>(null)
@@ -24,11 +24,17 @@ const copyBackupVisible = ref(false)
 const copyBackupId = ref('')
 
 async function loadBootVolume() {
-  if (!props.bootVolumeId) return
+  if (!props.dbId) return
   loading.value = true
   try {
-    const res = await request.get('/api/boot-volume/detail', { params: { bootVolumeId: props.bootVolumeId } }) as BootVolumeDetail
-    bootVolume.value = res
+    const res = await request.get(`/instances/${props.dbId}`) as any
+    // Map instance detail response to boot volume display format
+    bootVolume.value = {
+      id: res.bootVolumeId ?? '',
+      displayName: res.bootVolumeName ?? res.displayName ?? '-',
+      sizeInGBs: res.bootVolumeSizeInGbs ?? 0,
+      vpusPerGB: Number(res.vpusPerGb) || 10,
+    } as BootVolumeDetail
   } catch (e: any) {
     ElMessage.error(e.message || '加载启动卷信息失败')
   } finally {
@@ -37,9 +43,9 @@ async function loadBootVolume() {
 }
 
 async function loadBackups() {
-  if (!props.bootVolumeId) return
+  if (!props.tenantId) return
   try {
-    const res = await request.get('/api/backup/list', { params: { bootVolumeId: props.bootVolumeId } }) as BootVolumeBackup[]
+    const res = await request.get('/backup/list', { params: { tenantId: props.tenantId } }) as BootVolumeBackup[]
     backups.value = res ?? []
   } catch (e: any) {
     ElMessage.error(e.message || '加载备份列表失败')
@@ -49,7 +55,7 @@ async function loadBackups() {
 async function deleteBackup(backup: BootVolumeBackup) {
   try {
     await ElMessageBox.confirm(`确定删除备份 "${backup.displayName}"？`, '删除备份', { type: 'warning', confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' })
-    await request.get('/api/backup/delete', { params: { id: backup.id } })
+    await request.get('/backup/delete', { params: { id: backup.id } })
     ElMessage.success('备份已删除')
     loadBackups()
   } catch (e: any) {
@@ -124,10 +130,10 @@ onMounted(() => {
     </el-card>
 
     <!-- Modals -->
-    <SelectVpuModal v-model="vpuModalVisible" :boot-volume-id="bootVolumeId ?? ''" :current-vpu="bootVolume?.vpusPerGB ?? 10" @saved="onSaved" />
-    <ResizeVolumeModal v-model="resizeModalVisible" :boot-volume-id="bootVolumeId ?? ''" :current-size-g-b="bootVolume?.sizeInGBs ?? 0" @saved="onSaved" />
-    <CreateBackupModal v-model="createBackupVisible" :boot-volume-id="bootVolumeId ?? ''" @saved="onSaved" />
-    <CopyBackupModal v-model="copyBackupVisible" :backup-id="copyBackupId" @saved="onSaved" />
+    <SelectVpuModal v-model="vpuModalVisible" :instance-db-id="dbId" :current-vpu="bootVolume?.vpusPerGB ?? 10" @saved="onSaved" />
+    <ResizeVolumeModal v-model="resizeModalVisible" :instance-db-id="dbId" :current-size-g-b="bootVolume?.sizeInGBs ?? 0" @saved="onSaved" />
+    <CreateBackupModal v-model="createBackupVisible" :instance-id="instanceId" :tenant-id="tenantId ?? 0" @saved="onSaved" />
+    <CopyBackupModal v-model="copyBackupVisible" :backup-id="copyBackupId" :tenant-id="tenantId ?? 0" @saved="onSaved" />
   </div>
 </template>
 

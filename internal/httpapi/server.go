@@ -121,6 +121,7 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/tenants/security-rules", addSecurityRule(deps))
 	pro.DELETE("/tenants/security-rules/:id", deleteSecurityRule(deps))
 	pro.POST("/tenants/enableAll", batchEnableAll(deps))
+	pro.POST("/tenants/enableIpv6", enableIpv6(deps))
 
 	// Phase 11.4: Quota, Region Subscription, Audit Log.
 	pro.GET("/tenants/:id/quota", tenantQuota(deps))
@@ -165,6 +166,8 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.DELETE("/ssh-keys/:id", sshKeyDelete(deps))
 	pro.GET("/backup/list", backupList(deps))
 	pro.GET("/backup/delete", backupDelete(deps))
+	pro.POST("/backup/create", backupCreate(deps))
+	pro.POST("/backup/copy", backupCopy(deps))
 	pro.GET("/traffic/alert/list", trafficAlertList(deps))
 	pro.GET("/traffic/alert/get", trafficAlertGet(deps))
 	pro.POST("/traffic/alert/save", trafficAlertSave(deps))
@@ -261,6 +264,17 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.POST("/oci/vnic/changeSpecIp", vnicChangeSpecIp(deps))
 	pro.POST("/oci/vnic/network/configureLoadBalancer", vnicConfigureLB(deps))
 	pro.POST("/oci/vnic/network/restoreNetwork", vnicRestoreNetwork(deps))
+
+	// VCN, NAT gateway, and route table management.
+	pro.GET("/oci/vcn/list", vcnList(deps))
+	pro.POST("/oci/vcn/configure-ipv6", vcnConfigureIPv6(deps))
+	pro.GET("/oci/nat/list", natList(deps))
+	pro.POST("/oci/nat/create", natCreate(deps))
+	pro.GET("/oci/nat/delete", natDelete(deps))
+	pro.GET("/oci/route-table/list", routeTableList(deps))
+	pro.POST("/oci/route-table/create", routeTableCreate(deps))
+	pro.GET("/oci/route-table/delete", routeTableDelete(deps))
+	pro.POST("/oci/route-table/reset", routeTableReset(deps))
 
 	// Phase 12.2: Email Delivery management.
 	pro.POST("/api/email/receive/list", emailReceiveList(deps))

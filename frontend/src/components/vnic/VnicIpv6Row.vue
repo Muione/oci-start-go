@@ -14,7 +14,7 @@ const assigning = ref(false)
 async function assignIpv6() {
   assigning.value = true
   try {
-    await request.post('/api/vnic/ipv6/assign', { vnicId: props.vnicId })
+    await request.post('/oci/vnic/createIpv6', { vnicId: props.vnicId })
     ElMessage.success('IPv6 地址分配成功')
     emit('refresh')
   } catch (e: any) {
@@ -27,7 +27,7 @@ async function assignIpv6() {
 async function deleteAllIpv6() {
   try {
     await ElMessageBox.confirm('确定删除该 VNIC 的所有 IPv6 地址？', '删除 IPv6', { type: 'warning', confirmButtonText: '删除', confirmButtonClass: 'el-button--danger' })
-    await request.post('/api/vnic/ipv6/delete', { vnicId: props.vnicId })
+    await request.post('/oci/vnic/deleteIpv6', { vnicId: props.vnicId })
     ElMessage.success('IPv6 地址已删除')
     emit('refresh')
   } catch (e: any) {

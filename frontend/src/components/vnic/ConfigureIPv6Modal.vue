@@ -5,7 +5,7 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
 
-const props = defineProps<{ modelValue: boolean; vcnId: string }>()
+const props = defineProps<{ modelValue: boolean; vcnId: string; tenantId: number }>()
 const emit = defineEmits<{ 'update:modelValue': [val: boolean]; saved: [] }>()
 
 const saving = ref(false)
@@ -13,7 +13,7 @@ const saving = ref(false)
 async function handleConfigure() {
   saving.value = true
   try {
-    await request.post('/api/vcn/configure-ipv6', { vcnId: props.vcnId })
+    await request.post('/oci/vcn/configure-ipv6', { tenantId: props.tenantId, vcnId: props.vcnId })
     ElMessage.success('IPv6 安全规则配置成功')
     emit('saved')
     emit('update:modelValue', false)
