@@ -16,19 +16,71 @@
         <!-- 用户管理 -->
         <el-tab-pane label="👤 用户" name="user">
           <div class="tab-content">
-            <el-descriptions :column="2" border size="small">
-              <el-descriptions-item label="当前用户">
-                <el-tag type="primary" size="small">{{ user.username }}</el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item label="用户角色">
-                <el-tag type="danger" size="small">ADMIN</el-tag>
-              </el-descriptions-item>
-            </el-descriptions>
-            <div style="margin-top: 16px;">
-              <el-button type="warning" @click="openChangePassword">
-                <el-icon><Lock /></el-icon> 修改密码
-              </el-button>
-            </div>
+            <el-row :gutter="16">
+              <!-- User Info Card -->
+              <el-col :xs="24" :sm="12" style="margin-bottom:16px">
+                <el-card shadow="none" class="channel-card">
+                  <template #header>
+                    <div class="channel-header">
+                      <span>👤 用户信息</span>
+                    </div>
+                  </template>
+                  <el-descriptions :column="1" size="small" border>
+                    <el-descriptions-item label="用户名">
+                      <el-tag type="primary" size="small">{{ user.username }}</el-tag>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="用户角色">
+                      <el-tag type="danger" size="small">ADMIN</el-tag>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="登录状态">
+                      <el-tag type="success" size="small">
+                        <el-icon><Check /></el-icon> 已登录
+                      </el-tag>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </el-card>
+              </el-col>
+
+              <!-- Quick Actions Card -->
+              <el-col :xs="24" :sm="12" style="margin-bottom:16px">
+                <el-card shadow="none" class="channel-card">
+                  <template #header>
+                    <div class="channel-header">
+                      <span>⚡ 快捷操作</span>
+                    </div>
+                  </template>
+                  <div class="user-actions">
+                    <el-button type="primary" @click="openChangePassword">
+                      <el-icon><Lock /></el-icon> 修改密码
+                    </el-button>
+                    <el-button @click="activeTab = 'security'">
+                      <el-icon><Setting /></el-icon> 安全设置
+                    </el-button>
+                  </div>
+                </el-card>
+              </el-col>
+            </el-row>
+
+            <!-- System Info Card -->
+            <el-row :gutter="16">
+              <el-col :xs="24" :sm="24">
+                <el-card shadow="none" class="channel-card">
+                  <template #header>
+                    <div class="channel-header">
+                      <span>💻 系统信息</span>
+                    </div>
+                  </template>
+                  <el-descriptions :column="2" size="small" border>
+                    <el-descriptions-item label="应用版本">
+                      <el-tag type="info" size="small">v{{ config.appVersion || '未知' }}</el-tag>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="最后同步时间">
+                      {{ lastSyncTime }}
+                    </el-descriptions-item>
+                  </el-descriptions>
+                </el-card>
+              </el-col>
+            </el-row>
           </div>
         </el-tab-pane>
 
@@ -601,7 +653,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Lock, Check, Connection, Delete, SwitchButton, Promotion, Close } from '@element-plus/icons-vue'
+import { Refresh, Lock, Check, Connection, Delete, SwitchButton, Promotion, Close, Setting } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import request from '../utils/request'
 import PageHeader from '../components/common/PageHeader.vue'
@@ -615,6 +667,9 @@ const config = ref<SystemConfig>({
   bools: {},
   appVersion: '',
 })
+
+// Last sync time for system info
+const lastSyncTime = ref('暂未同步')
 
 // Inline edit state — all configurable fields
 const editValues = reactive<Record<string, string>>({
@@ -721,6 +776,8 @@ async function loadConfig() {
       for (const key of Object.keys(editValues)) {
         editValues[key] = data.strings?.[key] || ''
       }
+      // Update last sync time
+      lastSyncTime.value = formatNow()
     }
   } catch { /* silently ignore */ }
   loading.value = false
@@ -1286,6 +1343,13 @@ onMounted(async () => {
   font-family: monospace;
   font-size: var(--text-sm);
   color: var(--text-primary);
+}
+
+/* User actions */
+.user-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* Notification quick actions */
