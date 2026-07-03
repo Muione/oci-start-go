@@ -333,37 +333,59 @@
         <!-- SSL 证书 -->
         <el-tab-pane label="🔒 SSL" name="ssl">
           <div class="tab-content">
-            <el-descriptions :column="2" border>
-              <el-descriptions-item label="域名">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['ssl.domain']" placeholder="输入域名" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['ssl.domain']" @click="saveField('ssl.domain')">保存</el-button>
+            <el-card shadow="none" class="settings-card ssl-status-card" :class="sslStatusClass">
+              <template #header>
+                <div class="settings-card-header">
+                  <span class="settings-card-title">
+                    <el-icon><Lock /></el-icon> 证书状态
+                  </span>
+                  <el-tag :type="sslStatusType" size="small" effect="dark">{{ sslStatusText }}</el-tag>
                 </div>
-              </el-descriptions-item>
-              <el-descriptions-item label="Email">
-                <div class="inline-edit">
-                  <el-input v-model="editValues['ssl.email']" placeholder="输入 Email" size="small" />
-                  <el-button size="small" type="primary" :loading="savingKeys['ssl.email']" @click="saveField('ssl.email')">保存</el-button>
+              </template>
+              <div class="settings-card-body">
+                <el-row :gutter="16">
+                  <el-col :xs="24" :sm="12">
+                    <el-descriptions :column="1" size="small" border>
+                      <el-descriptions-item label="域名">
+                        <div class="inline-edit">
+                          <el-input v-model="editValues['ssl.domain']" placeholder="输入域名" size="small" />
+                          <el-button size="small" type="primary" :loading="savingKeys['ssl.domain']" @click="saveField('ssl.domain')">保存</el-button>
+                        </div>
+                      </el-descriptions-item>
+                      <el-descriptions-item label="Email">
+                        <div class="inline-edit">
+                          <el-input v-model="editValues['ssl.email']" placeholder="输入 Email" size="small" />
+                          <el-button size="small" type="primary" :loading="savingKeys['ssl.email']" @click="saveField('ssl.email')">保存</el-button>
+                        </div>
+                      </el-descriptions-item>
+                    </el-descriptions>
+                  </el-col>
+                  <el-col :xs="24" :sm="12">
+                    <el-descriptions :column="1" size="small" border>
+                      <el-descriptions-item label="模式">
+                        <el-tag :type="config.bools?.['ssl.staging'] ? 'warning' : 'success'" size="small">
+                          {{ config.bools?.['ssl.staging'] ? 'Staging (测试)' : 'Production (生产)' }}
+                        </el-tag>
+                      </el-descriptions-item>
+                      <el-descriptions-item label="自动续期">
+                        <el-tag type="info" size="small">每天 04:00 (SslCertJob)</el-tag>
+                      </el-descriptions-item>
+                    </el-descriptions>
+                  </el-col>
+                </el-row>
+                <div style="margin-top: var(--space-4); display: flex; gap: var(--space-2);">
+                  <el-button size="small" type="primary">
+                    <el-icon><Refresh /></el-icon> 强制续期
+                  </el-button>
+                  <el-button size="small">
+                    <el-icon><Document /></el-icon> 查看证书
+                  </el-button>
+                  <el-button size="small">
+                    <el-icon><Connection /></el-icon> 测试配置
+                  </el-button>
                 </div>
-              </el-descriptions-item>
-              <el-descriptions-item label="模式">
-                <el-tag :type="config.bools?.['ssl.staging'] ? 'warning' : 'success'" size="small">
-                  {{ config.bools?.['ssl.staging'] ? 'Staging (测试)' : 'Production (生产)' }}
-                </el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item label="自动续期">
-                <el-tag type="info" size="small">每天 04:00 (SslCertJob)</el-tag>
-              </el-descriptions-item>
-            </el-descriptions>
-            <div v-if="!cfgStr('ssl.domain')" style="margin-top:12px">
-              <el-alert
-                title="SSL 证书未配置"
-                type="info"
-                description="在系统配置中设置 ssl.domain、ssl.email、cloudflare.api.token 以启用 Let's Encrypt 自动签发/续期。"
-                :closable="false"
-                show-icon
-              />
-            </div>
+              </div>
+            </el-card>
           </div>
         </el-tab-pane>
 
@@ -621,9 +643,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Lock, Check, Connection, SwitchButton, Promotion, Close, Setting } from '@element-plus/icons-vue'
+import { Refresh, Lock, Check, Connection, SwitchButton, Promotion, Close, Setting, Document } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import request from '../utils/request'
 import PageHeader from '../components/common/PageHeader.vue'
@@ -731,6 +753,49 @@ const lastActivityTime = ref('2026-07-03 10:30:22')
 function cfgStr(key: string): string {
   return config.value.strings?.[key] || ''
 }
+
+// SSL status
+const sslStatus = computed(() => {
+  const domain = cfgStr('ssl.domain')
+  const notAfter = cfgStr('ssl.notAfter')
+
+  if (!domain) return 'not-configured'
+  if (!notAfter) return 'configured'
+
+  const expiryDate = new Date(notAfter)
+  const now = new Date()
+  const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+
+  if (daysLeft < 0) return 'expired'
+  if (daysLeft < 30) return 'expiring'
+  return 'valid'
+})
+
+const sslStatusClass = computed(() => {
+  return `ssl-status-card--${sslStatus.value}`
+})
+
+const sslStatusType = computed(() => {
+  const types: Record<string, string> = {
+    'valid': 'success',
+    'expiring': 'warning',
+    'expired': 'danger',
+    'configured': 'info',
+    'not-configured': 'info'
+  }
+  return types[sslStatus.value] || 'info'
+})
+
+const sslStatusText = computed(() => {
+  const texts: Record<string, string> = {
+    'valid': '有效',
+    'expiring': '即将到期',
+    'expired': '已过期',
+    'configured': '已配置',
+    'not-configured': '未配置'
+  }
+  return texts[sslStatus.value] || '未知'
+})
 
 async function loadConfig() {
   loading.value = true
@@ -1112,26 +1177,6 @@ onMounted(async () => {
   padding: 0;
 }
 
-.settings-layout {
-  display: flex;
-  gap: var(--space-6);
-}
-
-.settings-tabs {
-  flex: 1;
-}
-
-.settings-tabs :deep(.el-tabs__header) {
-  margin-right: var(--space-6);
-}
-
-.settings-tabs :deep(.el-tabs__item) {
-  height: 44px;
-  line-height: 44px;
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-}
-
 .tab-content {
   min-height: 400px;
 }
@@ -1204,7 +1249,7 @@ onMounted(async () => {
 
 .inline-edit {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
 }
 
@@ -1225,56 +1270,46 @@ onMounted(async () => {
 }
 
 .security-block {
+  background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  padding: 16px;
+  padding: var(--space-4);
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.security-block--accent {
+  border-left: 3px solid var(--accent);
 }
 
 .security-block-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-3);
 }
 
 .security-block-title {
-  font-size: var(--text-md);
+  font-size: var(--text-sm);
   font-weight: var(--font-semibold);
   color: var(--text-primary);
 }
 
 .security-block-desc {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
-  margin: 0 0 12px 0;
-  line-height: 1.4;
-}
-
-.security-block-form {
-  flex: 1;
-}
-
-.security-block-form :deep(.el-form-item) {
-  margin-bottom: 10px;
-}
-
-.security-block-form :deep(.el-form-item__label) {
-  font-size: 12px;
+  margin-bottom: var(--space-3);
 }
 
 .security-block-actions {
   margin-top: auto;
-  padding-top: 10px;
-  text-align: right;
 }
 
 /* User actions */
 .user-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
@@ -1283,34 +1318,131 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  border: 1px solid var(--border-default);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-raised);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  margin-bottom: var(--space-4);
+}
+
+.quick-actions-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .quick-actions-label {
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .quick-actions-right {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 /* Notification history */
 .notification-history-card {
-  margin-top: 16px;
+  margin-top: var(--space-4);
 }
 
 .notification-history-empty {
   text-align: center;
-  padding: 20px;
+  padding: var(--space-8);
   color: var(--text-muted);
   font-size: var(--text-sm);
+}
+
+/* IP Rule Item */
+.ip-rule-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ip-rule-item:last-child {
+  border-bottom: none;
+}
+
+/* Data Mono */
+.data-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* Unified Settings Card System */
+.settings-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+  overflow: hidden;
+}
+
+.settings-card--accent {
+  border-left: 3px solid var(--accent);
+}
+
+.settings-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+}
+
+.settings-card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.settings-card-body {
+  padding: var(--space-4);
+}
+
+/* SSL Status Card */
+.ssl-status-card {
+  border-left: 3px solid var(--accent);
+}
+
+.ssl-status-card.configured {
+  border-left-color: var(--status-up);
+}
+
+.ssl-status-card.expiring {
+  border-left-color: var(--status-warn);
+}
+
+.ssl-status-card.expired {
+  border-left-color: var(--status-down);
+}
+
+/* Settings Layout */
+.settings-layout {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.settings-tabs {
+  flex: 1;
+}
+
+.settings-tabs :deep(.el-tabs__header) {
+  margin-right: var(--space-6);
+}
+
+.settings-tabs :deep(.el-tabs__item) {
+  height: 44px;
+  line-height: 44px;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
 }
 
 @media (max-width: 768px) {
@@ -1329,7 +1461,13 @@ onMounted(async () => {
 
   .notification-quick-actions {
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-3);
+    align-items: flex-start;
+  }
+
+  .quick-actions-right {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 </style>
