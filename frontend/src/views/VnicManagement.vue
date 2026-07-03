@@ -89,138 +89,166 @@
       </div>
     </el-card>
 
-    <!-- ================================================================ -->
-    <!-- VNIC Statistics -->
-    <!-- ================================================================ -->
-    <div v-if="vnicData" class="stats-row">
-      <el-card shadow="none" class="stat-card">
-        <el-statistic title="总 VNIC 数" :value="vnicData.statistics?.totalVnicCount ?? 0" />
-      </el-card>
-      <el-card shadow="none" class="stat-card">
-        <el-statistic title="活跃 VNIC" :value="vnicData.statistics?.activeVnicCount ?? 0" />
-      </el-card>
-      <el-card shadow="none" class="stat-card">
-        <el-statistic title="辅助 VNIC" :value="vnicData.statistics?.secondaryVnicCount ?? 0" />
-      </el-card>
-      <el-card shadow="none" class="stat-card">
-        <el-statistic title="总 IPv6" :value="vnicData.statistics?.totalIpv6Count ?? 0" />
-      </el-card>
-    </div>
-
-    <!-- ================================================================ -->
-    <!-- Operations Toolbar -->
-    <!-- ================================================================ -->
-    <div v-if="selectedInstance" class="ops-toolbar">
-      <el-button type="primary" @click="openBatchCreate" :loading="batchCreating">
-        <el-icon><Plus /></el-icon> 批量创建 VNIC
-      </el-button>
-      <el-button type="danger" @click="confirmDeleteAllSecondary" :loading="deletingAll" :disabled="!vnicData?.secondaryVnics?.length">
-        <el-icon><Delete /></el-icon> 删除所有辅助 VNIC
-      </el-button>
-      <el-button @click="openIpSwitch" :loading="ipSwitching">
-        <el-icon><Switch /></el-icon> 切换IP
-      </el-button>
-      <el-button @click="openConfigureLB" :loading="configuringLB">
-        <el-icon><Connection /></el-icon> 配置负载均衡
-      </el-button>
-      <el-button @click="confirmRestoreNetwork" :loading="restoringNetwork">
-        <el-icon><RefreshRight /></el-icon> 恢复网络配置
-      </el-button>
-    </div>
-
-    <!-- ================================================================ -->
-    <!-- VNIC Table -->
-    <!-- ================================================================ -->
-    <el-card v-if="selectedInstance" shadow="none" class="table-card">
-      <el-table
-        :data="allVnics"
-        v-loading="loading"
-        border
-        stripe
-        style="width: 100%"
-        row-key="vnicId"
-      >
-        <template #empty>
-          <el-empty description="暂无 VNIC 数据" :image-size="80" />
-        </template>
-        <el-table-column type="index" label="#" width="50" align="center" />
-        <el-table-column label="名称" min-width="180">
-          <template #default="{ row }">
-            <span class="vnic-name">{{ row.vnicDisplayName || '-' }}</span>
-            <el-tag v-if="row.isPrimary" type="success" size="small" effect="dark" style="margin-left:6px">
-              主 VNIC
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="私网 IP" width="140">
-          <template #default="{ row }">
-            <span class="data-mono" style="font-size:var(--text-xs)">{{ row.privateIp || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="公网 IP" width="140">
-          <template #default="{ row }">
-            <span class="data-mono" style="font-size:var(--text-xs)">{{ row.publicIp || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="子网" min-width="200" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span class="data-mono" style="font-size:var(--text-xs)">{{ row.subnetId || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="IPv6 地址" min-width="200">
-          <template #default="{ row }">
-            <div v-if="row.ipv6Addresses?.length" class="ipv6-list">
-              <el-tag
-                v-for="(addr, idx) in row.ipv6Addresses"
-                :key="idx"
-                size="small"
-                type="info"
-                class="ipv6-tag"
-                closable
-                @close="confirmDeleteIpv6(row, addr)"
-              >
-                {{ truncateIpv6(addr) }}
-              </el-tag>
-            </div>
-            <span v-else class="text-muted">无 IPv6</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="100" align="center">
-          <template #default="{ row }">
-            <div class="state-cell">
-              <span class="status-dot" :class="lifecycleDotClass(row.lifecycleState)"></span>
-              <span>{{ row.lifecycleState || '-' }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
-          <template #default="{ row }">
-            <el-button-group>
-              <el-button size="small" @click="openCreateIpv6(row)" title="创建 IPv6">
-                <el-icon><Plus /></el-icon> IPv6
-              </el-button>
-              <el-button
-                size="small"
-                type="danger"
-                @click="confirmDeleteVnic(row)"
-                :disabled="row.isPrimary"
-                title="删除 VNIC"
-              >
-                <el-icon><Delete /></el-icon>
-              </el-button>
-            </el-button-group>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-
     <!-- Empty state when no instance selected -->
-    <el-card v-else shadow="none" class="empty-card">
+    <el-card v-if="!selectedInstance" shadow="none" class="empty-card">
       <el-empty description="请先选择租户和实例以管理 VNIC" :image-size="120" />
     </el-card>
 
     <!-- ================================================================ -->
-    <!-- Batch Create Dialog -->
+    <!-- Tab Framework -->
+    <!-- ================================================================ -->
+    <el-tabs v-if="selectedInstance" v-model="activeTab" type="border-card" class="vnic-tabs">
+      <!-- ============================================================ -->
+      <!-- Tab 1: VNIC Management -->
+      <!-- ============================================================ -->
+      <el-tab-pane label="VNIC 管理" name="vnic">
+        <!-- VNIC Statistics -->
+        <div v-if="vnicData" class="stats-row">
+          <el-card shadow="none" class="stat-card">
+            <el-statistic title="总 VNIC 数" :value="vnicData.statistics?.totalVnicCount ?? 0" />
+          </el-card>
+          <el-card shadow="none" class="stat-card">
+            <el-statistic title="活跃 VNIC" :value="vnicData.statistics?.activeVnicCount ?? 0" />
+          </el-card>
+          <el-card shadow="none" class="stat-card">
+            <el-statistic title="辅助 VNIC" :value="vnicData.statistics?.secondaryVnicCount ?? 0" />
+          </el-card>
+          <el-card shadow="none" class="stat-card">
+            <el-statistic title="总 IPv6" :value="vnicData.statistics?.totalIpv6Count ?? 0" />
+          </el-card>
+        </div>
+
+        <!-- Operations Toolbar -->
+        <div class="ops-toolbar">
+          <el-button type="primary" @click="batchCreateSimpleVisible = true">
+            <el-icon><Plus /></el-icon> 批量创建 VNIC+IPv6
+          </el-button>
+          <el-button type="danger" @click="confirmDeleteAllSecondary" :loading="deletingAll" :disabled="!vnicData?.secondaryVnics?.length">
+            <el-icon><Delete /></el-icon> 删除所有辅助 VNIC
+          </el-button>
+          <el-button @click="openIpSwitch" :loading="ipSwitching">
+            <el-icon><Switch /></el-icon> 切换IP
+          </el-button>
+          <el-button @click="openConfigureLB" :loading="configuringLB">
+            <el-icon><Connection /></el-icon> 配置负载均衡
+          </el-button>
+          <el-button @click="confirmRestoreNetwork" :loading="restoringNetwork">
+            <el-icon><RefreshRight /></el-icon> 恢复网络配置
+          </el-button>
+        </div>
+
+        <!-- VNIC Table -->
+        <el-card shadow="none" class="table-card">
+          <el-table
+            :data="allVnics"
+            v-loading="loading"
+            border
+            stripe
+            style="width: 100%"
+            row-key="vnicId"
+          >
+            <template #empty>
+              <el-empty description="暂无 VNIC 数据" :image-size="80" />
+            </template>
+            <el-table-column type="expand">
+              <template #default="{ row }">
+                <VnicIpv6Row
+                  :vnic-id="row.vnicId"
+                  :ipv6-addresses="row.ipv6Addresses ?? []"
+                  @refresh="loadVnics"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column type="index" label="#" width="50" align="center" />
+            <el-table-column label="名称" min-width="180">
+              <template #default="{ row }">
+                <span class="vnic-name">{{ row.vnicDisplayName || '-' }}</span>
+                <el-tag v-if="row.isPrimary" type="success" size="small" effect="dark" style="margin-left:6px">
+                  主 VNIC
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="私网 IP" width="140">
+              <template #default="{ row }">
+                <span class="data-mono" style="font-size:var(--text-xs)">{{ row.privateIp || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="公网 IP" width="140">
+              <template #default="{ row }">
+                <span class="data-mono" style="font-size:var(--text-xs)">{{ row.publicIp || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="子网" min-width="200" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span class="data-mono" style="font-size:var(--text-xs)">{{ row.subnetId || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="IPv6 数" width="100">
+              <template #default="{ row }">{{ row.ipv6Addresses?.length ?? 0 }}</template>
+            </el-table-column>
+            <el-table-column label="状态" width="100" align="center">
+              <template #default="{ row }">
+                <div class="state-cell">
+                  <span class="status-dot" :class="lifecycleDotClass(row.lifecycleState)"></span>
+                  <span>{{ row.lifecycleState || '-' }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="220" fixed="right">
+              <template #default="{ row }">
+                <el-button-group>
+                  <el-button size="small" @click="openCreateIpv6(row)" title="创建 IPv6">
+                    <el-icon><Plus /></el-icon> IPv6
+                  </el-button>
+                  <el-button
+                    size="small"
+                    type="danger"
+                    @click="confirmDeleteVnic(row)"
+                    :disabled="row.isPrimary"
+                    title="删除 VNIC"
+                  >
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </el-button-group>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-tab-pane>
+
+      <!-- ============================================================ -->
+      <!-- Tab 2: Security Rules (Task 7) -->
+      <!-- ============================================================ -->
+      <el-tab-pane label="安全规则" name="security">
+        <!-- Task 7 -->
+      </el-tab-pane>
+
+      <!-- ============================================================ -->
+      <!-- Tab 3: VCN Management (Task 8) -->
+      <!-- ============================================================ -->
+      <el-tab-pane label="VCN 管理" name="vcn">
+        <!-- Task 8 -->
+      </el-tab-pane>
+
+      <!-- ============================================================ -->
+      <!-- Tab 4: Network Config (Task 9) -->
+      <!-- ============================================================ -->
+      <el-tab-pane label="网络配置" name="network">
+        <!-- Task 9 -->
+      </el-tab-pane>
+    </el-tabs>
+
+    <!-- ================================================================ -->
+    <!-- BatchCreateModal (new simple modal) -->
+    <!-- ================================================================ -->
+    <BatchCreateModal
+      v-model="batchCreateSimpleVisible"
+      :instance-id="selectedInstanceId"
+      @saved="loadVnics"
+    />
+
+    <!-- ================================================================ -->
+    <!-- Batch Create Dialog (legacy, kept for existing flow) -->
     <!-- ================================================================ -->
     <el-dialog v-model="batchCreateVisible" title="批量创建 VNIC" width="520px" destroy-on-close>
       <el-alert
@@ -491,6 +519,8 @@ import type {
   VnicInfo, VnicLoadData, BatchVnicResult, NetworkConfigResult,
   SubnetInfo,
 } from '../types/api'
+import VnicIpv6Row from '../components/vnic/VnicIpv6Row.vue'
+import BatchCreateModal from '../components/vnic/BatchCreateModal.vue'
 
 // ---- Types ----
 interface Instance {
@@ -504,6 +534,12 @@ interface Instance {
 }
 
 // ---- State ----
+
+// Tab navigation
+const activeTab = ref('vnic')
+
+// Simple batch create modal (new)
+const batchCreateSimpleVisible = ref(false)
 
 // Tenant/Instance selection
 const tenantOptions = ref<Array<{ id: number; name: string }>>([])
@@ -693,6 +729,12 @@ async function refreshVnics() {
   } finally {
     loading.value = false
   }
+}
+
+/** Reload VNIC data for current instance (used by child components) */
+async function loadVnics() {
+  if (!selectedInstanceId.value) return
+  await loadVnicData(selectedInstanceId.value)
 }
 
 // ---- Selection Handlers ----
@@ -1066,6 +1108,19 @@ onMounted(loadTenants)
 /* ---- Empty Card ---- */
 .empty-card {
   border-radius: var(--radius-md);
+}
+
+/* ---- Tab Framework ---- */
+.vnic-tabs {
+  margin-top: var(--space-4);
+}
+
+.vnic-tabs :deep(.el-tabs__header) {
+  margin-bottom: 0;
+}
+
+.vnic-tabs :deep(.el-tabs__content) {
+  padding: var(--space-4);
 }
 
 /* ---- VNIC Name ---- */
