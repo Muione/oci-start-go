@@ -147,7 +147,7 @@ INSERT INTO instance_detail (tenant_id) VALUES (1), (1), (1);
 	// Per-row parity against the three legacy queries.
 	for _, r := range rows {
 		// register_time parity.
-		rd, rdErr := q.FindRegisterDetailByTenantId(ctx, ns(r.TenantID))
+		rd, rdErr := q.FindRegisterDetailByTenantId(ctx, r.TenantID)
 		switch {
 		case rdErr == nil:
 			if !r.RegisterTime.Valid || r.RegisterTime.String != ns(rd.RegisterTime) {

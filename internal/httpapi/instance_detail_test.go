@@ -47,8 +47,6 @@ func swapClientsForInstance(t *testing.T) {
 	}
 }
 
-func strPtr(s string) *string { return &s }
-
 // E2 (Terminate): when the cloud op succeeds but the local DB delete fails, the
 // response must carry a syncFailed marker instead of a plain success.
 func TestInstanceTerminate_LocalSyncFails_SyncFailed(t *testing.T) {

@@ -43,7 +43,7 @@ oci-start 的 Go 重写（原 Java），模块 `github.com/Muione/oci-start-go`�
 - 任何逻辑改动前先写/补测试；非平凡分支（解析、加密、并发、生命周期）必须有可运行检查。
 - 并发改动用 `go test -race ./...` 验证。
 - 修 bug 时先写一个会失败的测试复现，再改实现。
-- 现状：172 源文件仅 12 测试文件，`repo`/`grabber`/`ws`/`auth`/`dns`/`acme`/`notify`/`migration` 零测试——补测是重点之一。
+
 
 ## 关键约束
 - 不改公开 API 签名（导出函数/类型/方法）。
@@ -51,4 +51,4 @@ oci-start 的 Go 重写（原 Java），模块 `github.com/Muione/oci-start-go`�
 - SQLite-only，不引入新 DB 引擎。
 - `data/master.key`（32 字节 AES）为全系统信任根，勿泄；勿打印密文/凭据到日志。
 
-## 常用命令已加入 `.claude/settings.json` 的 `permissions.allow`，无需逐次确认。
+<!-- ## 常用命令已加入 `.claude/settings.json` 的 `permissions.allow`，无需逐次确认。 -->
