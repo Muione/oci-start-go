@@ -117,9 +117,9 @@ func recordLoginAttempt(deps *Deps, ctx context.Context, username, ip, userAgent
 
 // sessionResp represents a session entry.
 type sessionResp struct {
-	ID           string `json:"id"`
+	Token        string `json:"token"`
 	Username     string `json:"username"`
-	IPAddress    string `json:"ip_address"`
+	IP           string `json:"ip"`
 	UserAgent    string `json:"user_agent"`
 	CreatedAt    string `json:"created_at"`
 	LastActiveAt string `json:"last_active_at"`
@@ -134,7 +134,7 @@ func listSessions(deps *Deps) gin.HandlerFunc {
 		currentToken := auth.TokenFromRequest(c)
 
 		rows, err := deps.Store.Read.QueryContext(ctx,
-			`SELECT id, username, ip_address, user_agent, created_at, last_active_at FROM sessions WHERE expires_at > datetime('now') ORDER BY last_active_at DESC`)
+			`SELECT token, username, ip, user_agent, created_at, last_active_at FROM login_session WHERE expires_at > datetime('now') ORDER BY last_active_at DESC`)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "查询会话失败")
 			return
@@ -144,10 +144,10 @@ func listSessions(deps *Deps) gin.HandlerFunc {
 		sessions := []sessionResp{}
 		for rows.Next() {
 			var s sessionResp
-			if err := rows.Scan(&s.ID, &s.Username, &s.IPAddress, &s.UserAgent, &s.CreatedAt, &s.LastActiveAt); err != nil {
+			if err := rows.Scan(&s.Token, &s.Username, &s.IP, &s.UserAgent, &s.CreatedAt, &s.LastActiveAt); err != nil {
 				continue
 			}
-			s.IsCurrent = s.ID == currentToken
+			s.IsCurrent = s.Token == currentToken
 			sessions = append(sessions, s)
 		}
 
@@ -168,7 +168,7 @@ func deleteSession(deps *Deps) gin.HandlerFunc {
 			return
 		}
 
-		result, err := deps.Store.Write.ExecContext(ctx, `DELETE FROM sessions WHERE id = ?`, sessionID)
+		result, err := deps.Store.Write.ExecContext(ctx, `DELETE FROM login_session WHERE token = ?`, sessionID)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "删除会话失败")
 			return
@@ -192,7 +192,7 @@ func logoutAllSessions(deps *Deps) gin.HandlerFunc {
 		currentToken := auth.TokenFromRequest(c)
 
 		result, err := deps.Store.Write.ExecContext(ctx,
-			`DELETE FROM sessions WHERE id != ? AND username = (SELECT username FROM sessions WHERE id = ?)`,
+			`DELETE FROM login_session WHERE token != ? AND username = (SELECT username FROM login_session WHERE token = ?)`,
 			currentToken, currentToken)
 		if err != nil {
 			response.Fail(c, http.StatusInternalServerError, "退出会话失败")
