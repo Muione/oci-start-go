@@ -205,6 +205,9 @@ func NewServer(deps *Deps) *gin.Engine {
 	pro.GET("/system/settings", systemSettingsGet(deps))
 	pro.PUT("/system/settings", systemSettingsUpdate(deps))
 
+	// Notification test API.
+	pro.POST("/system/notification/test", notificationTest(deps))
+
 	// Cloudflare DNS management (Phase 7).
 	pro.GET("/dns/cloudflare/zones", cloudflareZones(deps))
 	pro.GET("/dns/cloudflare/zones/:zoneId/records", cloudflareRecords(deps))
