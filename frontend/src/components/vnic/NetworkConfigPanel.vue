@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'NetworkConfigPanel' })
 
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '../../utils/request'
 import type { NatGatewayInfo, RouteTableInfo } from '../../types/api'
@@ -18,7 +18,12 @@ const routeTables = ref<RouteTableInfo[]>([])
 const createNatVisible = ref(false)
 const createRouteTableVisible = ref(false)
 
+function hasRequiredParams(): boolean {
+  return !!(props.compartmentId && props.vcnId && props.tenantId)
+}
+
 async function loadNatGateways() {
+  if (!hasRequiredParams()) return
   try {
     const res = await request.get('/oci/nat/list', { params: { tenantId: props.tenantId, compartmentId: props.compartmentId, vcnId: props.vcnId } }) as NatGatewayInfo[]
     natGateways.value = res ?? []
@@ -28,6 +33,7 @@ async function loadNatGateways() {
 }
 
 async function loadRouteTables() {
+  if (!hasRequiredParams()) return
   try {
     const res = await request.get('/oci/route-table/list', { params: { tenantId: props.tenantId, compartmentId: props.compartmentId, vcnId: props.vcnId } }) as RouteTableInfo[]
     routeTables.value = res ?? []
@@ -69,9 +75,15 @@ async function resetToDefault() {
 }
 
 function loadData() {
+  if (!hasRequiredParams()) return
   loadNatGateways()
   loadRouteTables()
 }
+
+// Reload when props become available
+watch(() => [props.compartmentId, props.vcnId], () => {
+  if (hasRequiredParams()) loadData()
+})
 
 onMounted(loadData)
 </script>

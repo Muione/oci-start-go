@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'VCNPanel' })
 
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
 import type { VcnInfo } from '../../types/api'
@@ -20,6 +20,7 @@ const configureIpv6Visible = ref(false)
 const reassignIpVisible = ref(false)
 
 async function loadVcns() {
+  if (!props.compartmentId || !props.tenantId) return
   loading.value = true
   try {
     const res = await request.get('/oci/vcn/list', { params: { tenantId: props.tenantId, compartmentId: props.compartmentId } }) as VcnInfo[]
@@ -34,6 +35,11 @@ async function loadVcns() {
 function selectVcn(vcn: VcnInfo) {
   selectedVcn.value = vcn
 }
+
+// Reload when compartmentId becomes available
+watch(() => props.compartmentId, (newVal) => {
+  if (newVal) loadVcns()
+})
 
 onMounted(() => {
   currentPublicIp.value = props.currentPublicIp ?? ''

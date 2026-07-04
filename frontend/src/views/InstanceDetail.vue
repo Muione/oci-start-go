@@ -17,6 +17,12 @@
         <el-button size="small" type="success" :disabled="instance.state === 'Running'" @click="confirmStart" :loading="actionLoading">
           <el-icon><VideoPlay /></el-icon> 启动
         </el-button>
+        <el-button size="small" type="warning" :disabled="instance.state !== 'Running'" @click="confirmReboot" :loading="actionLoading">
+          <el-icon><RefreshRight /></el-icon> 重启
+        </el-button>
+        <el-button size="small" type="danger" :disabled="instance.state !== 'Running'" @click="confirmShutdown" :loading="actionLoading">
+          <el-icon><SwitchButton /></el-icon> 关机
+        </el-button>
         <el-button size="small" type="danger" :disabled="instance.state !== 'Running'" @click="confirmStop" :loading="actionLoading">
           <el-icon><VideoPause /></el-icon> 停止
         </el-button>
@@ -85,75 +91,6 @@
                 <el-icon><Edit /></el-icon> 修改配置
               </el-button>
             </div>
-          </el-collapse-item>
-
-          <!-- ======================== 磁盘 ======================== -->
-          <el-collapse-item name="disk">
-            <template #title>
-              <span class="panel-title">磁盘</span>
-            </template>
-            <el-skeleton v-if="diskLoading" :rows="4" animated />
-            <template v-else>
-              <el-descriptions :column="2" border size="small" style="margin-bottom:16px">
-                <el-descriptions-item label="启动卷大小">{{ instance.bootVolumeSizeInGbs ?? '-' }} GB</el-descriptions-item>
-                <el-descriptions-item label="当前 VPU/GB">{{ instance.vpusPerGb || '-' }}</el-descriptions-item>
-                <el-descriptions-item label="启动卷 ID" :span="2">
-                  <MonoText style="font-size:var(--text-xs)">{{ instance.bootVolumeId || '-' }}</MonoText>
-                </el-descriptions-item>
-              </el-descriptions>
-              <el-alert
-                title="调整磁盘 VPU 性能需要先停止实例。修改后重新启动实例生效。"
-                type="info"
-                :closable="false"
-                show-icon
-                style="margin-bottom:16px"
-              />
-              <el-form :model="diskForm" label-width="120px" size="small">
-                <el-form-item label="VPU 性能等级">
-                  <el-select v-model="diskForm.vpusPerGb" style="width:100%">
-                    <el-option :value="10" label="10 - 均衡 (Balanced)">
-                      <div class="vpu-option">
-                        <span class="vpu-label">10 - 均衡</span>
-                        <span class="vpu-desc">适用于大多数工作负载</span>
-                      </div>
-                    </el-option>
-                    <el-option :value="20" label="20 - 更高性能 (Higher Performance)">
-                      <div class="vpu-option">
-                        <span class="vpu-label">20 - 更高性能</span>
-                        <span class="vpu-desc">适用于需要更高 IOPS 的场景</span>
-                      </div>
-                    </el-option>
-                    <el-option :value="30" label="30 - 超高性能 (Ultra High)">
-                      <div class="vpu-option">
-                        <span class="vpu-label">30 - 超高性能</span>
-                        <span class="vpu-desc">适用于数据库和高 IO 负载</span>
-                      </div>
-                    </el-option>
-                    <el-option :value="40" label="40 - 超高性能">
-                      <div class="vpu-option"><span class="vpu-label">40 - 超高性能</span></div>
-                    </el-option>
-                    <el-option :value="50" label="50 - 超高性能">
-                      <div class="vpu-option"><span class="vpu-label">50 - 超高性能</span></div>
-                    </el-option>
-                    <el-option :value="60" label="60 - 超高性能">
-                      <div class="vpu-option"><span class="vpu-label">60 - 超高性能</span></div>
-                    </el-option>
-                    <el-option :value="80" label="80 - 超高性能">
-                      <div class="vpu-option"><span class="vpu-label">80 - 超高性能</span></div>
-                    </el-option>
-                    <el-option :value="100" label="100 - 超高性能">
-                      <div class="vpu-option"><span class="vpu-label">100 - 超高性能</span></div>
-                    </el-option>
-                    <el-option :value="120" label="120 - 超高性能">
-                      <div class="vpu-option"><span class="vpu-label">120 - 超高性能</span></div>
-                    </el-option>
-                  </el-select>
-                </el-form-item>
-                <el-form-item>
-                  <el-button type="primary" :loading="vpuSaving" @click="saveVpu">更新 VPU 设置</el-button>
-                </el-form-item>
-              </el-form>
-            </template>
           </el-collapse-item>
 
           <!-- ======================== 网络 ======================== -->
@@ -305,7 +242,27 @@
           <el-input v-model="modifyForm.displayName" placeholder="修改实例显示名称" />
         </el-form-item>
         <el-form-item label="新 Shape">
-          <el-input v-model="modifyForm.shape" placeholder="例如: VM.Standard.E4.Flex" />
+          <el-select
+            v-model="modifyForm.shape"
+            filterable
+            placeholder="选择 Shape"
+            style="width:100%"
+            :loading="shapesLoading"
+          >
+            <el-option
+              v-for="s in shapeOptions"
+              :key="s.shape"
+              :label="s.shape"
+              :value="s.shape"
+            >
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span>{{ s.shape }}</span>
+                <span style="color:var(--text-muted);font-size:12px;margin-left:12px">
+                  {{ s.isFlexible ? `OCPU: ${s.ocpus} / MEM: ${s.memoryInGbs}GB` : s.processorDescription }}
+                </span>
+              </div>
+            </el-option>
+          </el-select>
         </el-form-item>
         <el-form-item label="OCPU">
           <el-input-number v-model="modifyForm.ocpus" :min="1" :max="128" :step="1" controls-position="right" style="width:100%" />
@@ -328,7 +285,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowLeft, VideoPlay, VideoPause, FirstAidKit, Monitor,
-  Connection, Edit, Link,
+  Connection, Edit, Link, RefreshRight, SwitchButton,
 } from '@element-plus/icons-vue'
 import request from '../utils/request'
 import StatusBadge from '../components/common/StatusBadge.vue'
@@ -359,11 +316,6 @@ const activeTab = ref('overview')
 const activePanels = ref('info')
 const actionLoading = ref(false)
 
-// disk
-const diskLoading = ref(false)
-const diskForm = ref({ vpusPerGb: 10 })
-const vpuSaving = ref(false)
-
 // network
 const changeIpVisible = ref(false)
 const changeIpLoading = ref(false)
@@ -384,6 +336,8 @@ const remarkSaving = ref(false)
 const modifyVisible = ref(false)
 const modifySaving = ref(false)
 const modifyForm = ref({ shape: '', ocpus: 4, memoryInGbs: 24, displayName: '' })
+const shapeOptions = ref<any[]>([])
+const shapesLoading = ref(false)
 
 // --- helpers ---
 function getStateStatus(state: string): 'up' | 'down' | 'warn' | 'idle' {
@@ -411,17 +365,6 @@ async function loadInstance() {
     ElMessage.error('加载实例失败: ' + e.message)
   } finally {
     loading.value = false
-  }
-}
-
-async function loadDisk() {
-  diskLoading.value = true
-  try {
-    diskForm.value = {
-      vpusPerGb: parseInt(instance.value.vpusPerGb) || 10,
-    }
-  } finally {
-    diskLoading.value = false
   }
 }
 
@@ -454,7 +397,6 @@ async function loadRemark() {
 function onPanelChange(name: string | number | (string | number)[]) {
   const panel = Array.isArray(name) ? String(name[0] || '') : String(name || '')
   if (!panel) return
-  if (panel === 'disk') loadDisk()
   if (panel === 'ssh') loadSsh()
   if (panel === 'remark') loadRemark()
 }
@@ -483,7 +425,7 @@ function handleAction(cmd: string) {
   }
 }
 
-// --- start/stop ---
+// --- start/stop/reboot/shutdown ---
 async function confirmStart() {
   try {
     await ElMessageBox.confirm(`确定启动实例 ${instance.value.displayName}？`, '确认启动', { type: 'info' })
@@ -500,7 +442,11 @@ async function confirmStart() {
 
 async function confirmStop() {
   try {
-    await ElMessageBox.confirm(`确定停止实例 ${instance.value.displayName}？`, '确认停止', { type: 'warning' })
+    await ElMessageBox.confirm(
+      '确定要停止实例吗？这将中断所有正在运行的服务。',
+      '确认停止',
+      { type: 'warning', confirmButtonText: '停止', confirmButtonClass: 'el-button--danger' }
+    )
     actionLoading.value = true
     await request.post(`/instances/${instance.value.id}/stop`)
     ElMessage.success('停止请求已发送')
@@ -512,20 +458,39 @@ async function confirmStop() {
   }
 }
 
-// --- disk ---
-async function saveVpu() {
-  if (!instance.value.id) return
-  vpuSaving.value = true
+async function confirmReboot() {
   try {
-    await request.post(`/instances/${instance.value.id}/vpu`, {
-      vpusPerGb: diskForm.value.vpusPerGb,
-    })
-    ElMessage.success('VPU 设置已更新')
+    await ElMessageBox.confirm(
+      `确定重启实例 ${instance.value.displayName}？实例将先停止再启动，期间服务会短暂中断。`,
+      '确认重启',
+      { type: 'warning', confirmButtonText: '重启' }
+    )
+    actionLoading.value = true
+    await request.post(`/instances/${instance.value.id}/restart`)
+    ElMessage.success('重启请求已发送')
     await loadInstance()
   } catch (e: any) {
-    ElMessage.error(e.message || '更新 VPU 失败')
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
   } finally {
-    vpuSaving.value = false
+    actionLoading.value = false
+  }
+}
+
+async function confirmShutdown() {
+  try {
+    await ElMessageBox.confirm(
+      `确定关机实例 ${instance.value.displayName}？这将关闭操作系统并停止实例。`,
+      '确认关机',
+      { type: 'warning', confirmButtonText: '关机', confirmButtonClass: 'el-button--danger' }
+    )
+    actionLoading.value = true
+    await request.post(`/instances/${instance.value.id}/stop`)
+    ElMessage.success('关机请求已发送')
+    await loadInstance()
+  } catch (e: any) {
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
+  } finally {
+    actionLoading.value = false
   }
 }
 
@@ -594,6 +559,19 @@ async function saveRemark() {
 }
 
 // --- modify ---
+async function loadShapes() {
+  if (!instance.value.tenantId) return
+  shapesLoading.value = true
+  try {
+    const res = await request.get('/oci/shapes', { params: { tenantId: instance.value.tenantId } }) as any[]
+    shapeOptions.value = res || []
+  } catch {
+    shapeOptions.value = []
+  } finally {
+    shapesLoading.value = false
+  }
+}
+
 function openModify() {
   modifyForm.value = {
     shape: instance.value.shape || '',
@@ -602,6 +580,7 @@ function openModify() {
     displayName: instance.value.displayName || '',
   }
   modifyVisible.value = true
+  loadShapes()
 }
 
 async function doModify() {
@@ -706,20 +685,4 @@ onMounted(async () => {
   color: var(--text-primary);
 }
 
-.vpu-option {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 2px 0;
-}
-
-.vpu-label {
-  font-weight: var(--font-medium);
-  font-size: var(--text-sm);
-}
-
-.vpu-desc {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
 </style>

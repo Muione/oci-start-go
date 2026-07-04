@@ -86,7 +86,9 @@ onMounted(() => {
       <template #header>启动卷信息</template>
       <el-descriptions :column="2" border>
         <el-descriptions-item label="名称">{{ bootVolume?.displayName ?? '-' }}</el-descriptions-item>
-        <el-descriptions-item label="OCID"><el-text truncated>{{ bootVolume?.id ?? '-' }}</el-text></el-descriptions-item>
+        <el-descriptions-item label="OCID">
+          <el-text truncated class="ocid-text">{{ bootVolume?.id ?? '-' }}</el-text>
+        </el-descriptions-item>
         <el-descriptions-item label="大小">{{ bootVolume?.sizeInGBs ?? '-' }} GB</el-descriptions-item>
         <el-descriptions-item label="VPU/GB">{{ bootVolume?.vpusPerGB ?? '-' }}</el-descriptions-item>
       </el-descriptions>
@@ -140,5 +142,15 @@ onMounted(() => {
 <style scoped>
 .disk-panel {
   padding: var(--space-4);
+}
+
+.ocid-text {
+  display: block;
+  max-width: 100%;
+  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
 }
 </style>
