@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import path from 'path'
 
 // Dev: Vite serves the SPA on :5173 and proxies API requests to the Go
 // backend on :9856. Build: emits to ../internal/web/dist for go:embed.
@@ -15,7 +17,12 @@ const bypass = (req: { headers: { accept?: string } }) =>
   req.headers.accept?.includes('text/html') ? '/index.html' : undefined
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   server: {
     port: 5173,
     proxy: {

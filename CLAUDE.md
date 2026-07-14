@@ -51,4 +51,3 @@ oci-start 的 Go 重写（原 Java），模块 `github.com/Muione/oci-start-go`�
 - SQLite-only，不引入新 DB 引擎。
 - `data/master.key`（32 字节 AES）为全系统信任根，勿泄；勿打印密文/凭据到日志。
 
-<!-- ## 常用命令已加入 `.claude/settings.json` 的 `permissions.allow`，无需逐次确认。 -->

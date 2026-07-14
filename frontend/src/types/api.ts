@@ -858,3 +858,88 @@ export interface Ipv6Info {
   ipAddress: string
   vnicId: string
 }
+
+// ─── DNS (Phase 5) ─────────────────────────────────────────────────────
+
+/** Cloudflare zone from GET /dns/cloudflare/zones */
+export interface CfZone {
+  id: string
+  name: string
+  status: string
+  paused: boolean
+}
+
+/** Cloudflare DNS record */
+export interface CfRecord {
+  id: string
+  zone_id: string
+  zone_name?: string
+  type: string
+  name: string
+  content: string
+  ttl: number
+  proxied: boolean
+  created_on?: string
+  modified_on?: string
+}
+
+/** EdgeOne DNS record */
+export interface EoRecord {
+  RecordId?: string
+  Name?: string
+  Type?: string
+  Content?: string
+  TTL?: number
+  Priority?: number
+  recordId?: string
+  name?: string
+  type?: string
+  content?: string
+  ttl?: number
+  priority?: number
+}
+
+// ─── Traffic Monitoring (Phase 5) ──────────────────────────────────────
+
+/** Traffic stats for an instance */
+export interface TrafficStats {
+  instanceId: string
+  instanceName: string
+  publicIp: string
+  vnicCount: number
+  egressGB: number
+  egressBytes: number
+  ingressBytes: number
+  statsDate: string
+  region: string
+}
+
+/** Traffic alert */
+export interface TrafficAlert {
+  id: number
+  instanceId: string
+  instanceName: string
+  alertType: string
+  threshold: number
+  currentValue: number
+  triggeredAt: string
+  resolved: boolean
+}
+
+/** Auto-shutdown config for traffic */
+export interface AutoShutdownConfig {
+  enabled: boolean
+  thresholdGB: number
+  checkIntervalMinutes: number
+  notifyOnly: boolean
+}
+
+// ─── Rescue (Phase 5) ──────────────────────────────────────────────────
+
+/** Rescue progress update via WebSocket */
+export interface RescueProgress {
+  step: string
+  message: string
+  progress: number
+  instanceId: string
+}

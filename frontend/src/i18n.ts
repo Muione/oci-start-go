@@ -1,10 +1,18 @@
-import { createI18n } from 'vue-i18n'
+import i18n from 'i18next'
+import { initReactI18next } from 'react-i18next'
 import zh from './locales/zh.json'
 import en from './locales/en.json'
 
-export const i18n = createI18n({
-  legacy: false,
-  locale: 'zh',
-  fallbackLocale: 'en',
-  messages: { zh, en },
+i18n.use(initReactI18next).init({
+  resources: {
+    zh: { translation: zh },
+    en: { translation: en },
+  },
+  lng: 'zh',
+  fallbackLng: 'en',
+  interpolation: {
+    escapeValue: false,
+  },
 })
+
+export default i18n
